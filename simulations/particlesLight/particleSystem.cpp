@@ -12,6 +12,7 @@
 #include "particleSystem.h"
 #include "particleSystem.cuh"
 #include "particles_kernel.cuh"
+#include "event_timer.h" 
 
 #include <cuda_runtime.h>
 
@@ -41,6 +42,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_timer(NULL),
     m_solverIterations(1)
 {
+    m_eventTimer = EventTimer(5); 
     m_numGridCells = m_gridSize.x*m_gridSize.y*m_gridSize.z;
     //    float3 worldSize = make_float3(2.0f, 2.0f, 2.0f);
 
@@ -232,25 +234,35 @@ ParticleSystem::update(float deltaTime)
     // update constants
     setParameters(&m_params);
 
+    //m_eventTimer.startTimer(0);
     // integrate
     integrateSystem(
         dPos,
         m_dVel,
         deltaTime,
-        m_numParticles);
+        m_numParticles,
+        m_eventTimer);
+    //m_eventTimer.stopTimer(0);
 
+    //m_eventTimer.startTimer(1);
     // calculate grid hash
     calcHash(
         m_dGridParticleHash,
         m_dGridParticleIndex,
         dPos,
-        m_numParticles);
+        m_numParticles,
+        m_eventTimer);
+    //m_eventTimer.stopTimer(1);
+
 
     // sort particles based on hash
-    sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+    //m_eventTimer.startTimer(2);
+    sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles, m_eventTimer);
+    //m_eventTimer.stopTimer(2);
 
     // reorder particle arrays into sorted order and
     // find start and end of each cell
+    //m_eventTimer.startTimer(3);
     reorderDataAndFindCellStart(
         m_dCellStart,
         m_dCellEnd,
@@ -261,9 +273,13 @@ ParticleSystem::update(float deltaTime)
         dPos,
         m_dVel,
         m_numParticles,
-        m_numGridCells);
+        m_numGridCells,
+        m_eventTimer
+        );
+    //m_eventTimer.stopTimer(3);
 
     // process collisions
+    //m_eventTimer.startTimer(4);
     collide(
         m_dVel,
         m_dSortedPos,
@@ -272,7 +288,9 @@ ParticleSystem::update(float deltaTime)
         m_dCellStart,
         m_dCellEnd,
         m_numParticles,
-        m_numGridCells);
+        m_numGridCells,
+        m_eventTimer);
+    //m_eventTimer.stopTimer(4);
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if (m_bUseOpenGL)

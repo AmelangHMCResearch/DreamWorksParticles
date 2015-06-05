@@ -18,6 +18,7 @@
 #include <helper_functions.h>
 #include "particles_kernel.cuh"
 #include "vector_functions.h"
+#include "event_timer.h" 
 
 // Particle system class
 class ParticleSystem
@@ -122,6 +123,11 @@ class ParticleSystem
             return m_params.cellSize;
         }
 
+        float* getTime()
+        {
+            return m_eventTimer.getTimes();
+        }
+
         void addSphere(int index, float *pos, float *vel, int r, float spacing);
 
     protected: // methods
@@ -170,6 +176,7 @@ class ParticleSystem
         uint m_numGridCells;
 
         StopWatchInterface *m_timer;
+        EventTimer m_eventTimer;
 
         uint m_solverIterations;
 };

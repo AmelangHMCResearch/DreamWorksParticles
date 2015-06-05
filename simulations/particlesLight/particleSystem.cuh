@@ -9,6 +9,8 @@
  *
  */
 
+ #include "event_timer.h"
+
 extern "C"
 {
     void cudaInit(int argc, char **argv);
@@ -31,12 +33,14 @@ extern "C"
     void integrateSystem(float *pos,
                          float *vel,
                          float deltaTime,
-                         uint numParticles);
+                         uint numParticles,
+                         EventTimer& eventTimer);
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
                   float *pos,
-                  int    numParticles);
+                  int    numParticles,
+                  EventTimer& eventTimer);
 
     void reorderDataAndFindCellStart(uint  *cellStart,
                                      uint  *cellEnd,
@@ -47,7 +51,9 @@ extern "C"
                                      float *oldPos,
                                      float *oldVel,
                                      uint   numParticles,
-                                     uint   numCells);
+                                     uint   numCells,
+                                     EventTimer& eventTimer
+                                     );
 
     void collide(float *newVel,
                  float *sortedPos,
@@ -56,8 +62,9 @@ extern "C"
                  uint  *cellStart,
                  uint  *cellEnd,
                  uint   numParticles,
-                 uint   numCells);
+                 uint   numCells,
+                 EventTimer& eventTimer);
 
-    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles);
+    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);
 
 }

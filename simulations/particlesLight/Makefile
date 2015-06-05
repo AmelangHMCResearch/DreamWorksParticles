@@ -130,7 +130,7 @@ HOST_COMPILER ?= g++
 NVCC          := /opt/cuda/bin/nvcc
 
 # internal flags
-NVCCFLAGS   := -O2 -v --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
+NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
 CCFLAGS     :=
 LDFLAGS     :=
 
@@ -246,11 +246,14 @@ endif
 particleSystem.o:particleSystem.cpp particleSystem.h particleSystem.cuh particles_kernel.cuh
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
+event_timer.o: event_timer.cpp event_timer.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
 particleSystem_cuda.o:particleSystem_cuda.cu particleSystem.cuh particles_kernel_impl.cuh
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 particles.o:particles.cpp shaders.h render_particles.h particleSystem.h \
-	particles_kernel.cuh particleSystem.cuh
+	particles_kernel.cuh particleSystem.cuh event_timer.cpp event_timer.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
@@ -259,7 +262,8 @@ render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
 shaders.o:shaders.cpp shaders.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o
+particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o \
+	shaders.o event_timer.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
@@ -268,7 +272,7 @@ run: build
 	$(EXEC) ./particles
 
 clean:
-	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o
+	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/particles
 
 clobber: clean

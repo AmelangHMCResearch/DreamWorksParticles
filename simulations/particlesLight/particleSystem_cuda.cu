@@ -36,6 +36,7 @@
 #include "thrust/sort.h"
 
 #include "particles_kernel_impl.cuh"
+#include "event_timer.h"
 
 extern "C"
 {
@@ -144,30 +145,35 @@ extern "C"
     void integrateSystem(float *pos,
                          float *vel,
                          float deltaTime,
-                         uint numParticles)
+                         uint numParticles,
+                         EventTimer& eventTimer)
     {
         thrust::device_ptr<float4> d_pos4((float4 *)pos);
         thrust::device_ptr<float4> d_vel4((float4 *)vel);
-
+        eventTimer.startTimer(0, false);
         thrust::for_each(
             thrust::make_zip_iterator(thrust::make_tuple(d_pos4, d_vel4)),
             thrust::make_zip_iterator(thrust::make_tuple(d_pos4+numParticles, d_vel4+numParticles)),
             integrate_functor(deltaTime));
+        eventTimer.stopTimer(0, false);
     }
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
                   float *pos,
-                  int    numParticles)
+                  int    numParticles,
+                  EventTimer& eventTimer)
     {
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
         // execute the kernel
+        eventTimer.startTimer(1, true);
         calcHashD<<< numBlocks, numThreads >>>(gridParticleHash,
                                                gridParticleIndex,
                                                (float4 *) pos,
                                                numParticles);
+        eventTimer.stopTimer(1, true);
 
         // check if kernel invocation generated an error
         getLastCudaError("Kernel execution failed");
@@ -182,7 +188,9 @@ extern "C"
                                      float *oldPos,
                                      float *oldVel,
                                      uint   numParticles,
-                                     uint   numCells)
+                                     uint   numCells,
+                                     EventTimer& eventTimer
+                                     )
     {
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
@@ -196,6 +204,11 @@ extern "C"
 #endif
 
         uint smemSize = sizeof(uint)*(numThreads+1);
+        eventTimer.startTimer(3, true);
+        //cudaEvent_t start, stop;
+        //cudaEventCreate(&start);
+        //cudaEventCreate(&stop);
+        //cudaEventRecord(start, 0);
         reorderDataAndFindCellStartD<<< numBlocks, numThreads, smemSize>>>(
             cellStart,
             cellEnd,
@@ -206,6 +219,11 @@ extern "C"
             (float4 *) oldPos,
             (float4 *) oldVel,
             numParticles);
+        //cudaEventRecord(stop, 0);
+        //cudaEventSynchronize(stop);
+        //float elapsedTime;
+        //cudaEventElapsedTime(&elapsedTime, start, stop);
+        eventTimer.stopTimer(3, true);
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
 
 #if USE_TEX
@@ -221,7 +239,8 @@ extern "C"
                  uint  *cellStart,
                  uint  *cellEnd,
                  uint   numParticles,
-                 uint   numCells)
+                 uint   numCells,
+                 EventTimer& eventTimer)
     {
 #if USE_TEX
         checkCudaErrors(cudaBindTexture(0, oldPosTex, sortedPos, numParticles*sizeof(float4)));
@@ -235,6 +254,7 @@ extern "C"
         computeGridSize(numParticles, 64, numBlocks, numThreads);
 
         // execute the kernel
+        eventTimer.startTimer(4, true);
         collideD<<< numBlocks, numThreads >>>((float4 *)newVel,
                                               (float4 *)sortedPos,
                                               (float4 *)sortedVel,
@@ -242,6 +262,7 @@ extern "C"
                                               cellStart,
                                               cellEnd,
                                               numParticles);
+        eventTimer.stopTimer(4, true);
 
         // check if kernel invocation generated an error
         getLastCudaError("Kernel execution failed");
@@ -255,11 +276,13 @@ extern "C"
     }
 
 
-    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles)
+    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer)
     {
+        eventTimer.startTimer(2, false);
         thrust::sort_by_key(thrust::device_ptr<uint>(dGridParticleHash),
                             thrust::device_ptr<uint>(dGridParticleHash + numParticles),
                             thrust::device_ptr<uint>(dGridParticleIndex));
+        eventTimer.stopTimer(2, false);
     }
 
 }   // extern "C"
