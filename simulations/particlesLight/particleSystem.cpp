@@ -58,7 +58,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_params.colliderRadius = 0.2f;
 
     m_params.worldOrigin = make_float3(-1.0f, -1.0f, -1.0f);
-    //    m_params.cellSize = make_float3(worldSize.x / m_gridSize.x, worldSize.y / m_gridSize.y, worldSize.z / m_gridSize.z);
+    // m_params.cellSize = make_float3(worldSize.x / m_gridSize.x, worldSize.y / m_gridSize.y, worldSize.z / m_gridSize.z);
     float cellSize = m_params.particleRadius * 2.0f;  // cell size equal to particle diameter
     m_params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
@@ -189,6 +189,9 @@ ParticleSystem::_initialize(int numParticles)
     setParameters(&m_params);
 
     m_bInitialized = true;
+#if 1
+        copyReadOrder();
+#endif 
 }
 
 void

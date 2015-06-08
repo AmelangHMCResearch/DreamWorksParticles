@@ -34,6 +34,7 @@ texture<uint, 1, cudaReadModeElementType> cellEndTex;
 
 // simulation parameters in constant memory
 __constant__ SimParams params;
+__constant__ int readOrderD[3][3]; 
 
 
 struct integrate_functor
@@ -268,6 +269,7 @@ float3 collideCell(int3    gridPos,
                    uint   *cellEnd)
 {
     uint gridHash = calcGridHash(gridPos);
+    //uint cellCount = 0; 
 
     // get start of bucket for this cell
     uint startIndex = FETCH(cellStart, gridHash);
@@ -281,6 +283,9 @@ float3 collideCell(int3    gridPos,
 
         for (uint j=startIndex; j<endIndex; j++)
         {
+            /*if (index % 100000 == 0) {
+                ++cellCount; 
+            }*/
             if (j != index)                // check not colliding with self
             {
                 float3 pos2 = make_float3(FETCH(oldPos, j));
@@ -291,6 +296,9 @@ float3 collideCell(int3    gridPos,
             }
         }
     }
+    /*if (index % 100000 == 0) {
+        printf("Count in cell %d is %d\n", gridHash, cellCount);
+    }*/
 
     return force;
 }
@@ -326,6 +334,60 @@ void collideD(float4 *newVel,               // output: new velocity
             for (int x=-1; x<=1; x++)
             {
                 int3 neighbourPos = gridPos + make_int3(x, y, z);
+                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
+            }
+        }
+    }
+
+    // collide with cursor sphere
+    force += collideSpheres(pos, params.colliderPos, vel, make_float3(0.0f, 0.0f, 0.0f), params.particleRadius, params.colliderRadius, 0.0f);
+
+    // write new velocity back to original unsorted location
+    uint originalIndex = gridParticleIndex[index];
+    newVel[originalIndex] = make_float4(vel + force, 0.0f);
+}
+
+__device__
+int positive_modulo(int i, int n) {
+    return (i % n + n) % n;
+}
+
+__global__
+void collideBroadcastD(float4 *newVel,               // output: new velocity
+              float4 *oldPos,               // input: sorted positions
+              float4 *oldVel,               // input: sorted velocities
+              uint   *gridParticleIndex,    // input: sorted particle indices
+              uint   *cellStart,
+              uint   *cellEnd,
+              uint    numParticles)
+{
+    uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
+
+    if (index >= numParticles) return;
+
+    // read particle data from sorted arrays
+    float3 pos = make_float3(FETCH(oldPos, index));
+    float3 vel = make_float3(FETCH(oldVel, index));
+
+    // get address in grid
+    int3 gridPos = calcGridPos(pos);
+    int3 gridPosMod = make_int3(positive_modulo(gridPos.x, 3), 
+                                positive_modulo(gridPos.y, 3), 
+                                positive_modulo(gridPos.z, 3));
+
+    // examine neighbouring cells
+    float3 force = make_float3(0.0f);
+
+    for (uint z=0; z<=2; z++)
+    {
+        for (uint y=0; y<=2; y++)
+        {
+            for (uint x=0; x<=2; x++)
+            {
+                int3 neighbourPos = gridPos + make_int3(readOrderD[x][gridPosMod.x], 
+                                                        readOrderD[y][gridPosMod.y], 
+                                                        readOrderD[z][gridPosMod.z]);
+
                 force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
             }
         }

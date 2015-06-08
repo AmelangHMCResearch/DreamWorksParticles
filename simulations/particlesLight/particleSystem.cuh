@@ -30,6 +30,8 @@ extern "C"
 
     void setParameters(SimParams *hostParams);
 
+    void copyReadOrder();
+
     void integrateSystem(float *pos,
                          float *vel,
                          float deltaTime,

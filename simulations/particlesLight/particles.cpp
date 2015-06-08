@@ -48,6 +48,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
+#include <string>
 
 #include "particleSystem.h"
 #include "render_particles.h"
@@ -124,6 +125,25 @@ const char *sSDKsample = "CUDA Particles Simulation";
 extern "C" void cudaInit(int argc, char **argv);
 extern "C" void cudaGLInit(int argc, char **argv);
 extern "C" void copyArrayFromDevice(void *host, const void *device, unsigned int vbo, int size);
+
+void
+writeTimes(const float* times,
+           const std::string& filename,
+           const std::string& testVersion,
+           const uint numParticles) {
+    const std::string appendedFilename = filename + std::string(".csv");
+    FILE* file = fopen(appendedFilename.c_str(), "a");
+    fprintf(file, "%s, %d, ", testVersion.c_str(), numParticles);
+    for (unsigned int i = 0; i < 5; ++i) {
+        fprintf(file, "%f", times[i]);
+        if (i != 4) {
+            fprintf(file, ",");
+        }
+    }
+    fprintf(file, "\n");
+    fclose(file);
+    printf("wrote file to %s\n", appendedFilename.c_str());
+}
 
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
@@ -229,7 +249,6 @@ void computeFPS()
 
 void display()
 {
-    sdkStartTimer(&timer);
 
     // update the simulation
     if (!bPause)
@@ -249,7 +268,6 @@ void display()
             renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
         }
     }
-    sdkStopTimer(&timer);
     // render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -305,14 +323,8 @@ void display()
     glutReportErrors();
 
     computeFPS();
-    float timeNow = timer->getTime();
-    if (timeNow >= 1000.0) {
-        printf("Ran %d frames in %f ms for %d particles. \n", frameCount, timeNow, numParticles);
-        printf("Integrate system took %f ms\n", psystem->getTime()[0]);
-        printf("CalcHash took %f ms\n", psystem->getTime()[1]);
-        printf("Sort particles took %f ms\n", psystem->getTime()[2]);
-        printf("Reorder data and find cell start took %f ms\n", psystem->getTime()[3]);
-        printf("Collide took %f ms\n", psystem->getTime()[4]);
+    if (frameCount >=numIterations) {
+
 	    glutLeaveMainLoop();
     }
 }
@@ -704,7 +716,8 @@ main(int argc, char **argv)
 
     numParticles = NUM_PARTICLES;
     uint gridDim = GRID_SIZE;
-    numIterations = 0;
+    numIterations = 1000;
+    std::string testVersion = "Broadcast Reads No Tex"; 
 
     if (argc > 1)
     {
@@ -759,49 +772,39 @@ main(int argc, char **argv)
 
     initParticleSystem(numParticles, gridSize, g_refFile==NULL);
     initParams();
-
+    
     if (!g_refFile)
     {
         initMenus();
     }
+    
+    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    // glutMouseFunc(mouse);
+    // glutMotionFunc(motion);
+    // glutKeyboardFunc(key);
+    // glutSpecialFunc(special);
+    glutIdleFunc(idle);
 
-    if (benchmark || g_refFile)
-    {
-        if (numIterations <= 0)
-        {
-            numIterations = 300;
-        }
+    //glutCloseFunc(cleanup);
 
-       // runBenchmark(numIterations, argv[0]);
-    }
-    else
-    {
-        glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
-        glutDisplayFunc(display);
-        glutReshapeFunc(reshape);
-        // glutMouseFunc(mouse);
-        // glutMotionFunc(motion);
-        // glutKeyboardFunc(key);
-        // glutSpecialFunc(special);
-        glutIdleFunc(idle);
+    glutMainLoop();
 
-        //glutCloseFunc(cleanup);
+    float* times = psystem->getTime();
+    writeTimes(times, "particleTimings", testVersion, numParticles);
 
-        glutMainLoop();
-    }
-
-    //sdkDeleteTimer(&timer);
-
-    if (psystem)
-    {
-        //delete psystem;
-    }
     // cudaDeviceReset causes the driver to clean up all state. While
     // not mandatory in normal operation, it is good practice.  It is also
     // needed to ensure correct operation when the application is being
     // profiled. Calling cudaDeviceReset causes all profile data to be
     // flushed before the application exits
     cudaThreadSynchronize();
+    sdkDeleteTimer(&timer);
+    if (psystem)
+    {
+      //delete psystem;
+    }
  
     // Note: cudaDeviceReset() cause a segfault. Not completely sure why
     // If you need profiling information, you'll have to fix the segfault.

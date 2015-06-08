@@ -129,6 +129,12 @@ extern "C"
         checkCudaErrors(cudaMemcpyToSymbol(params, hostParams, sizeof(SimParams)));
     }
 
+    void copyReadOrder()
+    {
+        int readOrder[3][3] = {{-1,1, 0}, {0, -1, 1}, {1, 0, -1}};
+        checkCudaErrors(cudaMemcpyToSymbol(readOrderD, readOrder, 9*sizeof(int)));
+    }
+
     //Round a / b to nearest higher integer value
     uint iDivUp(uint a, uint b)
     {
@@ -253,19 +259,34 @@ extern "C"
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 64, numBlocks, numThreads);
 
-        // execute the kernel
-        eventTimer.startTimer(4, true);
-        collideD<<< numBlocks, numThreads >>>((float4 *)newVel,
-                                              (float4 *)sortedPos,
-                                              (float4 *)sortedVel,
-                                              gridParticleIndex,
-                                              cellStart,
-                                              cellEnd,
-                                              numParticles);
-        eventTimer.stopTimer(4, true);
-
-        // check if kernel invocation generated an error
-        getLastCudaError("Kernel execution failed");
+#if 1
+            // execute the kernel
+            eventTimer.startTimer(4, true);
+            collideBroadcastD<<< numBlocks, numThreads >>>((float4 *)newVel,
+                                                  (float4 *)sortedPos,
+                                                  (float4 *)sortedVel,
+                                                  gridParticleIndex,
+                                                  cellStart,
+                                                  cellEnd,
+                                                  numParticles);
+            eventTimer.stopTimer(4, true);
+            // check if kernel invocation generated an error
+            getLastCudaError("Kernel execution failed");
+#else 
+            // execute the kernel
+            eventTimer.startTimer(4, true);
+            collideD<<< numBlocks, numThreads >>>((float4 *)newVel,
+                                                  (float4 *)sortedPos,
+                                                  (float4 *)sortedVel,
+                                                  gridParticleIndex,
+                                                  cellStart,
+                                                  cellEnd,
+                                                  numParticles);
+            eventTimer.stopTimer(4, true);
+    
+            // check if kernel invocation generated an error
+            getLastCudaError("Kernel execution failed");
+#endif
 
 #if USE_TEX
         checkCudaErrors(cudaUnbindTexture(oldPosTex));

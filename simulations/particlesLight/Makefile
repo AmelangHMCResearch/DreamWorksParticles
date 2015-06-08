@@ -249,7 +249,8 @@ particleSystem.o:particleSystem.cpp particleSystem.h particleSystem.cuh particle
 event_timer.o: event_timer.cpp event_timer.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-particleSystem_cuda.o:particleSystem_cuda.cu particleSystem.cuh particles_kernel_impl.cuh
+particleSystem_cuda.o:particleSystem_cuda.cu particleSystem.cuh \
+	particles_kernel_impl.cuh particles_kernel.cuh
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 particles.o:particles.cpp shaders.h render_particles.h particleSystem.h \
