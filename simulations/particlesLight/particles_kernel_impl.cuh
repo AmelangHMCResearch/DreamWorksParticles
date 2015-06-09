@@ -153,6 +153,7 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
                                   uint   *cellEnd,          // output: cell end index
                                   float4 *sortedPos,        // output: sorted positions
                                   float4 *sortedVel,        // output: sorted velocities
+                                  float4 *sortedPosAfterLastSort, // output: sorted positions only updated during a sort
                                   uint   *gridParticleHash, // input: sorted grid hashes
                                   uint   *gridParticleIndex,// input: sorted particle indices
                                   float4 *oldPos,           // input: sorted position array
@@ -211,9 +212,8 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 
         sortedPos[index] = pos;
         sortedVel[index] = vel;
+        sortedPosAfterLastSort[index] = FETCH(oldPos, index);
     }
-
-
 }
 
 // collide two spheres using DEM method

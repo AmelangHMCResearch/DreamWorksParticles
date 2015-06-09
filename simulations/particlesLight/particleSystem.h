@@ -134,7 +134,7 @@ class ParticleSystem
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
 
     protected: // data
-        bool m_bInitialized, m_bUseOpenGL;
+        bool m_bInitialized, m_bUseOpenGL, m_hPosAfterLastSortIsValid;
         uint m_numParticles;
 
         // CPU data
@@ -149,6 +149,7 @@ class ParticleSystem
 
         float *m_dSortedPos;
         float *m_dSortedVel;
+        float *m_dSortedPosAfterLastSort;
 
         // grid data for sorting method
         uint  *m_dGridParticleHash; // grid hash value for each particle

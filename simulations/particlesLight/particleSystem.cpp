@@ -148,6 +148,7 @@ ParticleSystem::_initialize(int numParticles)
 
     allocateArray((void **)&m_dSortedPos, memSize);
     allocateArray((void **)&m_dSortedVel, memSize);
+    allocateArray((void **)&m_dSortedPosAfterLastSort, memSize);
 
     allocateArray((void **)&m_dGridParticleHash, m_numParticles*sizeof(uint));
     allocateArray((void **)&m_dGridParticleIndex, m_numParticles*sizeof(uint));
@@ -201,6 +202,7 @@ ParticleSystem::_finalize()
     freeArray(m_dVel);
     freeArray(m_dSortedPos);
     freeArray(m_dSortedVel);
+    freeArray(m_dSortedPosAfterLastSort);
 
     freeArray(m_dGridParticleHash);
     freeArray(m_dGridParticleIndex);
@@ -256,6 +258,8 @@ ParticleSystem::update(float deltaTime)
         m_dCellEnd,
         m_dSortedPos,
         m_dSortedVel,
+        m_dSortedPosAfterLastSort,
+        &m_hPosAfterLastSortIsValid,
         m_dGridParticleHash,
         m_dGridParticleIndex,
         dPos,
@@ -338,6 +342,9 @@ ParticleSystem::setArray(ParticleArray array, const float *data, int start, int 
                     glBufferSubData(GL_ARRAY_BUFFER, start*4*sizeof(float), count*4*sizeof(float), data);
                     glBindBuffer(GL_ARRAY_BUFFER, 0);
                     registerGLBufferObject(m_posVBO, &m_cuda_posvbo_resource);
+
+                    // force a resort because particles have moved
+                    m_hPosAfterLastSortIsValid = false;
                 }
             }
             break;

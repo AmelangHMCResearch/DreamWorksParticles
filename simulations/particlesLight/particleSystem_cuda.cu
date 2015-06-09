@@ -177,6 +177,8 @@ extern "C"
                                      uint  *cellEnd,
                                      float *sortedPos,
                                      float *sortedVel,
+                                     float *sortedPosAfterLastSort,
+                                     bool  *hPosAfterLastSortIsValid,
                                      uint  *gridParticleHash,
                                      uint  *gridParticleIndex,
                                      float *oldPos,
@@ -201,12 +203,15 @@ extern "C"
             cellEnd,
             (float4 *) sortedPos,
             (float4 *) sortedVel,
+            (float4 *) sortedPosAfterLastSort,
             gridParticleHash,
             gridParticleIndex,
             (float4 *) oldPos,
             (float4 *) oldVel,
             numParticles);
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
+
+        *hPosAfterLastSortIsValid = true;
 
 #if USE_TEX
         checkCudaErrors(cudaUnbindTexture(oldPosTex));
