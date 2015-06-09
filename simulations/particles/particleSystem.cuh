@@ -56,7 +56,9 @@ extern "C"
                  uint  *cellStart,
                  uint  *cellEnd,
                  uint   numParticles,
-                 uint   numCells);
+                 uint   numCells,
+                 uint* h_numNeighbors,
+                 uint* d_numNeighbors);
 
     void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles);
 

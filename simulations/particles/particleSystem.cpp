@@ -38,6 +38,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_hVel(0),
     m_dPos(0),
     m_dVel(0),
+    m_hNumNeighbors(0),
+    m_dNumNeighbors(0),
     m_gridSize(gridSize),
     m_timer(NULL),
     m_solverIterations(1)
@@ -135,6 +137,12 @@ ParticleSystem::_initialize(int numParticles)
 
     m_hCellEnd = new uint[m_numGridCells];
     memset(m_hCellEnd, 0, m_numGridCells*sizeof(uint));
+
+   // Allocate testing arrays here - to track num neighbors. 
+    m_hNumNeighbors = new uint[m_numParticles + 1];
+    memset(m_hNumNeighbors, 0, (m_numParticles+1)*sizeof(uint));
+    allocateArray((void **) &m_dNumNeighbors, (m_numParticles+1)*sizeof(uint)); 
+    checkCudaErrors(cudaMemset(m_dNumNeighbors, 0, (m_numParticles + 1) * sizeof(uint)));
 
     // allocate GPU data
     unsigned int memSize = sizeof(float) * 4 * m_numParticles;
@@ -290,7 +298,9 @@ ParticleSystem::update(float deltaTime)
         m_dCellStart,
         m_dCellEnd,
         m_numParticles,
-        m_numGridCells);
+        m_numGridCells,
+        m_hNumNeighbors,
+        m_dNumNeighbors);
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if (m_bUseOpenGL)

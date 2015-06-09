@@ -220,7 +220,9 @@ extern "C"
                  uint  *cellStart,
                  uint  *cellEnd,
                  uint   numParticles,
-                 uint   numCells)
+                 uint   numCells,
+                 uint* h_numNeighbors,
+                 uint* d_numNeighbors)
     {
 #if USE_TEX
         checkCudaErrors(cudaBindTexture(0, oldPosTex, sortedPos, numParticles*sizeof(float4)));
@@ -240,7 +242,8 @@ extern "C"
                                               gridParticleIndex,
                                               cellStart,
                                               cellEnd,
-                                              numParticles);
+                                              numParticles,
+                                              d_numNeighbors);
 
         // check if kernel invocation generated an error
         getLastCudaError("Kernel execution failed");
@@ -251,6 +254,7 @@ extern "C"
         checkCudaErrors(cudaUnbindTexture(cellStartTex));
         checkCudaErrors(cudaUnbindTexture(cellEndTex));
 #endif
+        checkCudaErrors(cudaMemcpy(h_numNeighbors, d_numNeighbors, (numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));
     }
 
 

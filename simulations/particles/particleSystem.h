@@ -132,6 +132,11 @@ class ParticleSystem
             return m_params.cellSize;
         }
 
+        uint* getNumNeighbors()
+        {
+            return m_hNumNeighbors;
+        }
+
         void addSphere(int index, float *pos, float *vel, int r, float spacing);
 
     protected: // methods
@@ -154,6 +159,10 @@ class ParticleSystem
         uint  *m_hParticleHash;
         uint  *m_hCellStart;
         uint  *m_hCellEnd;
+
+        // Testing Data:
+        uint* m_hNumNeighbors;
+        uint* m_dNumNeighbors; 
 
         // GPU data
         float *m_dPos;

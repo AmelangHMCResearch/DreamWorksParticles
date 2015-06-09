@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 1993-2013 NVIDIA Corporation.  All rights reserved.
+# Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
 #
 # NOTICE TO USER:
 #
@@ -36,100 +36,137 @@
 # Location of the CUDA Toolkit
 CUDA_PATH ?= /usr/local/cuda
 
-OSUPPER = $(shell uname -s 2>/dev/null | tr "[:lower:]" "[:upper:]")
-OSLOWER = $(shell uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]")
-
-OS_SIZE    = $(shell uname -m | sed -e "s/x86_64/64/" -e "s/armv7l/32/" -e "s/aarch64/64/")
-OS_ARCH    = $(shell uname -m)
-ARCH_FLAGS =
-
-DARWIN = $(strip $(findstring DARWIN, $(OSUPPER)))
-ifneq ($(DARWIN),)
-	XCODE_GE_5 = $(shell expr `xcodebuild -version | grep -i xcode | awk '{print $$2}' | cut -d'.' -f1` \>= 5)
-endif
-
-# Take command line flags that override any of these settings
+##############################
+# start deprecated interface #
+##############################
 ifeq ($(x86_64),1)
-	OS_SIZE = 64
-	OS_ARCH = x86_64
+    $(info WARNING - x86_64 variable has been deprecated)
+    $(info WARNING - please use TARGET_ARCH=x86_64 instead)
+    TARGET_ARCH ?= x86_64
 endif
 ifeq ($(ARMv7),1)
-	OS_SIZE    = 32
-	OS_ARCH    = armv7l
-	ARCH_FLAGS = -target-cpu-arch ARM
+    $(info WARNING - ARMv7 variable has been deprecated)
+    $(info WARNING - please use TARGET_ARCH=armv7l instead)
+    TARGET_ARCH ?= armv7l
 endif
 ifeq ($(aarch64),1)
-	OS_SIZE    = 64
-	OS_ARCH    = aarch64
-	ARCH_FLAGS = -target-cpu-arch ARM
+    $(info WARNING - aarch64 variable has been deprecated)
+    $(info WARNING - please use TARGET_ARCH=aarch64 instead)
+    TARGET_ARCH ?= aarch64
+endif
+ifeq ($(ppc64le),1)
+    $(info WARNING - ppc64le variable has been deprecated)
+    $(info WARNING - please use TARGET_ARCH=ppc64le instead)
+    TARGET_ARCH ?= ppc64le
+endif
+ifneq ($(GCC),)
+    $(info WARNING - GCC variable has been deprecated)
+    $(info WARNING - please use HOST_COMPILER=$(GCC) instead)
+    HOST_COMPILER ?= $(GCC)
+endif
+ifneq ($(abi),)
+    $(error ERROR - abi variable has been removed)
+endif
+############################
+# end deprecated interface #
+############################
+
+# architecture
+HOST_ARCH   := $(shell uname -m)
+TARGET_ARCH ?= $(HOST_ARCH)
+ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
+    TARGET_SIZE := 64
+else ifeq ($(TARGET_ARCH),armv7l)
+    TARGET_SIZE := 32
+else
+    $(error ERROR - unsupported value $(TARGET_ARCH) for TARGET_ARCH!)
+endif
+ifneq ($(TARGET_ARCH),$(HOST_ARCH))
+    ifeq (,$(filter $(HOST_ARCH)-$(TARGET_ARCH),aarch64-armv7l x86_64-armv7l x86_64-aarch64 x86_64-ppc64le))
+        $(error ERROR - cross compiling from $(HOST_ARCH) to $(TARGET_ARCH) is not supported!)
+    endif
 endif
 
-# Common binaries
-ifneq ($(DARWIN),)
-ifeq ($(XCODE_GE_5),1)
-  GCC ?= clang
-else
-  GCC ?= x86_64-pc-linux-gnu-g++
+# operating system
+HOST_OS   := $(shell uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]")
+TARGET_OS ?= $(HOST_OS)
+ifeq (,$(filter $(TARGET_OS),linux darwin qnx android))
+    $(error ERROR - unsupported value $(TARGET_OS) for TARGET_OS!)
 endif
-else
-ifeq ($(ARMv7),1)
-  GCC ?= arm-linux-gnueabihf-x86_64-pc-linux-gnu-g++
-else
-  GCC ?= x86_64-pc-linux-gnu-g++
+
+# host compiler
+ifeq ($(TARGET_OS),darwin)
+    ifeq ($(shell expr `xcodebuild -version | grep -i xcode | awk '{print $$2}' | cut -d'.' -f1` \>= 5),1)
+        HOST_COMPILER ?= clang++
+    endif
+else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
+    ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
+        ifeq ($(TARGET_OS),linux)
+            HOST_COMPILER ?= arm-linux-gnueabihf-g++
+        else ifeq ($(TARGET_OS),qnx)
+            ifeq ($(QNX_HOST),)
+                $(error ERROR - QNX_HOST must be passed to the QNX host toolchain)
+            endif
+            ifeq ($(QNX_TARGET),)
+                $(error ERROR - QNX_TARGET must be passed to the QNX target toolchain)
+            endif
+            export QNX_HOST
+            export QNX_TARGET
+            HOST_COMPILER ?= $(QNX_HOST)/usr/bin/arm-unknown-nto-qnx6.6.0eabi-g++
+        else ifeq ($(TARGET_OS),android)
+            HOST_COMPILER ?= arm-linux-androideabi-g++
+        endif
+    else ifeq ($(TARGET_ARCH),aarch64)
+        ifeq ($(TARGET_OS), linux)
+            HOST_COMPILER ?= aarch64-linux-gnu-g++
+        else ifeq ($(TARGET_OS), android)
+            HOST_COMPILER ?= aarch64-linux-android-g++
+        endif
+    else ifeq ($(TARGET_ARCH),ppc64le)
+        HOST_COMPILER ?= powerpc64le-linux-gnu-g++
+    endif
 endif
-endif
-NVCC := /opt/cuda/bin/nvcc
+HOST_COMPILER ?= g++
+NVCC          := /opt/cuda/bin/nvcc
 
 # internal flags
-NVCCFLAGS   := -O2 -v --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${OS_SIZE} ${ARCH_FLAGS}
+NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
 CCFLAGS     :=
 LDFLAGS     :=
 
-# Extra user flags
-EXTRA_NVCCFLAGS   ?=
-EXTRA_LDFLAGS     ?=
-EXTRA_CCFLAGS     ?=
+# build flags
+ifeq ($(TARGET_OS),darwin)
+    LDFLAGS += -rpath $(CUDA_PATH)/lib
+    CCFLAGS += -arch $(HOST_ARCH)
+else ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-armv7l-linux)
+    LDFLAGS += --dynamic-linker=/lib/ld-linux-armhf.so.3
+    CCFLAGS += -mfloat-abi=hard
+else ifeq ($(TARGET_OS),android)
+    LDFLAGS += -pie
+    CCFLAGS += -fpie -fpic -fexceptions
+endif
 
-# OS-specific build flags
-ifneq ($(DARWIN),)
-  LDFLAGS += -rpath $(CUDA_PATH)/lib
-  CCFLAGS += -arch $(OS_ARCH)
-else
-  ifeq ($(OS_ARCH),armv7l)
-    ifeq ($(abi),androideabi)
-      NVCCFLAGS += -target-os-variant Android
-    else
-      ifeq ($(abi),gnueabi)
-        CCFLAGS += -mfloat-abi=softfp
-      else
-        # default to gnueabihf
-        override abi := gnueabihf
-        LDFLAGS += --dynamic-linker=/lib/ld-linux-armhf.so.3
-        CCFLAGS += -mfloat-abi=hard
-      endif
+ifneq ($(TARGET_ARCH),$(HOST_ARCH))
+    ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+        ifneq ($(TARGET_FS),)
+            GCCVERSIONLTEQ46 := $(shell expr `$(HOST_COMPILER) -dumpversion` \<= 4.6)
+            ifeq ($(GCCVERSIONLTEQ46),1)
+                CCFLAGS += --sysroot=$(TARGET_FS)
+            endif
+            LDFLAGS += --sysroot=$(TARGET_FS)
+            LDFLAGS += -rpath-link=$(TARGET_FS)/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
+        endif
     endif
-  endif
-endif
-
-ifeq ($(ARMv7),1)
-ifneq ($(TARGET_FS),)
-GCCVERSIONLTEQ46 := $(shell expr `$(GCC) -dumpversion` \<= 4.6)
-ifeq ($(GCCVERSIONLTEQ46),1)
-CCFLAGS += --sysroot=$(TARGET_FS)
-endif
-LDFLAGS += --sysroot=$(TARGET_FS)
-LDFLAGS += -rpath-link=$(TARGET_FS)/lib
-LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib
-LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/arm-linux-$(abi)
-endif
 endif
 
 # Debug build flags
 ifeq ($(dbg),1)
       NVCCFLAGS += -g -G
-      TARGET := debug
+      BUILD_TYPE := debug
 else
-      TARGET := release
+      BUILD_TYPE := release
 endif
 
 ALL_CCFLAGS :=
@@ -155,21 +192,21 @@ SAMPLE_ENABLED := 1
 include ./findgllib.mk
 
 # OpenGL specific libraries
-ifneq ($(DARWIN),)
+ifeq ($(TARGET_OS),darwin)
  # Mac OSX specific libraries and paths to include
  LIBRARIES += -L/System/Library/Frameworks/OpenGL.framework/Libraries
  LIBRARIES += -lGL -lGLU ../../common/lib/darwin/libGLEW.a
  ALL_LDFLAGS += -Xlinker -framework -Xlinker GLUT
 else
- LIBRARIES += -L../../common/lib/$(OSLOWER)/$(OS_ARCH) $(GLLINK)
+ LIBRARIES += -L../../common/lib/$(TARGET_OS)/$(TARGET_ARCH) $(GLLINK)
  LIBRARIES += -lGL -lGLU -lX11 -lXi -lXmu -lglut -lGLEW
 endif
 
 # Gencode arguments
-ifeq ($(OS_ARCH),armv7l)
-SMS ?= 20 30 32 35 37 50
+ifeq ($(TARGET_ARCH),armv7l)
+SMS ?= 20 30 32 35 37 50 52
 else
-SMS ?= 11 13 20 30 35 37 50
+SMS ?= 20 30 35 37 50 52
 endif
 
 ifeq ($(SMS),)
@@ -209,11 +246,15 @@ endif
 particleSystem.o:particleSystem.cpp particleSystem.h particleSystem.cuh particles_kernel.cuh
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-particleSystem_cuda.o:particleSystem_cuda.cu particleSystem.cuh particles_kernel_impl.cuh
+event_timer.o: event_timer.cpp event_timer.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-particles.o: particles.cpp shaders.h render_particles.h particleSystem.h \
-	particles_kernel.cuh particleSystem.cuh
+particleSystem_cuda.o:particleSystem_cuda.cu particleSystem.cuh \
+	particles_kernel_impl.cuh particles_kernel.cuh
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+particles.o:particles.cpp shaders.h render_particles.h particleSystem.h \
+	particles_kernel.cuh particleSystem.cuh event_timer.cpp event_timer.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
@@ -222,16 +263,17 @@ render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
 shaders.o:shaders.cpp shaders.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o
+particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o \
+	shaders.o event_timer.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mkdir -p ../../bin/$(OS_ARCH)/$(OSLOWER)/$(TARGET)$(if $(abi),/$(abi))
-	$(EXEC) cp $@ ../../bin/$(OS_ARCH)/$(OSLOWER)/$(TARGET)$(if $(abi),/$(abi))
+	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 run: build
 	$(EXEC) ./particles
 
 clean:
-	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o
-	rm -rf ../../bin/$(OS_ARCH)/$(OSLOWER)/$(TARGET)$(if $(abi),/$(abi))/particles
+	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o
+	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/particles
 
 clobber: clean

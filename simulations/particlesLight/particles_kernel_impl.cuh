@@ -30,6 +30,7 @@ texture<float4, 1, cudaReadModeElementType> oldVelTex;
 texture<uint, 1, cudaReadModeElementType> gridParticleHashTex;
 texture<uint, 1, cudaReadModeElementType> cellStartTex;
 texture<uint, 1, cudaReadModeElementType> cellEndTex;
+texture<uint, 2, cudaReadModeElementType> readOrderTex;
 #endif
 
 // simulation parameters in constant memory

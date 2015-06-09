@@ -253,6 +253,7 @@ extern "C"
         checkCudaErrors(cudaBindTexture(0, oldVelTex, sortedVel, numParticles*sizeof(float4)));
         checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
         checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
+        checkCudaErrors(cudaBindTexture(0, readOrderTex, readOrderD, numCells*sizeof(uint)));
 #endif
 
         // thread per particle

@@ -45,6 +45,7 @@
 // Includes
 #include <stdlib.h>
 #include <cstdlib>
+#include <cmath>
 #include <cstdio>
 #include <algorithm>
 
@@ -55,7 +56,7 @@
 #define MAX_EPSILON_ERROR 5.00f
 #define THRESHOLD         0.30f
 
-#define GRID_SIZE       64
+#define GRID_SIZE       256
 #define NUM_PARTICLES   16384
 
 const uint width = 640, height = 480;
@@ -122,6 +123,53 @@ const char *sSDKsample = "CUDA Particles Simulation";
 extern "C" void cudaInit(int argc, char **argv);
 extern "C" void cudaGLInit(int argc, char **argv);
 extern "C" void copyArrayFromDevice(void *host, const void *device, unsigned int vbo, int size);
+
+double averageFunc(const uint* matrix, const uint size) {
+    double sum = 0; 
+    for (int i=0; i < size; ++i) {
+        sum += (double) matrix[i];
+    }
+
+    return sum / (double) size; 
+
+}
+
+double averageDoubleFunc(const double* matrix, const uint size) {
+    double sum = 0; 
+    for (int i=1; i < size + 1; ++i) {
+        sum += matrix[i];
+    }
+
+    return sum / (double) size; 
+
+}
+
+double standardDeviation(const uint* matrix, const double average, const uint size) {
+    double* result = new double[size]; 
+    for (int i = 1; i < size + 1; ++i) {
+        result[i] = (double) matrix[i] - average; 
+        result[i] = result[i] * result[i]; 
+    }
+    double avg = averageDoubleFunc(result, size); 
+    delete [] result;
+
+    return sqrt(avg);
+}
+
+void
+writeNeighbors(const uint* neighbors,
+           const std::string& filename,
+           const uint numParticles) {
+    const std::string appendedFilename = filename + std::string(".csv");
+    double avg = averageFunc(neighbors, numParticles);
+    double stdDev = standardDeviation(neighbors, avg, numParticles);
+    FILE* file = fopen(appendedFilename.c_str(), "a");
+    fprintf(file, "%d, ", neighbors[0]);
+    fprintf(file, "%f, ", avg);
+    fprintf(file, "%f\n", stdDev);
+    fclose(file);
+    //printf("wrote file to %s\n", appendedFilename.c_str());
+}
 
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
@@ -274,7 +322,7 @@ void display()
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(10.0);
+    glutWireCube(8.0);
 
     // collider
     glPushMatrix();
@@ -302,10 +350,9 @@ void display()
     glutSwapBuffers();
     glutReportErrors();
     computeFPS();
-    float timeNow = timer->getTime();
-    if (timeNow>=10000.0) {
-        printf("Ran %d frames for %d particles in %f ms\n", frameCount, numParticles, timeNow);
-    glutLeaveMainLoop();
+    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles);
+    if (frameCount >= 5000.0) {
+        glutLeaveMainLoop();
     }
 }
 

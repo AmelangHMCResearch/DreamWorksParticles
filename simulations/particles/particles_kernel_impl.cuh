@@ -61,41 +61,41 @@ struct integrate_functor
         // set this to zero to disable collisions with cube sides
 #if 1
 
-        if (pos.x > 5.0f - params.particleRadius)
+        if (pos.x > 4.0f - params.particleRadius)
         {
-            pos.x = 5.0f - params.particleRadius;
+            pos.x = 4.0f - params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.x < -5.0f + params.particleRadius)
+        if (pos.x < -4.0f + params.particleRadius)
         {
-            pos.x = -5.0f + params.particleRadius;
+            pos.x = -4.0f + params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.y > 5.0f - params.particleRadius)
+        if (pos.y > 4.0f - params.particleRadius)
         {
-            pos.y = 5.0f - params.particleRadius;
+            pos.y = 4.0f - params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
 
-        if (pos.z > 5.0f - params.particleRadius)
+        if (pos.z > 4.0f - params.particleRadius)
         {
-            pos.z = 5.0f - params.particleRadius;
+            pos.z = 4.0f - params.particleRadius;
             vel.z *= params.boundaryDamping;
         }
 
-        if (pos.z < -5.0f + params.particleRadius)
+        if (pos.z < -4.0f + params.particleRadius)
         {
-            pos.z = -5.0f + params.particleRadius;
+            pos.z = -4.0f + params.particleRadius;
             vel.z *= params.boundaryDamping;
         }
 
 #endif
 
-        if (pos.y < -5.0f + params.particleRadius)
+        if (pos.y < -4.0f + params.particleRadius)
         {
-            pos.y = -5.0f + params.particleRadius;
+            pos.y = -4.0f + params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
 
@@ -265,7 +265,8 @@ float3 collideCell(int3    gridPos,
                    float4 *oldPos,
                    float4 *oldVel,
                    uint   *cellStart,
-                   uint   *cellEnd)
+                   uint   *cellEnd,
+                   uint* d_numNeighbors)
 {
     uint gridHash = calcGridHash(gridPos);
 
@@ -288,6 +289,7 @@ float3 collideCell(int3    gridPos,
 
                 // collide two spheres
                 force += collideSpheres(pos, pos2, vel, vel2, params.particleRadius, params.particleRadius, params.attraction);
+                d_numNeighbors[index + 1] += 1; 
             }
         }
     }
@@ -303,11 +305,17 @@ void collideD(float4 *newVel,               // output: new velocity
               uint   *gridParticleIndex,    // input: sorted particle indices
               uint   *cellStart,
               uint   *cellEnd,
-              uint    numParticles)
+              uint    numParticles,
+              uint* d_numNeighbors)
 {
     uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
+
+    if (index == 0) {
+        ++d_numNeighbors[0]; 
+    }
+    d_numNeighbors[index + 1] = 0; 
 
     // read particle data from sorted arrays
     float3 pos = make_float3(FETCH(oldPos, index));
@@ -326,7 +334,7 @@ void collideD(float4 *newVel,               // output: new velocity
             for (int x=-1; x<=1; x++)
             {
                 int3 neighbourPos = gridPos + make_int3(x, y, z);
-                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
+                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd, d_numNeighbors);
             }
         }
     }
