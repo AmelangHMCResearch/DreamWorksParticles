@@ -58,7 +58,7 @@
 #define MAX_EPSILON_ERROR 5.00f
 #define THRESHOLD         0.30f
 
-#define GRID_SIZE      64
+#define GRID_SIZE      256
 #define NUM_PARTICLES   16384
 
 const uint width = 640, height = 480;
@@ -129,11 +129,11 @@ extern "C" void copyArrayFromDevice(void *host, const void *device, unsigned int
 void
 writeTimes(const float* times,
            const std::string& filename,
-           const std::string& testVersion,
-           const uint numParticles) {
+           const uint numParticles,
+           const uint gridSize) {
     const std::string appendedFilename = filename + std::string(".csv");
     FILE* file = fopen(appendedFilename.c_str(), "a");
-    fprintf(file, "%s, %d, ", testVersion.c_str(), numParticles);
+    fprintf(file, "%d, ", numParticles);
     for (unsigned int i = 0; i < 5; ++i) {
         fprintf(file, "%f", times[i]);
         if (i != 4) {
@@ -290,7 +290,7 @@ void display()
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(10.0);
+    glutWireCube(8.0);
 
     // collider
     /*
@@ -716,7 +716,7 @@ main(int argc, char **argv)
 
     numParticles = NUM_PARTICLES;
     uint gridDim = GRID_SIZE;
-    numIterations = 1000;
+    numIterations = 5000;
     std::string testVersion = "Broadcast Reads No Tex"; 
 
     if (argc > 1)
@@ -792,7 +792,7 @@ main(int argc, char **argv)
     glutMainLoop();
 
     float* times = psystem->getTime();
-    writeTimes(times, "particleTimings", testVersion, numParticles);
+    writeTimes(times, "broadcastTimings", numParticles, gridSize.x);
 
     // cudaDeviceReset causes the driver to clean up all state. While
     // not mandatory in normal operation, it is good practice.  It is also

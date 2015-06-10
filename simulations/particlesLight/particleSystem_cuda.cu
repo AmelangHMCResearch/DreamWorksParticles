@@ -246,6 +246,7 @@ extern "C"
                  uint  *cellEnd,
                  uint   numParticles,
                  uint   numCells,
+                 int* readOrder,
                  EventTimer& eventTimer)
     {
 #if USE_TEX
@@ -253,7 +254,9 @@ extern "C"
         checkCudaErrors(cudaBindTexture(0, oldVelTex, sortedVel, numParticles*sizeof(float4)));
         checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
         checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
-        checkCudaErrors(cudaBindTexture(0, readOrderTex, readOrderD, numCells*sizeof(uint)));
+#endif
+#if 1
+        checkCudaErrors(cudaBindTexture(0, readOrderTex, readOrder, 9*sizeof(int)));
 #endif
 
         // thread per particle
@@ -269,6 +272,7 @@ extern "C"
                                                   gridParticleIndex,
                                                   cellStart,
                                                   cellEnd,
+                                                  readOrder,
                                                   numParticles);
             eventTimer.stopTimer(4, true);
             // check if kernel invocation generated an error
@@ -294,6 +298,9 @@ extern "C"
         checkCudaErrors(cudaUnbindTexture(oldVelTex));
         checkCudaErrors(cudaUnbindTexture(cellStartTex));
         checkCudaErrors(cudaUnbindTexture(cellEndTex));
+#endif
+#if 1
+        checkCudaErrors(cudaUnbindTexture(readOrderTex));
 #endif
     }
 

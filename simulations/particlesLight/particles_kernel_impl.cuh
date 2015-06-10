@@ -30,7 +30,7 @@ texture<float4, 1, cudaReadModeElementType> oldVelTex;
 texture<uint, 1, cudaReadModeElementType> gridParticleHashTex;
 texture<uint, 1, cudaReadModeElementType> cellStartTex;
 texture<uint, 1, cudaReadModeElementType> cellEndTex;
-texture<uint, 2, cudaReadModeElementType> readOrderTex;
+texture<uint, 1, cudaReadModeElementType> readOrderTex;
 #endif
 
 // simulation parameters in constant memory
@@ -63,41 +63,41 @@ struct integrate_functor
         // set this to zero to disable collisions with cube sides
 #if 1
 
-        if (pos.x > 5.0f - params.particleRadius)
+        if (pos.x > 4.0f - params.particleRadius)
         {
-            pos.x = 5.0f - params.particleRadius;
+            pos.x = 4.0f - params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.x < -5.0f + params.particleRadius)
+        if (pos.x < -4.0f + params.particleRadius)
         {
-            pos.x = -5.0f + params.particleRadius;
+            pos.x = -4.0f + params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.y > 5.0f - params.particleRadius)
+        if (pos.y > 4.0f - params.particleRadius)
         {
-            pos.y = 5.0f - params.particleRadius;
+            pos.y = 4.0f - params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
 
-        if (pos.z > 5.0f - params.particleRadius)
+        if (pos.z > 4.0f - params.particleRadius)
         {
-            pos.z = 5.0f - params.particleRadius;
+            pos.z = 4.0f - params.particleRadius;
             vel.z *= params.boundaryDamping;
         }
 
-        if (pos.z < -5.0f + params.particleRadius)
+        if (pos.z < -4.0f + params.particleRadius)
         {
-            pos.z = -5.0f + params.particleRadius;
+            pos.z = -4.0f + params.particleRadius;
             vel.z *= params.boundaryDamping;
         }
 
 #endif
 
-        if (pos.y < -5.0f + params.particleRadius)
+        if (pos.y < -4.0f + params.particleRadius)
         {
-            pos.y = -5.0f + params.particleRadius;
+            pos.y = -4.0f + params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
 
@@ -360,6 +360,7 @@ void collideBroadcastD(float4 *newVel,               // output: new velocity
               uint   *gridParticleIndex,    // input: sorted particle indices
               uint   *cellStart,
               uint   *cellEnd,
+              int* readOrder,
               uint    numParticles)
 {
     uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
@@ -385,9 +386,9 @@ void collideBroadcastD(float4 *newVel,               // output: new velocity
         {
             for (uint x=0; x<=2; x++)
             {
-                int3 neighbourPos = gridPos + make_int3(readOrderD[x][gridPosMod.x], 
-                                                        readOrderD[y][gridPosMod.y], 
-                                                        readOrderD[z][gridPosMod.z]);
+                int3 neighbourPos = gridPos + make_int3(FETCH(readOrder, x*3 + gridPosMod.x), 
+                                                        FETCH(readOrder, y*3 + gridPosMod.y), 
+                                                        FETCH(readOrder, z*3 + gridPosMod.z));
 
                 force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
             }

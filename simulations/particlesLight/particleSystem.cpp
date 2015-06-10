@@ -40,7 +40,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_dVel(0),
     m_gridSize(gridSize),
     m_timer(NULL),
-    m_solverIterations(1)
+    m_solverIterations(1),
+    m_dReadOrder(0)
 {
     m_eventTimer = EventTimer(5); 
     m_numGridCells = m_gridSize.x*m_gridSize.y*m_gridSize.z;
@@ -59,7 +60,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
 
     m_params.worldOrigin = make_float3(-1.0f, -1.0f, -1.0f);
     // m_params.cellSize = make_float3(worldSize.x / m_gridSize.x, worldSize.y / m_gridSize.y, worldSize.z / m_gridSize.z);
-    float cellSize = m_params.particleRadius * 2.0f;  // cell size equal to particle diameter
+    float cellSize = 8.0f / (float) m_gridSize.x;  // cell size equal to particle diameter
     m_params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
     m_params.spring = 0.5f;
@@ -190,7 +191,9 @@ ParticleSystem::_initialize(int numParticles)
 
     m_bInitialized = true;
 #if 1
-        copyReadOrder();
+        int readOrder[3][3] = {{-1,1, 0}, {0, -1, 1}, {1, 0, -1}};
+        allocateArray((void **) &m_dReadOrder, 9*sizeof(int)); 
+        cudaMemcpy(m_dReadOrder, readOrder, 9*sizeof(int), cudaMemcpyHostToDevice);
 #endif 
 }
 
@@ -237,7 +240,6 @@ ParticleSystem::update(float deltaTime)
     // update constants
     setParameters(&m_params);
 
-    //m_eventTimer.startTimer(0);
     // integrate
     integrateSystem(
         dPos,
@@ -245,9 +247,7 @@ ParticleSystem::update(float deltaTime)
         deltaTime,
         m_numParticles,
         m_eventTimer);
-    //m_eventTimer.stopTimer(0);
 
-    //m_eventTimer.startTimer(1);
     // calculate grid hash
     calcHash(
         m_dGridParticleHash,
@@ -255,17 +255,12 @@ ParticleSystem::update(float deltaTime)
         dPos,
         m_numParticles,
         m_eventTimer);
-    //m_eventTimer.stopTimer(1);
-
 
     // sort particles based on hash
-    //m_eventTimer.startTimer(2);
     sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles, m_eventTimer);
-    //m_eventTimer.stopTimer(2);
 
     // reorder particle arrays into sorted order and
     // find start and end of each cell
-    //m_eventTimer.startTimer(3);
     reorderDataAndFindCellStart(
         m_dCellStart,
         m_dCellEnd,
@@ -279,10 +274,8 @@ ParticleSystem::update(float deltaTime)
         m_numGridCells,
         m_eventTimer
         );
-    //m_eventTimer.stopTimer(3);
 
     // process collisions
-    //m_eventTimer.startTimer(4);
     collide(
         m_dVel,
         m_dSortedPos,
@@ -292,8 +285,8 @@ ParticleSystem::update(float deltaTime)
         m_dCellEnd,
         m_numParticles,
         m_numGridCells,
+        m_dReadOrder,
         m_eventTimer);
-    //m_eventTimer.stopTimer(4);
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if (m_bUseOpenGL)

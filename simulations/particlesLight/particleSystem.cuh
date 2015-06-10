@@ -65,6 +65,7 @@ extern "C"
                  uint  *cellEnd,
                  uint   numParticles,
                  uint   numCells,
+                 int* readOrder,
                  EventTimer& eventTimer);
 
     void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);

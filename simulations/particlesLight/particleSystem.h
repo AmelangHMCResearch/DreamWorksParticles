@@ -150,6 +150,9 @@ class ParticleSystem
         uint  *m_hCellStart;
         uint  *m_hCellEnd;
 
+        // For broadcasted reads
+        int* m_dReadOrder;
+
         // GPU data
         float *m_dVel;
 
