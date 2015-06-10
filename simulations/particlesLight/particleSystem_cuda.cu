@@ -274,4 +274,11 @@ extern "C"
                             thrust::device_ptr<uint>(dGridParticleIndex));
     }
 
+    bool checkForResort(bool *pointHasMovedMoreThanThreshold)
+    {
+      bool needsResort;
+      cudaMemcpy(&needsResort, pointHasMovedMoreThanThreshold, sizeof(bool), cudaMemcpyDeviceToHost);
+      return needsResort;
+    }
+
 }   // extern "C"

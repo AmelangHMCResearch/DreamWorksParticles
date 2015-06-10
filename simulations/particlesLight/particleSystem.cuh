@@ -66,4 +66,6 @@ extern "C"
 
     void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles);
 
+    bool checkForResort(bool *pointHasMovedMoreThanThreshold);
+
 }

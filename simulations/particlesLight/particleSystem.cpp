@@ -252,15 +252,20 @@ ParticleSystem::update(float deltaTime)
         m_hPosAfterLastSortIsValid,
         m_dPointHasMovedMoreThanThreshold);
 
-    // calculate grid hash
-    calcHash(
-        m_dGridParticleHash,
-        m_dGridParticleIndex,
-        dPos,
-        m_numParticles);
+    bool needToResort = checkForResort(m_dPointHasMovedMoreThanThreshold);
 
-    // sort particles based on hash
-    sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+    if (needToResort) {
+
+        // calculate grid hash
+        calcHash(
+            m_dGridParticleHash,
+            m_dGridParticleIndex,
+            dPos,
+            m_numParticles);
+
+        // sort particles based on hash
+        sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+    }
 
     // reorder particle arrays into sorted order and
     // find start and end of each cell
