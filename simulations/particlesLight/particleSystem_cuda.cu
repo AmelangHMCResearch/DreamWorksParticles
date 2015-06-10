@@ -143,16 +143,21 @@ extern "C"
 
     void integrateSystem(float *pos,
                          float *vel,
+                         float *posAfterLastSort,
                          float deltaTime,
-                         uint numParticles)
+                         uint numParticles,
+                         bool posAfterLastSortIsValid,
+                         bool *pointHasMovedMoreThanThreshold)
     {
         thrust::device_ptr<float4> d_pos4((float4 *)pos);
         thrust::device_ptr<float4> d_vel4((float4 *)vel);
+        thrust::device_ptr<float4> d_posAfterLastSort4((float4 *)posAfterLastSort);
+
 
         thrust::for_each(
-            thrust::make_zip_iterator(thrust::make_tuple(d_pos4, d_vel4)),
-            thrust::make_zip_iterator(thrust::make_tuple(d_pos4+numParticles, d_vel4+numParticles)),
-            integrate_functor(deltaTime));
+            thrust::make_zip_iterator(thrust::make_tuple(d_pos4, d_vel4, d_posAfterLastSort4)),
+            thrust::make_zip_iterator(thrust::make_tuple(d_pos4+numParticles, d_vel4+numParticles, d_posAfterLastSort4+numParticles)),
+            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
     }
 
     void calcHash(uint  *gridParticleHash,
@@ -177,14 +182,15 @@ extern "C"
                                      uint  *cellEnd,
                                      float *sortedPos,
                                      float *sortedVel,
-                                     float *sortedPosAfterLastSort,
+                                     float *posAfterLastSort,
                                      bool  *hPosAfterLastSortIsValid,
                                      uint  *gridParticleHash,
                                      uint  *gridParticleIndex,
                                      float *oldPos,
                                      float *oldVel,
                                      uint   numParticles,
-                                     uint   numCells)
+                                     uint   numCells,
+                                     bool   *pointHasMovedMoreThanThreshold)
     {
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
@@ -203,12 +209,13 @@ extern "C"
             cellEnd,
             (float4 *) sortedPos,
             (float4 *) sortedVel,
-            (float4 *) sortedPosAfterLastSort,
+            (float4 *) posAfterLastSort,
             gridParticleHash,
             gridParticleIndex,
             (float4 *) oldPos,
             (float4 *) oldVel,
-            numParticles);
+            numParticles,
+            pointHasMovedMoreThanThreshold);
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
 
         *hPosAfterLastSortIsValid = true;

@@ -144,12 +144,16 @@ class ParticleSystem
         uint  *m_hCellStart;
         uint  *m_hCellEnd;
 
+
+
         // GPU data
         float *m_dVel;
 
         float *m_dSortedPos;
         float *m_dSortedVel;
-        float *m_dSortedPosAfterLastSort;
+        float *m_dPosAfterLastSort;
+
+        bool  *m_dPointHasMovedMoreThanThreshold;
 
         // grid data for sorting method
         uint  *m_dGridParticleHash; // grid hash value for each particle
@@ -173,6 +177,8 @@ class ParticleSystem
         StopWatchInterface *m_timer;
 
         uint m_solverIterations;
+
+        uint dummy_iterationsSinceLastResort;
 };
 
 #endif // __PARTICLESYSTEM_H__
