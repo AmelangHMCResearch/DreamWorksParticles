@@ -27,10 +27,7 @@ extern "C"
     void *mapGLBufferObject(struct cudaGraphicsResource **cuda_vbo_resource);
     void unmapGLBufferObject(struct cudaGraphicsResource *cuda_vbo_resource);
 
-
     void setParameters(SimParams *hostParams);
-
-    void copyReadOrder();
 
     void integrateSystem(float *pos,
                          float *vel,
@@ -66,6 +63,8 @@ extern "C"
                  uint   numParticles,
                  uint   numCells,
                  int* readOrder,
+                 uint* hNumNeighbors,
+                 uint* mNumNeighbors,
                  EventTimer& eventTimer);
 
     void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);

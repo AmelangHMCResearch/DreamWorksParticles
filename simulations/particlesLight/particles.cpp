@@ -145,6 +145,43 @@ writeTimes(const float* times,
     printf("wrote file to %s\n", appendedFilename.c_str());
 }
 
+void calcNumNeighbors(const uint* neighbors, uint* neighborStats, const uint numParticles, const uint maxNeighbors) {
+    for (int i=1; i < numParticles + 1; ++i) {
+        int numNeighbors = neighbors[i];
+        if (numNeighbors < maxNeighbors) {
+            neighborStats[numNeighbors] += 1;
+        }
+        else {
+            printf("Neighbors is %d\n", numNeighbors);
+        }
+    }
+
+}
+
+void
+writeNeighbors(const uint* neighbors,
+           const std::string& filename,
+           const uint numParticles,
+           const uint maxNeighbors) {
+    const std::string appendedFilename = filename + std::string(".csv");
+    uint* neighborStats = new uint[maxNeighbors]; 
+    memset(neighborStats, 0, maxNeighbors*sizeof(uint)); 
+    calcNumNeighbors(neighbors, neighborStats, numParticles, maxNeighbors);
+    FILE* file = fopen(appendedFilename.c_str(), "a");
+    fprintf(file, "%d, ", numParticles);
+    fprintf(file, "%d, ", neighbors[0]);
+    for (int i=0; i < maxNeighbors; ++i) {
+        fprintf(file, "%d", neighborStats[i]);
+        if (i != maxNeighbors - 1) {
+            fprintf(file, ", ");
+        }
+    }
+    fprintf(file, "\n");
+    fclose(file);
+    delete [] neighborStats;
+    //printf("wrote file to %s\n", appendedFilename.c_str());
+}
+
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
@@ -323,6 +360,9 @@ void display()
     glutReportErrors();
 
     computeFPS();
+
+    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
+
     if (frameCount >=numIterations) {
 
 	    glutLeaveMainLoop();

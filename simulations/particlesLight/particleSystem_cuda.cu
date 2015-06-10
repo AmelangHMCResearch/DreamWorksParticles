@@ -129,12 +129,6 @@ extern "C"
         checkCudaErrors(cudaMemcpyToSymbol(params, hostParams, sizeof(SimParams)));
     }
 
-    void copyReadOrder()
-    {
-        int readOrder[3][3] = {{-1,1, 0}, {0, -1, 1}, {1, 0, -1}};
-        checkCudaErrors(cudaMemcpyToSymbol(readOrderD, readOrder, 9*sizeof(int)));
-    }
-
     //Round a / b to nearest higher integer value
     uint iDivUp(uint a, uint b)
     {
@@ -211,10 +205,6 @@ extern "C"
 
         uint smemSize = sizeof(uint)*(numThreads+1);
         eventTimer.startTimer(3, true);
-        //cudaEvent_t start, stop;
-        //cudaEventCreate(&start);
-        //cudaEventCreate(&stop);
-        //cudaEventRecord(start, 0);
         reorderDataAndFindCellStartD<<< numBlocks, numThreads, smemSize>>>(
             cellStart,
             cellEnd,
@@ -225,10 +215,6 @@ extern "C"
             (float4 *) oldPos,
             (float4 *) oldVel,
             numParticles);
-        //cudaEventRecord(stop, 0);
-        //cudaEventSynchronize(stop);
-        //float elapsedTime;
-        //cudaEventElapsedTime(&elapsedTime, start, stop);
         eventTimer.stopTimer(3, true);
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
 
@@ -247,6 +233,8 @@ extern "C"
                  uint   numParticles,
                  uint   numCells,
                  int* readOrder,
+                 uint* hnumNeighbors,
+                 uint* dnumNeighbors,
                  EventTimer& eventTimer)
     {
 #if USE_TEX
@@ -273,7 +261,8 @@ extern "C"
                                                   cellStart,
                                                   cellEnd,
                                                   readOrder,
-                                                  numParticles);
+                                                  numParticles,
+                                                  dnumNeighbors);
             eventTimer.stopTimer(4, true);
             // check if kernel invocation generated an error
             getLastCudaError("Kernel execution failed");
@@ -286,7 +275,8 @@ extern "C"
                                                   gridParticleIndex,
                                                   cellStart,
                                                   cellEnd,
-                                                  numParticles);
+                                                  numParticles,
+                                                  dnumNeighbors);
             eventTimer.stopTimer(4, true);
     
             // check if kernel invocation generated an error
@@ -302,6 +292,8 @@ extern "C"
 #if 1
         checkCudaErrors(cudaUnbindTexture(readOrderTex));
 #endif
+
+        checkCudaErrors(cudaMemcpy(hnumNeighbors, dnumNeighbors, (numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));
     }
 
 

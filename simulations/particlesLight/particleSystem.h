@@ -123,6 +123,11 @@ class ParticleSystem
             return m_params.cellSize;
         }
 
+        uint* getNumNeighbors()
+        {
+            return m_hNumNeighbors;
+        }
+
         float* getTime()
         {
             return m_eventTimer.getTimes();
@@ -152,6 +157,10 @@ class ParticleSystem
 
         // For broadcasted reads
         int* m_dReadOrder;
+
+        // Testing Data:
+        uint* m_hNumNeighbors;
+        uint* m_dNumNeighbors; 
 
         // GPU data
         float *m_dVel;

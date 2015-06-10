@@ -30,12 +30,12 @@ texture<float4, 1, cudaReadModeElementType> oldVelTex;
 texture<uint, 1, cudaReadModeElementType> gridParticleHashTex;
 texture<uint, 1, cudaReadModeElementType> cellStartTex;
 texture<uint, 1, cudaReadModeElementType> cellEndTex;
-texture<uint, 1, cudaReadModeElementType> readOrderTex;
 #endif
+
+texture<uint, 1, cudaReadModeElementType> readOrderTex;
 
 // simulation parameters in constant memory
 __constant__ SimParams params;
-__constant__ int readOrderD[3][3]; 
 
 
 struct integrate_functor
@@ -267,10 +267,10 @@ float3 collideCell(int3    gridPos,
                    float4 *oldPos,
                    float4 *oldVel,
                    uint   *cellStart,
-                   uint   *cellEnd)
+                   uint   *cellEnd,
+                   uint* d_numNeighbors)
 {
     uint gridHash = calcGridHash(gridPos);
-    //uint cellCount = 0; 
 
     // get start of bucket for this cell
     uint startIndex = FETCH(cellStart, gridHash);
@@ -284,9 +284,6 @@ float3 collideCell(int3    gridPos,
 
         for (uint j=startIndex; j<endIndex; j++)
         {
-            /*if (index % 100000 == 0) {
-                ++cellCount; 
-            }*/
             if (j != index)                // check not colliding with self
             {
                 float3 pos2 = make_float3(FETCH(oldPos, j));
@@ -294,12 +291,10 @@ float3 collideCell(int3    gridPos,
 
                 // collide two spheres
                 force += collideSpheres(pos, pos2, vel, vel2, params.particleRadius, params.particleRadius, params.attraction);
+                d_numNeighbors[index + 1] += 1; 
             }
         }
     }
-    /*if (index % 100000 == 0) {
-        printf("Count in cell %d is %d\n", gridHash, cellCount);
-    }*/
 
     return force;
 }
@@ -312,11 +307,17 @@ void collideD(float4 *newVel,               // output: new velocity
               uint   *gridParticleIndex,    // input: sorted particle indices
               uint   *cellStart,
               uint   *cellEnd,
-              uint    numParticles)
+              uint    numParticles,
+              uint* d_numNeighbors)
 {
     uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
+
+    if (index == 0) {
+        ++d_numNeighbors[0]; 
+    }
+    d_numNeighbors[index + 1] = 0; 
 
     // read particle data from sorted arrays
     float3 pos = make_float3(FETCH(oldPos, index));
@@ -335,7 +336,7 @@ void collideD(float4 *newVel,               // output: new velocity
             for (int x=-1; x<=1; x++)
             {
                 int3 neighbourPos = gridPos + make_int3(x, y, z);
-                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
+                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd, d_numNeighbors);
             }
         }
     }
@@ -361,11 +362,17 @@ void collideBroadcastD(float4 *newVel,               // output: new velocity
               uint   *cellStart,
               uint   *cellEnd,
               int* readOrder,
-              uint    numParticles)
+              uint    numParticles,
+              uint* d_numNeighbors)
 {
     uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
+
+    if (index == 0) {
+        ++d_numNeighbors[0]; 
+    }
+    d_numNeighbors[index + 1] = 0; 
 
     // read particle data from sorted arrays
     float3 pos = make_float3(FETCH(oldPos, index));
@@ -390,7 +397,7 @@ void collideBroadcastD(float4 *newVel,               // output: new velocity
                                                         FETCH(readOrder, y*3 + gridPosMod.y), 
                                                         FETCH(readOrder, z*3 + gridPosMod.z));
 
-                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd);
+                force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd, d_numNeighbors);
             }
         }
     }
