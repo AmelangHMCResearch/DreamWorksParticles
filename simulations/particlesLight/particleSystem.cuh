@@ -30,8 +30,11 @@ extern "C"
 
     void integrateSystem(float *pos,
                          float *vel,
+                         float *posAfterLastSort,
                          float deltaTime,
-                         uint numParticles);
+                         uint numParticles,
+                         bool posAfterLastSortIsValid,
+                         bool *pointHasMovedMoreThanThreshold);
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
@@ -42,12 +45,16 @@ extern "C"
                                      uint  *cellEnd,
                                      float *sortedPos,
                                      float *sortedVel,
+                                     float *posAfterLastSort,
+                                     bool  *hPosAfterLastSortIsValid,
                                      uint  *gridParticleHash,
                                      uint  *gridParticleIndex,
                                      float *oldPos,
                                      float *oldVel,
                                      uint   numParticles,
-                                     uint   numCells);
+                                     uint   numCells,
+                                     bool   *pointHasMovedMoreThanThreshold,
+                                     bool   needsResort);
 
     void collide(float *newVel,
                  float *sortedPos,
@@ -59,5 +66,7 @@ extern "C"
                  uint   numCells);
 
     void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles);
+
+    bool checkForResort(bool *pointHasMovedMoreThanThreshold);
 
 }

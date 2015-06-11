@@ -38,10 +38,15 @@ __constant__ SimParams params;
 
 struct integrate_functor
 {
-    float deltaTime;
+    float _deltaTime;
+    bool  _posAfterLastSortIsValid;
+    bool *_pointHasMovedMoreThanThreshold;
 
     __host__ __device__
-    integrate_functor(float delta_time) : deltaTime(delta_time) {}
+    integrate_functor(float deltaTime, bool posAfterLastSortIsValid, bool *pointHasMovedMoreThanThreshold)
+        : _deltaTime(deltaTime),
+          _posAfterLastSortIsValid(posAfterLastSortIsValid),
+          _pointHasMovedMoreThanThreshold(pointHasMovedMoreThanThreshold) {}
 
     template <typename Tuple>
     __device__
@@ -49,14 +54,16 @@ struct integrate_functor
     {
         volatile float4 posData = thrust::get<0>(t);
         volatile float4 velData = thrust::get<1>(t);
+        volatile float4 posAfterLastSortData = thrust::get<2>(t);
         float3 pos = make_float3(posData.x, posData.y, posData.z);
         float3 vel = make_float3(velData.x, velData.y, velData.z);
+        float3 posAfterLastSort = make_float3(posAfterLastSortData.x, posAfterLastSortData.y, posAfterLastSortData.z);
 
-        vel += params.gravity * deltaTime;
+        vel += params.gravity * _deltaTime;
         vel *= params.globalDamping;
 
         // new position = old position + velocity * deltaTime
-        pos += vel * deltaTime;
+        pos += vel * _deltaTime;
 
         // set this to zero to disable collisions with cube sides
 #if 1
@@ -102,6 +109,19 @@ struct integrate_functor
         // store new position and velocity
         thrust::get<0>(t) = make_float4(pos, posData.w);
         thrust::get<1>(t) = make_float4(vel, velData.w);
+
+        if (_posAfterLastSortIsValid) {
+            float3 movementSinceLastSort = pos - posAfterLastSort;
+            float movementMagnitude = length(movementSinceLastSort);
+            if (movementMagnitude >= params.movementThreshold) {
+                *_pointHasMovedMoreThanThreshold = true;
+            }
+
+            // uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+            // if (index == 0) {
+            //     printf("Thread %d: point moved %f\n", index, movementMagnitude);
+            // }
+        }
     }
 };
 
@@ -109,9 +129,9 @@ struct integrate_functor
 __device__ int3 calcGridPos(float3 p)
 {
     int3 gridPos;
-    gridPos.x = floor((p.x - params.worldOrigin.x) / params.cellSize.x);
-    gridPos.y = floor((p.y - params.worldOrigin.y) / params.cellSize.y);
-    gridPos.z = floor((p.z - params.worldOrigin.z) / params.cellSize.z);
+    gridPos.x = floor((p.x - params.worldOrigin.x) / (params.cellSize.x + 2*params.movementThreshold));
+    gridPos.y = floor((p.y - params.worldOrigin.y) / (params.cellSize.y + 2*params.movementThreshold));
+    gridPos.z = floor((p.z - params.worldOrigin.z) / (params.cellSize.z + 2*params.movementThreshold));
     return gridPos;
 }
 
@@ -153,11 +173,14 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
                                   uint   *cellEnd,          // output: cell end index
                                   float4 *sortedPos,        // output: sorted positions
                                   float4 *sortedVel,        // output: sorted velocities
+                                  float4 *posAfterLastSort, // output: sorted positions only updated during a sort
                                   uint   *gridParticleHash, // input: sorted grid hashes
                                   uint   *gridParticleIndex,// input: sorted particle indices
                                   float4 *oldPos,           // input: sorted position array
                                   float4 *oldVel,           // input: sorted velocity array
-                                  uint    numParticles)
+                                  uint    numParticles,
+                                  bool   *pointHasMovedMoreThanThreshold,
+                                  bool   needsResort)
 {
     extern __shared__ uint sharedHash[];    // blockSize + 1 elements
     uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
@@ -211,9 +234,18 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 
         sortedPos[index] = pos;
         sortedVel[index] = vel;
+
+        if (needsResort) {
+            posAfterLastSort[index] = FETCH(oldPos, index);
+            
+            // have the 0th thread reset the movement threshold trigger for resort
+            if (index == 0) {
+                *pointHasMovedMoreThanThreshold = false;
+            }
+        }
+
+        
     }
-
-
 }
 
 // collide two spheres using DEM method

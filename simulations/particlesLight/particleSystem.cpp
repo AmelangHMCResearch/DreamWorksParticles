@@ -39,7 +39,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_dVel(0),
     m_gridSize(gridSize),
     m_timer(NULL),
-    m_solverIterations(1)
+    m_solverIterations(1),
+    dummy_iterationsSinceLastResort(0)
 {
     m_numGridCells = m_gridSize.x*m_gridSize.y*m_gridSize.z;
     //    float3 worldSize = make_float3(2.0f, 2.0f, 2.0f);
@@ -68,6 +69,9 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
 
     m_params.gravity = make_float3(0.0f, -0.0003f, 0.0f);
     m_params.globalDamping = 1.0f;
+
+    // fixed initial value for cell padding / movement threshold
+    m_params.movementThreshold = 0.2*m_params.particleRadius;
 
     _initialize(numParticles);
 }
@@ -148,12 +152,16 @@ ParticleSystem::_initialize(int numParticles)
 
     allocateArray((void **)&m_dSortedPos, memSize);
     allocateArray((void **)&m_dSortedVel, memSize);
+    allocateArray((void **)&m_dPosAfterLastSort, memSize);
 
     allocateArray((void **)&m_dGridParticleHash, m_numParticles*sizeof(uint));
     allocateArray((void **)&m_dGridParticleIndex, m_numParticles*sizeof(uint));
 
     allocateArray((void **)&m_dCellStart, m_numGridCells*sizeof(uint));
     allocateArray((void **)&m_dCellEnd, m_numGridCells*sizeof(uint));
+
+    allocateArray((void **)&m_dPointHasMovedMoreThanThreshold, sizeof(bool));
+    cudaMemset(m_dPointHasMovedMoreThanThreshold, true, sizeof(bool));
 
     if (m_bUseOpenGL)
     {
@@ -201,11 +209,14 @@ ParticleSystem::_finalize()
     freeArray(m_dVel);
     freeArray(m_dSortedPos);
     freeArray(m_dSortedVel);
+    freeArray(m_dPosAfterLastSort);
 
     freeArray(m_dGridParticleHash);
     freeArray(m_dGridParticleIndex);
     freeArray(m_dCellStart);
     freeArray(m_dCellEnd);
+
+    freeArray(m_dPointHasMovedMoreThanThreshold);
 
     if (m_bUseOpenGL)
     {
@@ -236,18 +247,30 @@ ParticleSystem::update(float deltaTime)
     integrateSystem(
         dPos,
         m_dVel,
+        m_dPosAfterLastSort,
         deltaTime,
-        m_numParticles);
+        m_numParticles,
+        m_hPosAfterLastSortIsValid,
+        m_dPointHasMovedMoreThanThreshold);
 
-    // calculate grid hash
-    calcHash(
-        m_dGridParticleHash,
-        m_dGridParticleIndex,
-        dPos,
-        m_numParticles);
+    bool needToResort = checkForResort(m_dPointHasMovedMoreThanThreshold);
 
-    // sort particles based on hash
-    sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+    if (needToResort) {
+        // calculate grid hash
+        calcHash(
+            m_dGridParticleHash,
+            m_dGridParticleIndex,
+            dPos,
+            m_numParticles);
+
+        // sort particles based on hash
+        sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+
+        printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
+        dummy_iterationsSinceLastResort = 0;
+    } else {
+        ++dummy_iterationsSinceLastResort;
+    }
 
     // reorder particle arrays into sorted order and
     // find start and end of each cell
@@ -256,12 +279,16 @@ ParticleSystem::update(float deltaTime)
         m_dCellEnd,
         m_dSortedPos,
         m_dSortedVel,
+        m_dPosAfterLastSort,
+        &m_hPosAfterLastSortIsValid,
         m_dGridParticleHash,
         m_dGridParticleIndex,
         dPos,
         m_dVel,
         m_numParticles,
-        m_numGridCells);
+        m_numGridCells,
+        m_dPointHasMovedMoreThanThreshold,
+        needToResort);
 
     // process collisions
     collide(
@@ -338,6 +365,10 @@ ParticleSystem::setArray(ParticleArray array, const float *data, int start, int 
                     glBufferSubData(GL_ARRAY_BUFFER, start*4*sizeof(float), count*4*sizeof(float), data);
                     glBindBuffer(GL_ARRAY_BUFFER, 0);
                     registerGLBufferObject(m_posVBO, &m_cuda_posvbo_resource);
+
+                    // force a resort because particles have moved
+                    m_hPosAfterLastSortIsValid = false;
+                    cudaMemset(m_dPointHasMovedMoreThanThreshold, true, sizeof(bool));
                 }
             }
             break;
