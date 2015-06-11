@@ -71,7 +71,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_params.globalDamping = 1.0f;
 
     // fixed initial value for cell padding / movement threshold
-    m_params.movementThreshold = 0.1*m_params.particleRadius;
+    m_params.movementThreshold = 0.2*m_params.particleRadius;
 
     _initialize(numParticles);
 }
@@ -161,6 +161,7 @@ ParticleSystem::_initialize(int numParticles)
     allocateArray((void **)&m_dCellEnd, m_numGridCells*sizeof(uint));
 
     allocateArray((void **)&m_dPointHasMovedMoreThanThreshold, sizeof(bool));
+    cudaMemset(m_dPointHasMovedMoreThanThreshold, true, sizeof(bool));
 
     if (m_bUseOpenGL)
     {
@@ -255,7 +256,6 @@ ParticleSystem::update(float deltaTime)
     bool needToResort = checkForResort(m_dPointHasMovedMoreThanThreshold);
 
     if (needToResort) {
-
         // calculate grid hash
         calcHash(
             m_dGridParticleHash,
@@ -265,6 +265,11 @@ ParticleSystem::update(float deltaTime)
 
         // sort particles based on hash
         sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
+
+        printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
+        dummy_iterationsSinceLastResort = 0;
+    } else {
+        ++dummy_iterationsSinceLastResort;
     }
 
     // reorder particle arrays into sorted order and
@@ -282,7 +287,8 @@ ParticleSystem::update(float deltaTime)
         m_dVel,
         m_numParticles,
         m_numGridCells,
-        m_dPointHasMovedMoreThanThreshold);
+        m_dPointHasMovedMoreThanThreshold,
+        needToResort);
 
     // process collisions
     collide(
@@ -362,6 +368,7 @@ ParticleSystem::setArray(ParticleArray array, const float *data, int start, int 
 
                     // force a resort because particles have moved
                     m_hPosAfterLastSortIsValid = false;
+                    cudaMemset(m_dPointHasMovedMoreThanThreshold, true, sizeof(bool));
                 }
             }
             break;

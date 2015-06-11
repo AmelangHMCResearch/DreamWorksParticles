@@ -116,6 +116,11 @@ struct integrate_functor
             if (movementMagnitude >= params.movementThreshold) {
                 *_pointHasMovedMoreThanThreshold = true;
             }
+
+            // uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+            // if (index == 0) {
+            //     printf("Thread %d: point moved %f\n", index, movementMagnitude);
+            // }
         }
     }
 };
@@ -174,7 +179,8 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
                                   float4 *oldPos,           // input: sorted position array
                                   float4 *oldVel,           // input: sorted velocity array
                                   uint    numParticles,
-                                  bool   *pointHasMovedMoreThanThreshold)
+                                  bool   *pointHasMovedMoreThanThreshold,
+                                  bool   needsResort)
 {
     extern __shared__ uint sharedHash[];    // blockSize + 1 elements
     uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
@@ -228,12 +234,17 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 
         sortedPos[index] = pos;
         sortedVel[index] = vel;
-        posAfterLastSort[index] = FETCH(oldPos, index);
 
-        // have the 0th thread reset the movement threshold trigger for resort
-        if (index == 0) {
-            *pointHasMovedMoreThanThreshold = false;
+        if (needsResort) {
+            posAfterLastSort[index] = FETCH(oldPos, index);
+            
+            // have the 0th thread reset the movement threshold trigger for resort
+            if (index == 0) {
+                *pointHasMovedMoreThanThreshold = false;
+            }
         }
+
+        
     }
 }
 

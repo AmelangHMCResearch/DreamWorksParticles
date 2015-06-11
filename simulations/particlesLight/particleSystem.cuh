@@ -53,7 +53,8 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
-                                     bool   *pointHasMovedMoreThanThreshold);
+                                     bool   *pointHasMovedMoreThanThreshold,
+                                     bool   needsResort);
 
     void collide(float *newVel,
                  float *sortedPos,

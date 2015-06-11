@@ -190,7 +190,8 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
-                                     bool   *pointHasMovedMoreThanThreshold)
+                                     bool   *pointHasMovedMoreThanThreshold,
+                                     bool   needsResort)
     {
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
@@ -215,7 +216,8 @@ extern "C"
             (float4 *) oldPos,
             (float4 *) oldVel,
             numParticles,
-            pointHasMovedMoreThanThreshold);
+            pointHasMovedMoreThanThreshold,
+            needsResort);
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
 
         *hPosAfterLastSortIsValid = true;
