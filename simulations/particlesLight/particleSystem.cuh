@@ -9,6 +9,8 @@
  *
  */
 
+ #include "event_timer.h"
+
 extern "C"
 {
     void cudaInit(int argc, char **argv);
@@ -33,13 +35,18 @@ extern "C"
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
+<<<<<<< HEAD
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold);
+=======
+                         EventTimer& eventTimer);
+>>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
                   float *pos,
-                  int    numParticles);
+                  int    numParticles,
+                  EventTimer& eventTimer);
 
     void reorderDataAndFindCellStart(uint  *cellStart,
                                      uint  *cellEnd,
@@ -53,8 +60,13 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
+<<<<<<< HEAD
                                      bool   *pointHasMovedMoreThanThreshold,
                                      bool   needsResort);
+=======
+                                     EventTimer& eventTimer
+                                     );
+>>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
 
     void collide(float *newVel,
                  float *sortedPos,
@@ -63,9 +75,10 @@ extern "C"
                  uint  *cellStart,
                  uint  *cellEnd,
                  uint   numParticles,
-                 uint   numCells);
+                 uint   numCells,
+                 EventTimer& eventTimer);
 
-    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles);
+    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);
 
     bool checkForResort(bool *pointHasMovedMoreThanThreshold);
 

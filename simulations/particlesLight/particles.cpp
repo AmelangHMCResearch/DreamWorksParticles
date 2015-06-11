@@ -52,6 +52,7 @@
 #include "particleSystem.h"
 #include "render_particles.h"
 #include "paramgl.h"
+#include "event_timer.h"
 
 #define MAX_EPSILON_ERROR 5.00f
 #define THRESHOLD         0.30f
@@ -138,23 +139,6 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     }
 
     sdkCreateTimer(&timer);
-}
-
-void cleanup()
-{
-    sdkDeleteTimer(&timer);
-
-    if (psystem)
-    {
-        delete psystem;
-    }
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
-    return;
 }
 
 // initialize OpenGL
@@ -324,7 +308,12 @@ void display()
     float timeNow = timer->getTime();
     if (frameCount >= 5000) {
         printf("Ran %d frames in %f ms for %d particles. \n", frameCount, timeNow, numParticles);
-	glutLeaveMainLoop();
+        printf("Integrate system took %f ms\n", psystem->getTime()[0]);
+        printf("CalcHash took %f ms\n", psystem->getTime()[1]);
+        printf("Sort particles took %f ms\n", psystem->getTime()[2]);
+        printf("Reorder data and find cell start took %f ms\n", psystem->getTime()[3]);
+        printf("Collide took %f ms\n", psystem->getTime()[4]);
+	    glutLeaveMainLoop();
     }
 }
 
@@ -787,6 +776,7 @@ main(int argc, char **argv)
     }
     else
     {
+        glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
         glutDisplayFunc(display);
         glutReshapeFunc(reshape);
         // glutMouseFunc(mouse);
@@ -795,23 +785,28 @@ main(int argc, char **argv)
         // glutSpecialFunc(special);
         glutIdleFunc(idle);
 
-        glutCloseFunc(cleanup);
+        //glutCloseFunc(cleanup);
 
         glutMainLoop();
     }
 
+    //sdkDeleteTimer(&timer);
+
     if (psystem)
     {
-        delete psystem;
+        //delete psystem;
     }
-
     // cudaDeviceReset causes the driver to clean up all state. While
     // not mandatory in normal operation, it is good practice.  It is also
     // needed to ensure correct operation when the application is being
     // profiled. Calling cudaDeviceReset causes all profile data to be
     // flushed before the application exits
     cudaThreadSynchronize();
-    cudaDeviceReset();
+ 
+    // Note: cudaDeviceReset() cause a segfault. Not completely sure why
+    // If you need profiling information, you'll have to fix the segfault.
+    // Sorry :(
+    // cudaDeviceReset();
     exit(g_TotalErrors > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
