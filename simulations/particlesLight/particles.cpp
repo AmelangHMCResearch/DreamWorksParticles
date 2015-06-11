@@ -322,7 +322,7 @@ void display()
 
     computeFPS();
     float timeNow = timer->getTime();
-    if (timeNow >= 10000.0) {
+    if (frameCount >= 5000) {
         printf("Ran %d frames in %f ms for %d particles. \n", frameCount, timeNow, numParticles);
 	glutLeaveMainLoop();
     }

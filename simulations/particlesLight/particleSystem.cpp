@@ -266,7 +266,7 @@ ParticleSystem::update(float deltaTime)
         // sort particles based on hash
         sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
 
-        printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
+        // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {
         ++dummy_iterationsSinceLastResort;
