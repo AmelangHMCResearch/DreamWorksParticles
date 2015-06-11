@@ -253,7 +253,6 @@ ParticleSystem::update(float deltaTime)
         m_dPosAfterLastSort,
         deltaTime,
         m_numParticles,
-<<<<<<< HEAD
         m_hPosAfterLastSortIsValid,
         m_dPointHasMovedMoreThanThreshold,
         m_eventTimer);

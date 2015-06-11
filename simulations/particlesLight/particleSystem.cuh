@@ -35,12 +35,9 @@ extern "C"
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
-<<<<<<< HEAD
                          bool posAfterLastSortIsValid,
-                         bool *pointHasMovedMoreThanThreshold);
-=======
+                         bool *pointHasMovedMoreThanThreshold,
                          EventTimer& eventTimer);
->>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
@@ -60,13 +57,9 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
-<<<<<<< HEAD
                                      bool   *pointHasMovedMoreThanThreshold,
-                                     bool   needsResort);
-=======
-                                     EventTimer& eventTimer
-                                     );
->>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
+                                     bool   needsResort,
+                                     EventTimer& eventTimer);
 
     void collide(float *newVel,
                  float *sortedPos,

@@ -195,13 +195,9 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
-<<<<<<< HEAD
                                      bool   *pointHasMovedMoreThanThreshold,
-                                     bool   needsResort)
-=======
-                                     EventTimer& eventTimer
-                                     )
->>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
+                                     bool   needsResort,
+                                     EventTimer& eventTimer)
     {
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
@@ -230,18 +226,14 @@ extern "C"
             gridParticleIndex,
             (float4 *) oldPos,
             (float4 *) oldVel,
-<<<<<<< HEAD
             numParticles,
             pointHasMovedMoreThanThreshold,
             needsResort);
-=======
-            numParticles);
         //cudaEventRecord(stop, 0);
         //cudaEventSynchronize(stop);
         //float elapsedTime;
         //cudaEventElapsedTime(&elapsedTime, start, stop);
         eventTimer.stopTimer(3, true);
->>>>>>> 4b90af1d0a22b91454bac65437a0f781764c809a
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
 
         *hPosAfterLastSortIsValid = true;
