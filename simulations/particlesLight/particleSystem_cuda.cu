@@ -34,6 +34,9 @@
 #include "thrust/for_each.h"
 #include "thrust/iterator/zip_iterator.h"
 #include "thrust/sort.h"
+#include "thrust/device_vector.h"
+#include <thrust/extrema.h>
+#include <thrust/execution_policy.h>
 
 #include "particles_kernel_impl.cuh"
 
@@ -152,12 +155,18 @@ extern "C"
         thrust::device_ptr<float4> d_pos4((float4 *)pos);
         thrust::device_ptr<float4> d_vel4((float4 *)vel);
         thrust::device_ptr<float4> d_posAfterLastSort4((float4 *)posAfterLastSort);
+        thrust::device_vector<float> movementThisTimestep(numParticles);
+
 
 
         thrust::for_each(
-            thrust::make_zip_iterator(thrust::make_tuple(d_pos4, d_vel4, d_posAfterLastSort4)),
-            thrust::make_zip_iterator(thrust::make_tuple(d_pos4+numParticles, d_vel4+numParticles, d_posAfterLastSort4+numParticles)),
+            thrust::make_zip_iterator(thrust::make_tuple(d_pos4, d_vel4, d_posAfterLastSort4, movementThisTimestep.begin())),
+            thrust::make_zip_iterator(thrust::make_tuple(d_pos4+numParticles, d_vel4+numParticles, d_posAfterLastSort4+numParticles, movementThisTimestep.end())),
             integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
+
+        float maxMovementThisTimestep = *thrust::max_element(movementThisTimestep.begin(), movementThisTimestep.end());
+        // printf("maxMovementThisTimestep is %f", maxMovementThisTimestep);
+        
     }
 
     void calcHash(uint  *gridParticleHash,

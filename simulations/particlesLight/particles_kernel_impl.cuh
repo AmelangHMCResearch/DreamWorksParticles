@@ -41,6 +41,7 @@ struct integrate_functor
     float _deltaTime;
     bool  _posAfterLastSortIsValid;
     bool *_pointHasMovedMoreThanThreshold;
+    float4 * _movementThisTimestep;
 
     __host__ __device__
     integrate_functor(float deltaTime, bool posAfterLastSortIsValid, bool *pointHasMovedMoreThanThreshold)
@@ -121,6 +122,9 @@ struct integrate_functor
             // if (index == 0) {
             //     printf("Thread %d: point moved %f\n", index, movementMagnitude);
             // }
+            
+            // save the movement for graphing
+            thrust::get<3>(t) = movementMagnitude;
         }
     }
 };

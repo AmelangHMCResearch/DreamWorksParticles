@@ -71,7 +71,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_params.globalDamping = 1.0f;
 
     // fixed initial value for cell padding / movement threshold
-    m_params.movementThreshold = 0.2*m_params.particleRadius;
+    m_params.movementThreshold = 0;
 
     _initialize(numParticles);
 }
