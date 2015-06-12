@@ -11,10 +11,8 @@
 
 /*
     Particle system example with collisions using uniform grid
-
     CUDA 2.1 SDK release 12/2008
     - removed atomic grid method, some optimization, added demo mode.
-
     CUDA 2.2 release 3/2009
     - replaced sort function with latest radix sort, now disables v-sync.
     - added support for automated testing and comparison to a reference value.
@@ -48,17 +46,28 @@
 #include <cstdlib>
 #include <cstdio>
 #include <algorithm>
+#include <string>
 
 #include "particleSystem.h"
 #include "render_particles.h"
 #include "paramgl.h"
 #include "event_timer.h"
 
-#define MAX_EPSILON_ERROR 5.00f
-#define THRESHOLD         0.30f
+// Parameters you might be interested in changing (also command line)
+uint numParticles = 999424;
+uint3 gridSize = {256, 256, 256};
+int numIterations = 5000; // run until exit
 
-#define GRID_SIZE      64
-#define NUM_PARTICLES   16384
+// simulation parameters
+float timestep = 0.5f;
+float damping = 1.0f;
+float gravity = 0.0003f;
+int ballr = 10;
+
+float collideSpring = 0.5f;;
+float collideDamping = 0.02f;;
+float collideShear = 0.1f;
+float collideAttraction = 0.0f;
 
 const uint width = 640, height = 480;
 
@@ -84,28 +93,11 @@ const int idleDelay = 2000;
 
 enum { M_VIEW = 0, M_MOVE };
 
-uint numParticles = 0;
-uint3 gridSize;
-int numIterations = 0; // run until exit
-
-// simulation parameters
-float timestep = 0.5f;
-float damping = 1.0f;
-float gravity = 0.0003f;
-int iterations = 1;
-int ballr = 10;
-
-float collideSpring = 0.5f;;
-float collideDamping = 0.02f;;
-float collideShear = 0.1f;
-float collideAttraction = 0.0f;
-
 ParticleSystem *psystem = 0;
 
 // fps
 static int fpsCount = 0;
 static int fpsLimit = 1;
-StopWatchInterface *timer = NULL;
 
 ParticleRenderer *renderer = 0;
 
@@ -117,13 +109,67 @@ ParamListGL *params;
 const int frameCheckNumber = 4;
 unsigned int frameCount = 0;
 unsigned int g_TotalErrors = 0;
-char        *g_refFile = NULL;
 
 const char *sSDKsample = "CUDA Particles Simulation";
 
-extern "C" void cudaInit(int argc, char **argv);
 extern "C" void cudaGLInit(int argc, char **argv);
 extern "C" void copyArrayFromDevice(void *host, const void *device, unsigned int vbo, int size);
+
+void
+writeTimes(const float* times,
+           const std::string& filename,
+           const uint numParticles,
+           const uint gridSize) {
+    const std::string appendedFilename = filename + std::string(".csv");
+    FILE* file = fopen(appendedFilename.c_str(), "a");
+    fprintf(file, "%d, ", numParticles);
+    for (unsigned int i = 0; i < 5; ++i) {
+        fprintf(file, "%f", times[i]);
+        if (i != 4) {
+            fprintf(file, ",");
+        }
+    }
+    fprintf(file, "\n");
+    fclose(file);
+    printf("wrote file to %s\n", appendedFilename.c_str());
+}
+
+void calcNumNeighbors(const uint* neighbors, uint* neighborStats, const uint numParticles, const uint maxNeighbors) {
+    for (int i=1; i < numParticles + 1; ++i) {
+        int numNeighbors = neighbors[i];
+        if (numNeighbors < maxNeighbors) {
+            neighborStats[numNeighbors] += 1;
+        }
+        else {
+            //printf("Neighbors is %d\n", numNeighbors);
+        }
+    }
+
+}
+
+void
+writeNeighbors(const uint* neighbors,
+           const std::string& filename,
+           const uint numParticles,
+           const uint maxNeighbors) {
+    const std::string appendedFilename = filename + std::string(".csv");
+    uint* neighborStats = new uint[maxNeighbors]; 
+    memset(neighborStats, 0, maxNeighbors*sizeof(uint)); 
+    calcNumNeighbors(neighbors, neighborStats, numParticles, maxNeighbors);
+    FILE* file = fopen(appendedFilename.c_str(), "a");
+    fprintf(file, "%d, ", numParticles);
+    fprintf(file, "%d, ", neighbors[0]);
+    for (int i=0; i < maxNeighbors; ++i) {
+        fprintf(file, "%d", neighborStats[i]);
+        if (i != maxNeighbors - 1) {
+            fprintf(file, ", ");
+        }
+    }
+    fprintf(file, "\n");
+    fclose(file);
+    delete [] neighborStats;
+    //printf("wrote file to %s\n", appendedFilename.c_str());
+}
 
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
@@ -138,7 +184,6 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         renderer->setColorBuffer(psystem->getColorBuffer());
     }
 
-    sdkCreateTimer(&timer);
 }
 
 // initialize OpenGL
@@ -172,69 +217,31 @@ void initGL(int *argc, char **argv)
 
     glutReportErrors();
 }
-/*
-void runBenchmark(int iterations, char *exec_path)
-{
-    printf("Run %u particles simulation for %d iterations...\n\n", numParticles, iterations);
-    cudaDeviceSynchronize();
-    sdkStartTimer(&timer);
 
-    for (int i = 0; i < iterations; ++i)
-    {
-        psystem->update(timestep);
-    }
-
-    cudaDeviceSynchronize();
-    sdkStopTimer(&timer);
-    float fAvgSeconds = ((float)1.0e-3 * (float)sdkGetTimerValue(&timer)/(float)iterations);
-
-    printf("particles, Throughput = %.4f KParticles/s, Time = %.5f s, Size = %u particles, NumDevsUsed = %u, Workgroup = %u\n",
-           (1.0e-3 * numParticles)/fAvgSeconds, fAvgSeconds, numParticles, 1, 0);
-
-    if (g_refFile)
-    {
-        printf("\nChecking result...\n\n");
-        float *hPos = (float *)malloc(sizeof(float)*4*psystem->getNumParticles());
-        copyArrayFromDevice(hPos, psystem->getCudaPosVBO(),
-                            0, sizeof(float)*4*psystem->getNumParticles());
-
-        sdkDumpBin((void *)hPos, sizeof(float)*4*psystem->getNumParticles(), "particles.bin");
-
-        if (!sdkCompareBin2BinFloat("particles.bin", g_refFile, sizeof(float)*4*psystem->getNumParticles(),
-                                    MAX_EPSILON_ERROR, THRESHOLD, exec_path))
-        {
-            g_TotalErrors++;
-        }
-    }
-}
-*/
 void computeFPS()
 {
     frameCount++;
     fpsCount++;
 
-    if (fpsCount == fpsLimit)
+    /*if (fpsCount == fpsLimit)
     {
         char fps[256];
-        float ifps = 1.f / (sdkGetAverageTimerValue(&timer) / 1000.f);
-        sprintf(fps, "CUDA Particles (%d particles): %3.1f fps", numParticles, ifps);
+        // float ifps = 1.f / (sdkGetAverageTimerValue(&timer) / 1000.f);
+        // sprintf(fps, "CUDA Particles (%d particles): %3.1f fps", numParticles, ifps);
 
         glutSetWindowTitle(fps);
         fpsCount = 0;
 
         fpsLimit = (int)MAX(ifps, 1.f);
-        // sdkResetTimer(&timer);
-    }
+    }*/
 }
 
 void display()
 {
-    sdkStartTimer(&timer);
 
     // update the simulation
     if (!bPause)
     {
-        psystem->setIterations(iterations);
         psystem->setDamping(damping);
         psystem->setGravity(-gravity);
         psystem->setCollideSpring(collideSpring);
@@ -249,7 +256,6 @@ void display()
             renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
         }
     }
-    sdkStopTimer(&timer);
     // render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -272,7 +278,7 @@ void display()
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(10.0);
+    glutWireCube(8.0);
 
     // collider
     /*
@@ -305,15 +311,12 @@ void display()
     glutReportErrors();
 
     computeFPS();
-    float timeNow = timer->getTime();
-    if (timeNow >= 1000.0) {
-        printf("Ran %d frames in %f ms for %d particles. \n", frameCount, timeNow, numParticles);
-        printf("Integrate system took %f ms\n", psystem->getTime()[0]);
-        printf("CalcHash took %f ms\n", psystem->getTime()[1]);
-        printf("Sort particles took %f ms\n", psystem->getTime()[2]);
-        printf("Reorder data and find cell start took %f ms\n", psystem->getTime()[3]);
-        printf("Collide took %f ms\n", psystem->getTime()[4]);
-	    glutLeaveMainLoop();
+
+    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
+
+    if (frameCount >=numIterations) {
+
+        glutLeaveMainLoop();
     }
 }
 
@@ -620,11 +623,9 @@ void idle(void)
         demoMode = true;
         printf("Entering demo mode\n");
     }
-
     if (demoMode)
     {
         camera_rot[1] += 0.1f;
-
         if (demoCounter++ > 1000)
         {
             ballr = 10 + (rand() % 10);
@@ -638,33 +639,17 @@ void idle(void)
 
 void initParams()
 {
-    if (g_refFile)
-    {
-        timestep = 0.0f;
-        damping = 0.0f;
-        gravity = 0.0f;
-        ballr = 1;
-        collideSpring = 0.0f;
-        collideDamping = 0.0f;
-        collideShear = 0.0f;
-        collideAttraction = 0.0f;
+    // create a new parameter list
+    params = new ParamListGL("misc");
+    params->AddParam(new Param<float>("time step", timestep, 0.0f, 1.0f, 0.01f, &timestep));
+    params->AddParam(new Param<float>("damping"  , damping , 0.0f, 1.0f, 0.001f, &damping));
+    params->AddParam(new Param<float>("gravity"  , gravity , 0.0f, 0.001f, 0.0001f, &gravity));
+    params->AddParam(new Param<int> ("ball radius", ballr , 1, 20, 1, &ballr));
 
-    }
-    else
-    {
-
-        // create a new parameter list
-        params = new ParamListGL("misc");
-        params->AddParam(new Param<float>("time step", timestep, 0.0f, 1.0f, 0.01f, &timestep));
-        params->AddParam(new Param<float>("damping"  , damping , 0.0f, 1.0f, 0.001f, &damping));
-        params->AddParam(new Param<float>("gravity"  , gravity , 0.0f, 0.001f, 0.0001f, &gravity));
-        params->AddParam(new Param<int> ("ball radius", ballr , 1, 20, 1, &ballr));
-
-        params->AddParam(new Param<float>("collide spring" , collideSpring , 0.0f, 1.0f, 0.001f, &collideSpring));
-        params->AddParam(new Param<float>("collide damping", collideDamping, 0.0f, 0.1f, 0.001f, &collideDamping));
-        params->AddParam(new Param<float>("collide shear"  , collideShear  , 0.0f, 0.1f, 0.001f, &collideShear));
-        params->AddParam(new Param<float>("collide attract", collideAttraction, 0.0f, 0.1f, 0.001f, &collideAttraction));
-    }
+    params->AddParam(new Param<float>("collide spring" , collideSpring , 0.0f, 1.0f, 0.001f, &collideSpring));
+    params->AddParam(new Param<float>("collide damping", collideDamping, 0.0f, 0.1f, 0.001f, &collideDamping));
+    params->AddParam(new Param<float>("collide shear"  , collideShear  , 0.0f, 0.1f, 0.001f, &collideShear));
+    params->AddParam(new Param<float>("collide attract", collideAttraction, 0.0f, 0.1f, 0.001f, &collideAttraction));
 }
 
 void mainMenu(int i)
@@ -702,10 +687,6 @@ main(int argc, char **argv)
 
     printf("NOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.\n\n");
 
-    numParticles = NUM_PARTICLES;
-    uint gridDim = GRID_SIZE;
-    numIterations = 0;
-
     if (argc > 1)
     {
         if (checkCmdLineFlag(argc, (const char **) argv, "n"))
@@ -715,98 +696,55 @@ main(int argc, char **argv)
 
         if (checkCmdLineFlag(argc, (const char **) argv, "grid"))
         {
-            gridDim = getCmdLineArgumentInt(argc, (const char **) argv, "grid");
+            gridSize.x=gridSize.y = gridSize.z = getCmdLineArgumentInt(argc, (const char **) argv, "grid");
         }
 
-        if (checkCmdLineFlag(argc, (const char **)argv, "file"))
+        if (checkCmdLineFlag(argc, (const char **) argv, "i"))
         {
-            getCmdLineArgumentString(argc, (const char **)argv, "file", &g_refFile);
-            fpsLimit = frameCheckNumber;
-            numIterations = 1;
+            numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
         }
+
     }
 
-    gridSize.x = gridSize.y = gridSize.z = gridDim;
     printf("grid: %d x %d x %d = %d cells\n", gridSize.x, gridSize.y, gridSize.z, gridSize.x*gridSize.y*gridSize.z);
     printf("particles: %d\n", numParticles);
 
-    bool benchmark = checkCmdLineFlag(argc, (const char **) argv, "benchmark") != 0;
 
-    if (checkCmdLineFlag(argc, (const char **) argv, "i"))
-    {
-        numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
-    }
+    initGL(&argc, argv);
+    cudaGLInit(argc, argv);
 
-    if (g_refFile)
-    {
-        cudaInit(argc, argv);
-    }
-    else
-    {
-        if (checkCmdLineFlag(argc, (const char **)argv, "device"))
-        {
-            printf("[%s]\n", argv[0]);
-            printf("   Does not explicitly support -device=n in OpenGL mode\n");
-            printf("   To use -device=n, the sample must be running w/o OpenGL\n\n");
-            printf(" > %s -device=n -file=<*.bin>\n", argv[0]);
-            printf("exiting...\n");
-            exit(EXIT_SUCCESS);
-        }
-
-        initGL(&argc, argv);
-        cudaGLInit(argc, argv);
-    }
-
-    initParticleSystem(numParticles, gridSize, g_refFile==NULL);
+    // Last param for initParticleSystem tells it to use openGL
+    initParticleSystem(numParticles, gridSize, 1);
     initParams();
+    
+    initMenus();
+    
+    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    // glutMouseFunc(mouse);
+    // glutMotionFunc(motion);
+    // glutKeyboardFunc(key);
+    // glutSpecialFunc(special);
+    glutIdleFunc(idle);
 
-    if (!g_refFile)
-    {
-        initMenus();
-    }
+    //glutCloseFunc(cleanup);
 
-    if (benchmark || g_refFile)
-    {
-        if (numIterations <= 0)
-        {
-            numIterations = 300;
-        }
+    glutMainLoop();
 
-       // runBenchmark(numIterations, argv[0]);
-    }
-    else
-    {
-        glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
-        glutDisplayFunc(display);
-        glutReshapeFunc(reshape);
-        // glutMouseFunc(mouse);
-        // glutMotionFunc(motion);
-        // glutKeyboardFunc(key);
-        // glutSpecialFunc(special);
-        glutIdleFunc(idle);
+    float* times = psystem->getTime();
+    writeTimes(times, "broadcastTimings", numParticles, gridSize.x);
 
-        //glutCloseFunc(cleanup);
-
-        glutMainLoop();
-    }
-
-    //sdkDeleteTimer(&timer);
-
-    if (psystem)
-    {
-        //delete psystem;
-    }
-    // cudaDeviceReset causes the driver to clean up all state. While
+    cudaThreadSynchronize();
+ 
+     // cudaDeviceReset causes the driver to clean up all state. While
     // not mandatory in normal operation, it is good practice.  It is also
     // needed to ensure correct operation when the application is being
     // profiled. Calling cudaDeviceReset causes all profile data to be
     // flushed before the application exits
-    cudaThreadSynchronize();
- 
     // Note: cudaDeviceReset() cause a segfault. Not completely sure why
     // If you need profiling information, you'll have to fix the segfault.
     // Sorry :(
     // cudaDeviceReset();
     exit(g_TotalErrors > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
-

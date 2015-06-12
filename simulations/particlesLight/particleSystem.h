@@ -12,9 +12,6 @@
 #ifndef __PARTICLESYSTEM_H__
 #define __PARTICLESYSTEM_H__
 
-#define DEBUG_GRID 0
-#define DO_TIMING 0
-
 #include <helper_functions.h>
 #include "particles_kernel.cuh"
 #include "vector_functions.h"
@@ -24,7 +21,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenGL);
+        ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL);
         ~ParticleSystem();
 
         enum ParticleConfig
@@ -47,85 +44,85 @@ class ParticleSystem
 
         int    getNumParticles() const
         {
-            return m_numParticles;
+            return _numParticles;
         }
 
         unsigned int getCurrentReadBuffer() const
         {
-            return m_posVBO;
+            return _posVBO;
         }
         unsigned int getColorBuffer()       const
         {
-            return m_colorVBO;
+            return _colorVBO;
         }
 
         void dumpGrid();
         void dumpParticles(uint start, uint count);
 
-        void setIterations(int i)
-        {
-            m_solverIterations = i;
-        }
-
         void setDamping(float x)
         {
-            m_params.globalDamping = x;
+            _params.globalDamping = x;
         }
         void setGravity(float x)
         {
-            m_params.gravity = make_float3(0.0f, x, 0.0f);
+            _params.gravity = make_float3(0.0f, x, 0.0f);
         }
 
         void setCollideSpring(float x)
         {
-            m_params.spring = x;
+            _params.spring = x;
         }
         void setCollideDamping(float x)
         {
-            m_params.damping = x;
+            _params.damping = x;
         }
         void setCollideShear(float x)
         {
-            m_params.shear = x;
+            _params.shear = x;
         }
         void setCollideAttraction(float x)
         {
-            m_params.attraction = x;
+            _params.attraction = x;
         }
 
         void setColliderPos(float3 x)
         {
-            m_params.colliderPos = x;
+            _params.colliderPos = x;
         }
 
         float getParticleRadius()
         {
-            return m_params.particleRadius;
+            return _params.particleRadius;
         }
         float3 getColliderPos()
         {
-            return m_params.colliderPos;
+            return _params.colliderPos;
         }
         float getColliderRadius()
         {
-            return m_params.colliderRadius;
+            return _params.colliderRadius;
         }
         uint3 getGridSize()
         {
-            return m_params.gridSize;
+            return _params.gridSize;
         }
         float3 getWorldOrigin()
         {
-            return m_params.worldOrigin;
+            return _params.worldOrigin;
         }
         float3 getCellSize()
         {
-            return m_params.cellSize;
+            return _params.cellSize;
+        }
+
+        uint* getNumNeighbors()
+        {
+            return _numNeighbors;
         }
 
         float* getTime()
         {
-            return m_eventTimer.getTimes();
+            return _timer->getTimes();
         }
 
         void addSphere(int index, float *pos, float *vel, int r, float spacing);
@@ -134,51 +131,50 @@ class ParticleSystem
         ParticleSystem() {}
         uint createVBO(uint size);
 
-        void _initialize(int numParticles);
+        void _initialize();
         void _finalize();
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
 
     protected: // data
-        bool m_bInitialized, m_bUseOpenGL;
-        uint m_numParticles;
+        bool _systemInitialized; 
+        bool _usingOpenGL;
+        bool _shouldResort;
+        bool *_dev_shouldResort;
+        uint _numParticles;
 
-        // CPU data
-        float *m_hPos;              // particle positions
-        float *m_hVel;              // particle velocities
+        // CPU data - Do we even need this?
+        float *_pos;              
+        float *_vel;   
+        uint  *_cellStart;
+        uint  *_cellEnd;         
 
-        uint  *m_hCellStart;
-        uint  *m_hCellEnd;
+        uint *_numNeighbors;
 
         // GPU data
-        float *m_dVel;
-
-        float *m_dSortedPos;
-        float *m_dSortedVel;
+        float *_dev_oldPos;
+        float *_dev_vel;
+        float *_dev_force;
+        uint *_dev_numNeighbors;     // How many neighbors each particle has
 
         // grid data for sorting method
-        uint  *m_dGridParticleHash; // grid hash value for each particle
-        uint  *m_dGridParticleIndex;// particle index for each particle
-        uint  *m_dCellStart;        // index of start of each cell in sorted list
-        uint  *m_dCellEnd;          // index of end of cell
+        uint *_dev_cellIndex;    // grid hash value for each particle
+        uint *_dev_particleIndex;// particle index for each particle
+        uint *_dev_cellStart;        // index of start of each cell in sorted list
+        uint *_dev_cellEnd;          // index of end of cell
 
-        uint   m_gridSortBits;
+        uint   _posVBO;            // vertex buffer object for particle positions
+        uint   _colorVBO;          // vertex buffer object for colors
 
-        uint   m_posVBO;            // vertex buffer object for particle positions
-        uint   m_colorVBO;          // vertex buffer object for colors
-
-        struct cudaGraphicsResource *m_cuda_posvbo_resource; // handles OpenGL-CUDA exchange
-        struct cudaGraphicsResource *m_cuda_colorvbo_resource; // handles OpenGL-CUDA exchange
+        struct cudaGraphicsResource *_cuda_posvbo_resource; // handles OpenGL-CUDA exchange
+        struct cudaGraphicsResource *_cuda_colorvbo_resource; // handles OpenGL-CUDA exchange
 
         // params
-        SimParams m_params;
-        uint3 m_gridSize;
-        uint m_numGridCells;
+        SimParams _params;
+        uint3 _gridSize;
+        uint _numGridCells;
 
-        StopWatchInterface *m_timer;
-        EventTimer m_eventTimer;
-
-        uint m_solverIterations;
+        EventTimer* _timer;
 };
 
 #endif // __PARTICLESYSTEM_H__

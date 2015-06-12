@@ -1,12 +1,13 @@
 #include "event_timer.h"
 #include "ctime"
+#include "stdio.h"
 #include <sys/time.h>
 
 
 EventTimer::EventTimer() 
 {
     m_times = NULL;
-};
+}
 
 EventTimer::EventTimer(unsigned int numTimers)
 {
@@ -19,6 +20,7 @@ EventTimer::EventTimer(unsigned int numTimers)
 
 EventTimer::~EventTimer()
 {  
+    printf("yo\n");
     delete[] m_times;
 }
 
