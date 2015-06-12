@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <GL/glew.h>
+#include <string>
 
 #ifndef CUDART_PI_F
 #define CUDART_PI_F         3.141592654f
@@ -40,7 +41,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool bUseOpenG
     m_gridSize(gridSize),
     m_timer(NULL),
     m_solverIterations(1),
-    dummy_iterationsSinceLastResort(0)
+    dummy_iterationsSinceLastResort(0),
+    _timestepIndex(0)
 {
     m_numGridCells = m_gridSize.x*m_gridSize.y*m_gridSize.z;
     //    float3 worldSize = make_float3(2.0f, 2.0f, 2.0f);
@@ -194,6 +196,16 @@ ParticleSystem::_initialize(int numParticles)
 
     setParameters(&m_params);
 
+    // file to measure maxMovementThisTimestep
+    const std::string prefix = "data/particles_";
+    const std::string suffix = "_shadowfax";
+
+    // open the file that will store our data.
+    char sprintfBuffer[500];
+    sprintf(sprintfBuffer, "%smaxMovementPerTimestep%s.csv", prefix.c_str(), suffix.c_str());
+    _file = fopen(sprintfBuffer, "w");
+    fprintf(_file, "timestep, maxMovementThisTimestep\n");
+
     m_bInitialized = true;
 }
 
@@ -243,6 +255,9 @@ ParticleSystem::update(float deltaTime)
     // update constants
     setParameters(&m_params);
 
+    // to create graph
+    float maxMovementThisTimestep;
+
     // integrate
     integrateSystem(
         dPos,
@@ -251,7 +266,12 @@ ParticleSystem::update(float deltaTime)
         deltaTime,
         m_numParticles,
         m_hPosAfterLastSortIsValid,
-        m_dPointHasMovedMoreThanThreshold);
+        m_dPointHasMovedMoreThanThreshold,
+        &maxMovementThisTimestep);
+
+    // write to the maxMovement file
+    fprintf(_file, "%6u, %10.6e\n", _timestepIndex, maxMovementThisTimestep);
+    fflush(_file);
 
     bool needToResort = checkForResort(m_dPointHasMovedMoreThanThreshold);
 
@@ -266,7 +286,7 @@ ParticleSystem::update(float deltaTime)
         // sort particles based on hash
         sortParticles(m_dGridParticleHash, m_dGridParticleIndex, m_numParticles);
 
-        printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
+        // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {
         ++dummy_iterationsSinceLastResort;
@@ -306,6 +326,8 @@ ParticleSystem::update(float deltaTime)
     {
         unmapGLBufferObject(m_cuda_posvbo_resource);
     }
+
+    ++_timestepIndex;
 }
 
 void

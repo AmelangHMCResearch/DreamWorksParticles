@@ -34,7 +34,8 @@ extern "C"
                          float deltaTime,
                          uint numParticles,
                          bool posAfterLastSortIsValid,
-                         bool *pointHasMovedMoreThanThreshold);
+                         bool *pointHasMovedMoreThanThreshold,
+                         float *maxMovementThisTimestep);
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,

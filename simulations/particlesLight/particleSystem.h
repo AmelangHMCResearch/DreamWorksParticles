@@ -179,6 +179,9 @@ class ParticleSystem
         uint m_solverIterations;
 
         uint dummy_iterationsSinceLastResort;
+
+        FILE *_file;
+        uint _timestepIndex;
 };
 
 #endif // __PARTICLESYSTEM_H__
