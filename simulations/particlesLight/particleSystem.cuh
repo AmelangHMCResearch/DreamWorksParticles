@@ -13,12 +13,8 @@
 
 extern "C"
 {
-    void cudaInit(int argc, char **argv);
-
     void allocateArray(void **devPtr, int size);
     void freeArray(void *devPtr);
-
-    void threadSync();
 
     void copyArrayFromDevice(void *host, const void *device, struct cudaGraphicsResource **cuda_vbo_resource, int size);
     void copyArrayToDevice(void *device, const void *host, int offset, int size);
@@ -27,51 +23,76 @@ extern "C"
     void *mapGLBufferObject(struct cudaGraphicsResource **cuda_vbo_resource);
     void unmapGLBufferObject(struct cudaGraphicsResource *cuda_vbo_resource);
 
-
     void setParameters(SimParams *hostParams);
 
     void integrateSystem(float *pos,
                          float *vel,
+                         float *force,
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
-                         EventTimer& eventTimer);
+                         EventTimer* timer);
 
-    void calcHash(uint  *gridParticleHash,
-                  uint  *gridParticleIndex,
-                  float *pos,
-                  int    numParticles,
-                  EventTimer& eventTimer);
+    void calcCellIndices(uint  *cellIndex,
+                         uint  *particleIndex,
+                         float *pos,
+                         int    numParticles,
+                         EventTimer* timer);
+
+    void sortParticles(uint *cellIndex, 
+                       uint *particleIndex, 
+                       uint numParticles, 
+                       EventTimer* timer);
+
+    void sortParticlesOnce(uint *cellIndex, 
+                       float *pos,
+                       float *vel, 
+                       uint numParticles, 
+                       EventTimer* timer);
+
+    void copyArrays(float *pos,
+                    float *tempPos,
+                    float *vel,
+                    float *tempVel,
+                    uint   numParticles,
+                    EventTimer* timer);
 
     void reorderDataAndFindCellStart(uint  *cellStart,
                                      uint  *cellEnd,
-                                     float *sortedPos,
-                                     float *sortedVel,
+                                     uint  *cellIndex,
+                                     uint  *particleIndex,
+                                     float *pos,
+                                     float *tempPos,
                                      float *posAfterLastSort,
-                                     bool  *hPosAfterLastSortIsValid,
-                                     uint  *gridParticleHash,
-                                     uint  *gridParticleIndex,
-                                     float *oldPos,
-                                     float *oldVel,
+                                     float *vel,
+                                     float *tempVel,
+                                     bool  *posAfterLastSortIsValid,
+                                     bool  *pointHasMovedMoreThanThreshold, 
                                      uint   numParticles,
                                      uint   numCells,
-                                     bool   *pointHasMovedMoreThanThreshold,
-                                     bool   needsResort,
-                                     EventTimer& eventTimer);
+                                     EventTimer* timer);
 
-    void collide(float *newVel,
-                 float *sortedPos,
-                 float *sortedVel,
-                 uint  *gridParticleIndex,
+    void findCellStart(uint  *cellStart,
+                       uint  *cellEnd,
+                       uint  *cellIndex,
+                       float *pos,
+                       float *oldPos,
+                       uint   numParticles,
+                       uint   numCells,
+                       EventTimer* timer);
+
+    void collide(float *pos,
+                 float *vel,
+                 float *force,
+                 uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,
+                 uint  *numNeighbors,
                  uint   numParticles,
                  uint   numCells,
-                 EventTimer& eventTimer);
-
-    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);
+                 EventTimer* timer);
 
     bool checkForResort(bool *pointHasMovedMoreThanThreshold);
 
