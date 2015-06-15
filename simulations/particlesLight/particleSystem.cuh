@@ -33,15 +33,6 @@ extern "C"
                          float deltaTime,
                          uint numParticles,
                          EventTimer* timer);
-                         
-    void integrateSystemNoThrust(float *pos,
-                                 float *vel,
-                                 float *force,
-                                 float *oldPos,
-                                 bool *shouldResort,
-                                 float deltaTime,
-                                 uint numParticles,
-                                 EventTimer* timer);
 
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,

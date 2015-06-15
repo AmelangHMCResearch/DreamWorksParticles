@@ -119,71 +119,6 @@ struct integrate_functor
     }
 };
 
-__global__
-void integrateSystemD(float4 *pos,
-                      float4 *oldPos,
-                      float4 *vel,
-                      float4 *force,
-                      bool *shouldResort,
-                      float deltaTime,
-                      uint numParticles)
-{
-    uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
-
-    if (index >= numParticles) return;
-
-    float3 particlePos = make_float3(pos[index]);
-    float3 particleVel = make_float3(vel[index]);
-    
-    // How they initially calculated the new velocity
-    particleVel += make_float3(force[index]);
-    particleVel += params.gravity * deltaTime;
-    particleVel *= params.globalDamping;
-    // new position = old position + velocity * deltaTime
-    particlePos += particleVel * deltaTime;
-    // set this to zero to disable collisions with cube sides
-#if 1
-
-    if (particlePos.x > 4.0f - params.particleRadius)
-    {
-        particlePos.x = 4.0f - params.particleRadius;
-        particleVel.x *= params.boundaryDamping;
-    }
-    if (particlePos.x < -4.0f + params.particleRadius)
-    {
-        particlePos.x = -4.0f + params.particleRadius;
-        particleVel.x *= params.boundaryDamping;
-    }
-    if (particlePos.y > 4.0f - params.particleRadius)
-    {
-        particlePos.y = 4.0f - params.particleRadius;
-        particleVel.y *= params.boundaryDamping;
-    }
-    if (particlePos.z > 4.0f - params.particleRadius)
-    {
-        particlePos.z = 4.0f - params.particleRadius;
-        particleVel.z *= params.boundaryDamping;
-    }
-    if (particlePos.z < -4.0f + params.particleRadius)
-    {
-        particlePos.z = -4.0f + params.particleRadius;
-        particleVel.z *= params.boundaryDamping;
-    }
-
-#endif
-
-    if (particlePos.y < -4.0f + params.particleRadius)
-    {
-        particlePos.y = -4.0f + params.particleRadius;
-        particleVel.y *= params.boundaryDamping;
-    }
-    // Filler: Decide if should resort
-    *shouldResort = true;
-    // store new position and velocity
-    pos[index] = make_float4(particlePos, 1.0);
-    vel[index] = make_float4(particleVel, 1.0);
-}
-
 // calculate position in uniform grid
 __device__ int3 calcGridPos(float3 p)
 {
@@ -475,6 +410,7 @@ void collideD(float4 *pos,               // input: position
 
     if (index >= numParticles) return;
 
+    // Make this a command line flag at some point
     if (index == 0) {
         ++numNeighbors[0]; 
     }

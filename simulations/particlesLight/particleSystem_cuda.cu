@@ -144,29 +144,6 @@ extern "C"
         timer->stopTimer(0, false);
     }
 
-    void integrateSystemNoThrust(float *pos,
-                                 float *vel,
-                                 float *force,
-                                 float *oldPos,
-                                 bool *shouldResort,
-                                 float deltaTime,
-                                 uint numParticles,
-                                 EventTimer* timer)
-    {
-        uint numThreads, numBlocks;
-        computeGridSize(numParticles, 256, numBlocks, numThreads);
-        timer->startTimer(0, true);
-
-        integrateSystemD<<< numBlocks, numThreads >>>((float4 *)pos,
-                                                      (float4 *)oldPos,
-                                                      (float4 *)vel,
-                                                      (float4 *)force,
-                                                      shouldResort,
-                                                      deltaTime,
-                                                      numParticles);
-        timer->stopTimer(0, true);
-    }
-
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
                          float *pos,

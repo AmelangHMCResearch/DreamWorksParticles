@@ -240,7 +240,6 @@ ParticleSystem::update(float deltaTime)
     // update constants
     setParameters(&_params);
 
-#if 0
     // integrate
     integrateSystem(dPos,
                     _dev_vel,
@@ -250,18 +249,6 @@ ParticleSystem::update(float deltaTime)
                     deltaTime,
                     _numParticles,
                     _timer);
-#else
-    // integrate
-    integrateSystemNoThrust(dPos,
-                            _dev_vel,
-                            _dev_force,
-                            _dev_oldPos,
-                            _dev_shouldResort,
-                            deltaTime,
-                            _numParticles,
-                            _timer);
-
-#endif
 
     checkCudaErrors(cudaMemcpy((void *)&_shouldResort, _dev_shouldResort, sizeof(bool), cudaMemcpyDeviceToHost));
 
