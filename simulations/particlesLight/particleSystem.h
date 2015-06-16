@@ -130,7 +130,7 @@ class ParticleSystem
 
         float* getTime()
         {
-            return m_eventTimer.getTimes();
+            return m_eventTimer->getTimes();
         }
 
         void addSphere(int index, float *pos, float *vel, int r, float spacing);
@@ -188,7 +188,7 @@ class ParticleSystem
         uint m_numGridCells;
 
         StopWatchInterface *m_timer;
-        EventTimer m_eventTimer;
+        EventTimer *m_eventTimer;
 
         uint m_solverIterations;
 };

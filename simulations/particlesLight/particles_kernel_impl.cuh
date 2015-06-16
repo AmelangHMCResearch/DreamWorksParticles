@@ -118,12 +118,30 @@ __device__ int3 calcGridPos(float3 p)
 }
 
 // calculate address in grid from position (clamping to edges)
-__device__ uint calcGridHash(int3 gridPos)
+__device__ uint calcOldGridHash(int3 gridPos)
 {
     gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     gridPos.y = gridPos.y & (params.gridSize.y-1);
     gridPos.z = gridPos.z & (params.gridSize.z-1);
     return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
+}
+
+__device__ uint calcGridHash(int3 gridPos)
+{
+    //gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
+    //gridPos.y = gridPos.y & (params.gridSize.y-1);
+    //gridPos.z = gridPos.z & (params.gridSize.z-1);
+    uint hash = 0;
+    hash = hash | (gridPos.x & 1) | (gridPos.y & 1) << 1 | (gridPos.z & 1) << 2;
+    hash = hash | (gridPos.x & 0x2) << 2 | (gridPos.y & 0x2) << 3 | (gridPos.z & 0x2) << 4;
+    hash = hash | (gridPos.x & 0x4) << 4 | (gridPos.y & 0x4) << 5 | (gridPos.z & 0x4) << 6;
+    hash = hash | (gridPos.x & 0x8) << 6 | (gridPos.y & 0x8) << 7 | (gridPos.z & 0x8) << 8;
+    hash = hash | (gridPos.x & 0x10) << 8 | (gridPos.y & 0x10) << 9 | (gridPos.z & 0x10) << 10;
+    hash = hash | (gridPos.x & 0x20) << 10 | (gridPos.y & 0x20) << 11 | (gridPos.z & 0x20) << 12;
+    hash = hash | (gridPos.x & 0x40) << 12 | (gridPos.y & 0x40) << 13 | (gridPos.z & 0x40) << 14;
+    hash = hash | (gridPos.x & 0x80) << 14 | (gridPos.y & 0x80) << 15 | (gridPos.z & 0x80) << 16;
+
+    return hash;
 }
 
 // calculate grid hash value for each particle
@@ -396,6 +414,7 @@ void collideBroadcastD(float4 *newVel,               // output: new velocity
                 int3 neighbourPos = gridPos + make_int3(FETCH(readOrder, x*3 + gridPosMod.x), 
                                                         FETCH(readOrder, y*3 + gridPosMod.y), 
                                                         FETCH(readOrder, z*3 + gridPosMod.z));
+
 
                 force += collideCell(neighbourPos, index, pos, vel, oldPos, oldVel, cellStart, cellEnd, d_numNeighbors);
             }

@@ -33,13 +33,13 @@ extern "C"
                          float *vel,
                          float deltaTime,
                          uint numParticles,
-                         EventTimer& eventTimer);
+                         EventTimer* eventTimer);
 
     void calcHash(uint  *gridParticleHash,
                   uint  *gridParticleIndex,
                   float *pos,
                   int    numParticles,
-                  EventTimer& eventTimer);
+                  EventTimer* eventTimer);
 
     void reorderDataAndFindCellStart(uint  *cellStart,
                                      uint  *cellEnd,
@@ -51,7 +51,7 @@ extern "C"
                                      float *oldVel,
                                      uint   numParticles,
                                      uint   numCells,
-                                     EventTimer& eventTimer
+                                     EventTimer* eventTimer
                                      );
 
     void collide(float *newVel,
@@ -65,8 +65,8 @@ extern "C"
                  int* readOrder,
                  uint* hNumNeighbors,
                  uint* mNumNeighbors,
-                 EventTimer& eventTimer);
+                 EventTimer* eventTimer);
 
-    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer& eventTimer);
+    void sortParticles(uint *dGridParticleHash, uint *dGridParticleIndex, uint numParticles, EventTimer* eventTimer);
 
 }

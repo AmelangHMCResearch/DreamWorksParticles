@@ -152,7 +152,7 @@ void calcNumNeighbors(const uint* neighbors, uint* neighborStats, const uint num
             neighborStats[numNeighbors] += 1;
         }
         else {
-            printf("Neighbors is %d\n", numNeighbors);
+            //printf("Neighbors is %d\n", numNeighbors);
         }
     }
 
