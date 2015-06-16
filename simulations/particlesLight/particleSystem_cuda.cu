@@ -326,7 +326,7 @@ extern "C"
 
         // thread per particle
         uint numThreads, numBlocks;
-        computeGridSize(numParticles, 256, numBlocks, numThreads);
+        computeGridSize(numParticles, 128, numBlocks, numThreads);
 
         float* tempPos;
         float* tempVel;
