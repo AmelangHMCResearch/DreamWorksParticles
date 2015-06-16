@@ -332,7 +332,7 @@ extern "C"
 
         // thread per particle
         uint numThreads, numBlocks;
-        computeGridSize(numParticles, 64, numBlocks, numThreads);
+        computeGridSize(numParticles, 256, numBlocks, numThreads);
 
         // execute the kernel
         timer->startTimer(4, true);

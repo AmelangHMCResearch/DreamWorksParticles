@@ -65,13 +65,15 @@ struct integrate_functor
         float3 posAfterLastSort = make_float3(posAfterLastSortData.x, posAfterLastSortData.y, posAfterLastSortData.z);
 
         // How they initially calculated the new velocity
-        vel += force;
+        vel += force * _deltaTime / 2;
 
         vel += params.gravity * _deltaTime;
         vel *= params.globalDamping;
 
         // new position = old position + velocity * deltaTime
-        pos += vel * _deltaTime;
+        pos += vel * _deltaTime + 0.5 * force * _deltaTime * _deltaTime;
+
+        vel += force * _deltaTime / 2;
 
         // set this to zero to disable collisions with cube sides
 #if 1
