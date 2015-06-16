@@ -323,28 +323,49 @@ extern "C"
                  uint   numCells,
                  EventTimer* timer)
     {
-#if USE_TEX
-        checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
-        checkCudaErrors(cudaBindTexture(0, velTex, vel, numParticles*sizeof(float4)));
-        checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
-        checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
-#endif
 
         // thread per particle
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
+        float* tempPos;
+        float* tempVel;
+        float* tempForce;
+        allocateArray((void **)&tempPos, numParticles*3*sizeof(float));
+        allocateArray((void **)&tempVel, numParticles*3*sizeof(float));
+        allocateArray((void **)&tempForce, numParticles*3*sizeof(float));
+
+        reorderPreCollideD<<< numBlocks, numThreads >>>((float4 *)pos,
+                                              (float4 *)vel,
+                                              tempPos,
+                                              tempVel,
+                                              numParticles);
+        getLastCudaError("Kernel execution failed");
+
+#if USE_TEX
+        checkCudaErrors(cudaBindTexture(0, nPosTex, tempPos, numParticles*3*sizeof(float)));
+        checkCudaErrors(cudaBindTexture(0, nVelTex, tempVel, numParticles*3*sizeof(float)));
+        checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
+        checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
+#endif
+
         // execute the kernel
         timer->startTimer(4, true);
-        collideD<<< numBlocks, numThreads >>>((float4 *)pos,
-                                              (float4 *)vel,
-                                              (float4 *)force,
+        collideD<<< numBlocks, numThreads >>>(tempPos,
+                                              tempVel,
+                                              tempForce,
                                               cellIndex,
                                               cellStart,
                                               cellEnd,
                                               numParticles,
                                               numNeighbors);
         timer->stopTimer(4, true);
+        getLastCudaError("Kernel execution failed");
+
+        reorderPostCollideD<<< numBlocks, numThreads >>>(
+                                              (float4 *)force,
+                                              tempForce,
+                                              numParticles);
     
         // check if kernel invocation generated an error
         getLastCudaError("Kernel execution failed");
@@ -355,6 +376,9 @@ extern "C"
         checkCudaErrors(cudaUnbindTexture(cellStartTex));
         checkCudaErrors(cudaUnbindTexture(cellEndTex));
 #endif
+        freeArray(tempPos);
+        freeArray(tempVel);
+        freeArray(tempForce);
     }
 
     bool checkForResort(bool *pointHasMovedMoreThanThreshold)

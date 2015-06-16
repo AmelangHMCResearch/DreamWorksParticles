@@ -30,6 +30,9 @@ texture<float4, 1, cudaReadModeElementType> velTex;
 texture<float4, 1, cudaReadModeElementType> tempPosTex;
 texture<float4, 1, cudaReadModeElementType> tempVelTex;
 
+texture<float, 1, cudaReadModeElementType> nPosTex;
+texture<float, 1, cudaReadModeElementType> nVelTex;
+
 texture<uint, 1, cudaReadModeElementType> cellStartTex;
 texture<uint, 1, cudaReadModeElementType> cellEndTex;
 #endif
@@ -328,6 +331,40 @@ void findCellStartD(uint   *cellStart,        // output: cell start index
     }
 }
 
+__global__
+void reorderPreCollideD(float4 *pos,
+                   float4 *vel,
+                   float *tempPos,
+                   float *tempVel,
+                   uint numParticles)
+{
+    uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
+    if (index < numParticles) {
+        tempPos[index] = pos[index].x;
+        tempPos[index + numParticles] = pos[index].y;
+        tempPos[index + 2 * numParticles] = pos[index].z;
+        tempVel[index] = vel[index].x;
+        tempVel[index + numParticles] = vel[index].y;
+        tempVel[index + 2 * numParticles] = vel[index].z;
+    }
+
+}
+
+__global__
+void reorderPostCollideD(float4 *force,
+                    float *tempForce,
+                    uint numParticles)
+{
+    uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
+    if (index < numParticles) {
+        force[index].x = tempForce[index];
+        force[index].y = tempForce[index + numParticles];
+        force[index].z = tempForce[index + 2 * numParticles];
+
+    }
+
+}
+
 // collide two spheres using DEM method
 __device__
 float3 collideSpheres(float3 posA, float3 posB,
@@ -375,14 +412,15 @@ float3 collideCell(int3    gridPos,
                    uint    index,
                    float3  particlePos,
                    float3  particleVel,
-                   float4 *pos,
-                   float4 *vel,
+                   float  *nPos,
+                   float  *nVel,
                    uint   *cellStart,
                    uint   *cellEnd,
+                   uint    numParticles,
                    uint*   numNeighbors)
 {
     uint cellIndex = calcCellIndex(gridPos);
-    uint neighbors = 0; 
+    //uint neighbors = 0; 
 
     // get start of bucket for this cell
     uint startIndex = FETCH(cellStart, cellIndex);
@@ -398,25 +436,33 @@ float3 collideCell(int3    gridPos,
         {
             if (j != index)                // check not colliding with self
             {
-                float3 pos2 = make_float3(FETCH(pos, j));
-                float3 vel2 = make_float3(FETCH(vel, j));
+
+                float3 pos2;
+                pos2.x = FETCH(nPos, j);
+                pos2.y = FETCH(nPos, j + numParticles);
+                pos2.z = FETCH(nPos, j + 2 * numParticles);
+            
+                float3 vel2;
+                vel2.x = FETCH(nVel, j);
+                vel2.y = FETCH(nVel, j + numParticles);
+                vel2.z = FETCH(nVel, j + 2 * numParticles);
 
                 // collide two spheres
                 force += collideSpheres(particlePos, pos2, particleVel, vel2, params.particleRadius, 
                                         params.particleRadius, params.attraction);
-                ++neighbors; 
+                //++neighbors; 
             }
         }
     }
-    numNeighbors[index + 1] = neighbors; 
+    //numNeighbors[index + 1] = neighbors; 
 
     return force;
 }
 
 __global__
-void collideD(float4 *pos,               // input: position
-              float4 *vel,               // input: velocity
-              float4 *force,             // output: forces
+void collideD(float *nPos,               // input: position
+              float *nVel,               // input: velocity
+              float *force,             // output: forces
               uint   *cellIndex,    
               uint   *cellStart,
               uint   *cellEnd,
@@ -428,14 +474,21 @@ void collideD(float4 *pos,               // input: position
     if (index >= numParticles) return;
 
     // Make this a command line flag at some point
-    if (index == 0) {
+    /*if (index == 0) {
         ++numNeighbors[0]; 
     }
-    numNeighbors[index + 1] = 0; 
+    numNeighbors[index + 1] = 0; */
 
     // read particle data from sorted arrays
-    float3 particlePos = make_float3(FETCH(pos, index));
-    float3 particleVel = make_float3(FETCH(vel, index));
+    float3 particlePos;
+    particlePos.x = FETCH(nPos, index);
+    particlePos.y = FETCH(nPos, index + numParticles);
+    particlePos.z = FETCH(nPos, index + 2 * numParticles);
+
+    float3 particleVel;
+    particleVel.x = FETCH(nVel, index);
+    particleVel.y = FETCH(nVel, index + numParticles);
+    particleVel.z = FETCH(nVel, index + 2 * numParticles);
 
     // get address in grid
     int3 gridPos = calcGridPos(particlePos);
@@ -450,8 +503,8 @@ void collideD(float4 *pos,               // input: position
             for (int x=-1; x<=1; x++)
             {
                 int3 neighborPos = gridPos + make_int3(x, y, z);
-                particleForce += collideCell(neighborPos, index, particlePos, particleVel, pos, vel, 
-                                             cellStart, cellEnd, numNeighbors);
+                particleForce += collideCell(neighborPos, index, particlePos, particleVel, nPos, nVel, 
+                                             cellStart, cellEnd, numParticles, numNeighbors);
             }
         }
     }
@@ -461,8 +514,9 @@ void collideD(float4 *pos,               // input: position
                                     make_float3(0.0f, 0.0f, 0.0f), 
                                     params.particleRadius, params.colliderRadius, 0.0f);
 
-    // Note: Is 1.0 reasonable???
-    force[index] = make_float4(particleForce, 1.0f);
+    force[index] = particleForce.x;
+    force[index + numParticles] = particleForce.y;
+    force[index + 2 * numParticles] = particleForce.z;
 }
 
 #endif
