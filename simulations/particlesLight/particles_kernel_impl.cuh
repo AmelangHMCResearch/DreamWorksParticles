@@ -118,7 +118,7 @@ __device__ int3 calcGridPos(float3 p)
 }
 
 // calculate address in grid from position (clamping to edges)
-__device__ uint calcOldGridHash(int3 gridPos)
+__device__ uint calcGridHash(int3 gridPos)
 {
     gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     gridPos.y = gridPos.y & (params.gridSize.y-1);
@@ -126,7 +126,7 @@ __device__ uint calcOldGridHash(int3 gridPos)
     return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
 }
 
-__device__ uint calcGridHash(int3 gridPos)
+__device__ uint calcNewGridHash(int3 gridPos)
 {
     //gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     //gridPos.y = gridPos.y & (params.gridSize.y-1);
