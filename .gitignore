@@ -1,3 +1,7 @@
 *.o
 bin/
 simulations/particlesLight/particles
+openvdb/bin
+openvdb/vdb_view
+openvdb/vdb_render
+*.vdb
