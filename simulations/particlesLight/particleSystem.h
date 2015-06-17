@@ -21,13 +21,14 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL);
+        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL);
         ~ParticleSystem();
 
         enum ParticleConfig
         {
             CONFIG_RANDOM,
             CONFIG_GRID,
+            CONFIG_SPOUT,
             _NUM_CONFIGS
         };
 
@@ -90,6 +91,20 @@ class ParticleSystem
             _params.colliderPos = x;
         }
 
+        void setTranslation(float* trans)
+        {
+            _params.translation.x = trans[0];
+            _params.translation.y = trans[1];
+            _params.translation.z = trans[2];
+        }
+
+        void setRotation(float* rot)
+        {
+            _params.rotation.x = rot[0];
+            _params.rotation.y = rot[1];
+            _params.rotation.z = rot[2];
+        }
+
         float getParticleRadius()
         {
             return _params.particleRadius;
@@ -135,12 +150,14 @@ class ParticleSystem
         void _finalize();
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
+        void initSpout(float spoutRadius, float jitter, uint numParticles);
 
     protected: // data
         bool _systemInitialized; 
         bool _usingOpenGL;
         bool _posAfterLastSortIsValid; 
         uint _numParticles;
+        uint _numActiveParticles;
 
         // CPU data - Do we even need this?
         float *_pos;              

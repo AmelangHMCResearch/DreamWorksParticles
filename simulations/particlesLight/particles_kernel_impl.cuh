@@ -78,31 +78,31 @@ struct integrate_functor
         // set this to zero to disable collisions with cube sides
 #if 1
 
-        if (pos.x > 4.0f - params.particleRadius)
+        if (pos.x > 4.0f - params.particleRadius && vel.x > 0.0f)
         {
             pos.x = 4.0f - params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.x < -4.0f + params.particleRadius)
+        if (pos.x < -4.0f + params.particleRadius && vel.y < 0.0f)
         {
             pos.x = -4.0f + params.particleRadius;
             vel.x *= params.boundaryDamping;
         }
 
-        if (pos.y > 4.0f - params.particleRadius)
+        if (pos.y > 4.0f - params.particleRadius && vel.y > 0.0f)
         {
             pos.y = 4.0f - params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
 
-        if (pos.z > 4.0f - params.particleRadius)
+        if (pos.z > 4.0f - params.particleRadius && vel.z > 0.0f)
         {
             pos.z = 4.0f - params.particleRadius;
             vel.z *= params.boundaryDamping;
         }
 
-        if (pos.z < -4.0f + params.particleRadius)
+        if (pos.z < -4.0f + params.particleRadius && vel.z < 0.0f)
         {
             pos.z = -4.0f + params.particleRadius;
             vel.z *= params.boundaryDamping;
@@ -110,7 +110,7 @@ struct integrate_functor
 
 #endif
 
-        if (pos.y < -4.0f + params.particleRadius)
+        if (pos.y < -4.0f + params.particleRadius && vel.y < 0.0f)
         {
             pos.y = -4.0f + params.particleRadius;
             vel.y *= params.boundaryDamping;

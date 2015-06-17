@@ -26,11 +26,13 @@
 #include <cstdlib>
 #include <algorithm>
 #include <GL/glew.h>
+#include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
+    _numActiveParticles(0),
     _posAfterLastSortIsValid(false),
     _pos(0),
     _vel(0),
@@ -58,7 +60,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
 
-    _params.worldOrigin = make_float3(-1.0f, -1.0f, -1.0f);
+    _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
@@ -71,6 +73,9 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.globalDamping = 1.0f;
     // fixed initial value for cell padding / movement threshold
     _params.movementThreshold = 0.2*_params.particleRadius;
+
+    setRotation(rot);
+    setTranslation(trans);
 
     _initialize();
 }
@@ -236,6 +241,10 @@ ParticleSystem::update(float deltaTime)
 {
     assert(_systemInitialized);
 
+    if (_numActiveParticles + 16 <= _numParticles) {
+         _numActiveParticles += 64;
+    }
+
     float *dPos;
 
     if (_usingOpenGL)
@@ -252,7 +261,7 @@ ParticleSystem::update(float deltaTime)
                     _dev_force,
                     _dev_posAfterLastSort,
                     deltaTime,
-                    _numParticles,
+                    _numActiveParticles,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _timer);
@@ -265,26 +274,26 @@ ParticleSystem::update(float deltaTime)
         calcCellIndices(_dev_cellIndex,
                         _dev_particleIndex,
                         dPos,
-                        _numParticles,
+                        _numActiveParticles,
                         _timer);
 #if 1
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
                       _dev_particleIndex, 
-                      _numParticles, 
+                      _numActiveParticles, 
                       _timer);
 
         float* tempPos;
         float* tempVel;
-        allocateArray((void **)&tempPos, _numParticles*4*sizeof(float));
-        allocateArray((void **)&tempVel, _numParticles*4*sizeof(float));
+        allocateArray((void **)&tempPos, _numActiveParticles*4*sizeof(float));
+        allocateArray((void **)&tempVel, _numActiveParticles*4*sizeof(float));
 
         copyArrays(dPos,
                    tempPos,
                    _dev_vel,
                    tempVel,
-                   _numParticles,
+                   _numActiveParticles,
                    _timer);
     
         // reorder particle arrays into sorted order and
@@ -300,7 +309,7 @@ ParticleSystem::update(float deltaTime)
                                     tempVel,
                                     &_posAfterLastSortIsValid,
                                     _dev_pointHasMovedMoreThanThreshold,
-                                    _numParticles,
+                                    _numActiveParticles,
                                     _numGridCells,
                                     _timer);
         freeArray(tempPos);
@@ -340,7 +349,7 @@ ParticleSystem::update(float deltaTime)
             _dev_cellStart,
             _dev_cellEnd,
             _dev_numNeighbors,
-            _numParticles,
+            _numActiveParticles,
             _numGridCells,
             _timer);
 
@@ -460,6 +469,60 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
     }
 }
 
+std::vector<float> gen7Positions(float radius, float centerX, float centerY) 
+{
+    std::vector<float> positions;
+    positions.push_back(centerX);
+    positions.push_back(centerY);
+    for (int i = 0; i < 360; i += 60) {
+        float newPosX = centerX + radius / 3.0 * cos(i);
+        float newPosY = centerY + radius / 3.0 * sin(i); 
+        positions.push_back(newPosX);
+        positions.push_back(newPosY);
+    }
+    return positions;
+}
+
+std::vector<float> recursiveHexPos(float radius, float particleRadius, float jitter, float centerX, float centerY)
+{
+    std::vector<float> positions;
+    if (radius < 6 * (jitter + 1) * particleRadius) {
+        positions.push_back(centerX);
+        positions.push_back(centerY);
+        return positions;  
+    }
+    std::vector<float> nextPos = gen7Positions(radius, centerX, centerY);
+    for (int i = 0; i < 7; ++i) {
+        std::vector<float> recurse = recursiveHexPos(radius / 6.0, particleRadius, jitter, nextPos[2 * i], nextPos[2 * i + 1]);
+        positions.insert(positions.end(), recurse.begin(), recurse.end());
+    }
+    return positions;
+
+}
+
+
+void
+ParticleSystem::initSpout(float spoutRadius, float jitter, uint numParticles)
+{
+    printf("%d, %d\n", !1.0f, !0.0f);
+    srand(1973);
+
+    std::vector<float> startingPos = recursiveHexPos(spoutRadius, _params.particleRadius, jitter, -1.0*_params.translation.y, -1.0*_params.translation.z);
+
+    for (int i = 0; i < numParticles; ++i)
+    {
+        uint index = i % (startingPos.size() / 2);
+        _pos[i*4] = -1.0*(_params.translation.x) + frand() * jitter;
+        _pos[i*4+1] = startingPos[2 * index] + frand() * jitter;
+        _pos[i*4+2] = startingPos[2 * index + 1] + frand() * jitter;
+        _pos[i*4+3] = 1.0f;
+        _vel[i*4] = 0.03f * !_params.translation.y;
+        _vel[i*4+1] = 0.03f * !_params.translation.x;
+        _vel[i*4+2] = 0.0f;
+        _vel[i*4+3] = 0.0f;
+    }
+}
+
 void
 ParticleSystem::reset(ParticleConfig config)
 {
@@ -495,6 +558,11 @@ ParticleSystem::reset(ParticleConfig config)
                 uint gridSize[3];
                 gridSize[0] = gridSize[1] = gridSize[2] = s;
                 initGrid(gridSize, _params.particleRadius*2.0f, jitter, _numParticles);
+            }
+            break;
+        case CONFIG_SPOUT:
+            {
+                initSpout(0.5f, 0.1, _numParticles);
             }
             break;
     }

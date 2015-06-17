@@ -174,8 +174,8 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
-    psystem->reset(ParticleSystem::CONFIG_GRID);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL);
+    psystem->reset(ParticleSystem::CONFIG_SPOUT);
 
     if (bUseOpenGL)
     {
@@ -238,7 +238,6 @@ void computeFPS()
 
 void display()
 {
-
     // update the simulation
     if (!bPause)
     {
@@ -248,6 +247,8 @@ void display()
         psystem->setCollideDamping(collideDamping);
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
+        psystem->setRotation(camera_rot);
+        psystem->setTranslation(camera_trans);
 
         psystem->update(timestep);
 
@@ -722,8 +723,8 @@ main(int argc, char **argv)
     glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    // glutMouseFunc(mouse);
-    // glutMotionFunc(motion);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
     // glutKeyboardFunc(key);
     // glutSpecialFunc(special);
     glutIdleFunc(idle);
