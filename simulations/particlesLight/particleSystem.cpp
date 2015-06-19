@@ -267,7 +267,7 @@ ParticleSystem::update(float deltaTime)
                         dPos,
                         _numParticles,
                         _timer);
-#if 1
+#if 0
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
@@ -320,7 +320,7 @@ ParticleSystem::update(float deltaTime)
                       _dev_cellEnd,
                       _dev_cellIndex,
                       dPos,
-                      _dev_oldPos,
+                      _dev_posAfterLastSort,
                       _numParticles,
                       _numGridCells,
                       _timer);

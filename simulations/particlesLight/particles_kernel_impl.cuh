@@ -130,6 +130,80 @@ struct integrate_functor
     }
 };
 
+
+__global__
+void integrateSystemD(float4 *pos,
+                 float4 *vel,
+                 float4 *force,
+                 float4 *posAfterLastSort, 
+                 float deltaTime,
+                 uint numParticles, 
+                 bool posAfterLastSortIsValid, 
+                 bool *pointHasMovedMoreThanThreshold)
+{
+    uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+
+    if (index >= numParticles) return;
+
+    float3 threadPos = make_float3(pos[index]);
+    float3 threadVel = make_float3(vel[index]);
+    float3 threadForce = make_float3(force[index]);
+    float3 threadOldPos = make_float3(posAfterLastSort[index]);
+    // How they initially calculated the new velocity
+    threadVel += threadForce * deltaTime / 2;
+    threadVel += params.gravity * deltaTime;
+    threadVel *= params.globalDamping;
+    // new position = old position + velocity * deltaTime
+    threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
+    threadVel += threadForce * deltaTime / 2;
+    // set this to zero to disable collisions with cube sides
+#if 1
+
+    if (threadPos.x > 4.0f - params.particleRadius)
+    {
+        threadPos.x = 4.0f - params.particleRadius;
+        threadVel.x *= params.boundaryDamping;
+    }
+    if (threadPos.x < -4.0f + params.particleRadius)
+    {
+        threadPos.x = -4.0f + params.particleRadius;
+        threadVel.x *= params.boundaryDamping;
+    }
+    if (threadPos.y > 4.0f - params.particleRadius)
+    {
+        threadPos.y = 4.0f - params.particleRadius;
+        threadVel.y *= params.boundaryDamping;
+    }
+    if (threadPos.z > 4.0f - params.particleRadius)
+    {
+        threadPos.z = 4.0f - params.particleRadius;
+        threadVel.z *= params.boundaryDamping;
+    }
+    if (threadPos.z < -4.0f + params.particleRadius)
+    {
+        threadPos.z = -4.0f + params.particleRadius;
+        threadVel.z *= params.boundaryDamping;
+    }
+
+#endif
+
+    if (threadPos.y < -4.0f + params.particleRadius)
+    {
+        threadPos.y = -4.0f + params.particleRadius;
+        threadVel.y *= params.boundaryDamping;
+    }
+    // store new position and velocity
+    pos[index] = make_float4(threadPos, 1.0f);
+    vel[index] = make_float4(threadVel, 1.0f);
+    if (posAfterLastSortIsValid) {
+        float3 movementSinceLastSort = threadPos - threadOldPos;
+        float movementMagnitude = length(movementSinceLastSort);
+        if (movementMagnitude >= params.movementThreshold) {
+            *pointHasMovedMoreThanThreshold = true;
+        }
+    }
+}
+
 // calculate position in uniform grid
 __device__ int3 calcGridPos(float3 p)
 {
