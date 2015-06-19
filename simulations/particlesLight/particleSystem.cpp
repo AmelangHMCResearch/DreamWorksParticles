@@ -34,6 +34,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _numParticles(numParticles),
     _numActiveParticles(0),
     _posAfterLastSortIsValid(false),
+    _numTimesteps(0),
+    _initialVel(0.3f),
     _pos(0),
     _vel(0),
     _cellStart(0),
@@ -241,9 +243,13 @@ ParticleSystem::update(float deltaTime)
 {
     assert(_systemInitialized);
 
-    if (_numActiveParticles + 16 <= _numParticles) {
-         _numActiveParticles += 64;
+    if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius || _numActiveParticles == 0) {
+        _numTimesteps = 0;
+        float spoutRadius = 0.5f;
+        float jitter = 0.1f;       // Room for jitter as a percentage of particle radius
+        addParticles(spoutRadius, jitter);
     }
+    ++_numTimesteps;
 
     float *dPos;
 
@@ -352,6 +358,7 @@ ParticleSystem::update(float deltaTime)
             _numActiveParticles,
             _numGridCells,
             _timer);
+    
 
     /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
@@ -469,63 +476,134 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
     }
 }
 
-std::vector<float> gen7Positions(float radius, float centerX, float centerY) 
-{
-    std::vector<float> positions;
-    positions.push_back(centerX);
-    positions.push_back(centerY);
-    for (int i = 0; i < 360; i += 60) {
-        float newPosX = centerX + radius / 3.0 * cos(i);
-        float newPosY = centerY + radius / 3.0 * sin(i); 
-        positions.push_back(newPosX);
-        positions.push_back(newPosY);
-    }
-    return positions;
+float findRadius(float2 radius) {
+    return sqrt(radius.x * radius.x + radius.y * radius.y);
 }
 
-std::vector<float> recursiveHexPos(float radius, float particleRadius, float jitter, float centerX, float centerY)
-{
-    std::vector<float> positions;
-    if (radius < 6 * (jitter + 1) * particleRadius) {
-        positions.push_back(centerX);
-        positions.push_back(centerY);
-        return positions;  
-    }
-    std::vector<float> nextPos = gen7Positions(radius, centerX, centerY);
-    for (int i = 0; i < 7; ++i) {
-        std::vector<float> recurse = recursiveHexPos(radius / 6.0, particleRadius, jitter, nextPos[2 * i], nextPos[2 * i + 1]);
-        positions.insert(positions.end(), recurse.begin(), recurse.end());
-    }
-    return positions;
-
+float3 rotate(float3* rotMatrix, float3 pos) {
+    float3 result;
+    result.x = rotMatrix[0].x * pos.x + rotMatrix[0].y * pos.y + rotMatrix[0].z * pos.z;
+    result.y = rotMatrix[1].x * pos.x + rotMatrix[1].y * pos.y + rotMatrix[1].z * pos.z;
+    result.z = rotMatrix[2].x * pos.x + rotMatrix[2].y * pos.y + rotMatrix[2].z * pos.z;
+    return result;
 }
 
+float3 crossProduct(float3 a, float3 b) {
+    float3 result;
+    result.x = a.y * b.z - a.z * b.y;
+    result.y = a.z * b.x - a.x * b.z;
+    result.z = a.x * b.y - a.y * b.z;
+    return result;
+}
+
+float dotProduct(float3 a, float3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z; 
+}
+
+float3 scalarMult(float a, float3 b) {
+    b.x = b.x * a;
+    b.y = b.y * a;
+    b.z = b.z * a;
+    return b;
+}
+
+// Generates grid with side length radius based on hexagonal dense packing pattern
+std::vector<float2> genParticlePos(float particleRadius, float radius)
+{
+    std::vector<float2> grid; 
+    float cellWidth = 2 * particleRadius;
+    float cellLength = 2 * sqrt(2 * particleRadius * particleRadius);
+    uint gridWidth = ceil(2 * radius / cellWidth);
+    uint gridLength = ceil(2 * radius / cellLength);
+    for (int i = 0; i < gridLength; ++i) {
+        for (int j = 0; j < gridWidth; ++j) {
+            float2 newIntersection = make_float2(-1.0 * radius + j * cellWidth, -1.0 * radius + i * cellLength);
+            grid.push_back(newIntersection);
+            if (i > 0 && j > 0) {
+                float2 center;
+                center.x = newIntersection.x - 0.5 * cellWidth;
+                center.y = newIntersection.y - 0.5 * cellLength;
+                grid.push_back(center); 
+            }
+        }
+    }
+    std::vector<float2>::iterator i = grid.begin();
+    while (i != grid.end()) {
+        if (findRadius(*i) > radius) {
+            i = grid.erase(i);
+        } else {
+            ++i;
+        }
+    }
+    return grid;
+}
 
 void
-ParticleSystem::initSpout(float spoutRadius, float jitter, uint numParticles)
+ParticleSystem::addParticles(float spoutRadius, float jitter)
 {
-    printf("%d, %d\n", !1.0f, !0.0f);
-    srand(1973);
 
-    std::vector<float> startingPos = recursiveHexPos(spoutRadius, _params.particleRadius, jitter, -1.0*_params.translation.y, -1.0*_params.translation.z);
+    float3 center = _translation;
+    float3 normal = _rotation; 
+    normal.x = normal.x * (3.141592/180.0);
+    normal.y = normal.y * (3.141592/180.0);
 
-    for (int i = 0; i < numParticles; ++i)
+    float3 xRotate[3] = {make_float3(1, 0, 0),
+                         make_float3(0, cos(normal.x), -1.0 * sin(normal.x)),
+                         make_float3(0, sin(normal.x), cos(normal.x))};
+    float3 yRotate[3] = {make_float3(cos(normal.y), 0, sin(normal.y)),
+                         make_float3(0, 1, 0),
+                         make_float3(-1.0 * sin(normal.y), 0, cos(normal.y))};
+    float3 x2Rotate[3] = {make_float3(1, 0, 0),
+                         make_float3(0, cos(normal.x), sin(normal.x)),
+                         make_float3(0, -1.0 * sin(normal.x), cos(normal.x))};
+    float3 y2Rotate[3] = {make_float3(cos(normal.y), 0, -1.0 * sin(normal.y)),
+                         make_float3(0, 1, 0),
+                         make_float3(sin(normal.y), 0, cos(normal.y))};
+
+
+    float3 cameraVec = rotate(x2Rotate, rotate(y2Rotate, center));
+
+
+    std::vector<float2> startingPos = genParticlePos(_params.particleRadius* (1.0f + jitter), 0.15f);
+
+    uint newNumParticles;
+    uint amountToCopy;
+    _spoutSize = startingPos.size();
+    if (_numActiveParticles + _spoutSize < _numParticles) {
+        newNumParticles = _numActiveParticles + _spoutSize; 
+        amountToCopy = _spoutSize;
+    }
+    else {
+        newNumParticles = _numParticles; 
+        amountToCopy = _numParticles - _numActiveParticles;
+    }
+
+    float3 newVel = make_float3(_initialVel, _initialVel, _initialVel);
+    float aDotB = dotProduct(newVel, cameraVec);
+    float bDotB = dotProduct(cameraVec, cameraVec);
+    newVel = scalarMult(aDotB/ bDotB, cameraVec); 
+
+    for (int i = 0; i < newNumParticles - _numActiveParticles; ++i)
     {
-        uint index = i % (startingPos.size() / 2);
-        _pos[i*4] = -1.0*(_params.translation.x) + frand() * jitter;
-        _pos[i*4+1] = startingPos[2 * index] + frand() * jitter;
-        _pos[i*4+2] = startingPos[2 * index + 1] + frand() * jitter;
+        _pos[i*4] = startingPos[i].x - cameraVec.x + frand() * jitter;
+        _pos[i*4+1] = startingPos[i].y - cameraVec.y +  frand() * jitter;
+        _pos[i*4+2] = -1.0 * cameraVec.z + frand() * jitter;
         _pos[i*4+3] = 1.0f;
-        _vel[i*4] = 0.03f * !_params.translation.y;
-        _vel[i*4+1] = 0.03f * !_params.translation.x;
-        _vel[i*4+2] = 0.0f;
+        _vel[i*4] = -1.0 * newVel.x;
+        _vel[i*4+1] = -1.0 * newVel.y;
+        _vel[i*4+2] = -1.0 * newVel.z;
         _vel[i*4+3] = 0.0f;
     }
+
+    setArray(POSITION, _pos, _numActiveParticles, amountToCopy);
+    setArray(VELOCITY, _vel, _numActiveParticles, amountToCopy);
+    _numActiveParticles = newNumParticles;
 }
 
 void
 ParticleSystem::reset(ParticleConfig config)
 {
+    srand(1973);
     switch (config)
     {
         default:
@@ -562,13 +640,27 @@ ParticleSystem::reset(ParticleConfig config)
             break;
         case CONFIG_SPOUT:
             {
-                initSpout(0.5f, 0.1, _numParticles);
+                // Write the particles to a location off screen, otherwise they default to
+                // their old positions.
+                int p = 0, v = 0;
+
+                for (uint i=0; i < _numParticles; i++)
+                {
+                    _pos[4*i] = -15.0;
+                    _pos[4*i + 1] = -15.0;
+                    _pos[4*i + 2] = -15.0;
+                    _pos[4*i + 3] = 1.0f; // radius
+                    _vel[4*i] = 0.0f;
+                    _vel[4*i + 1] = 0.0f;
+                    _vel[4*i + 2] = 0.0f;
+                    _vel[4*i + 3] = 0.0f;
+                }
             }
             break;
     }
-
     setArray(POSITION, _pos, 0, _numParticles);
     setArray(VELOCITY, _vel, 0, _numParticles);
+
 }
 
 void

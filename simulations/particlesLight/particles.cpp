@@ -313,7 +313,7 @@ void display()
 
     computeFPS();
 
-    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
+    //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
 

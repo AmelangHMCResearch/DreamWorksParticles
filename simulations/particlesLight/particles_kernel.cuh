@@ -29,9 +29,6 @@ struct SimParams
     float3 colliderPos;
     float  colliderRadius;
 
-    float3 rotation;
-    float3 translation;
-
     float3 gravity;
     float globalDamping;
     float particleRadius;

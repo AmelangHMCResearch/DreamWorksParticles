@@ -93,18 +93,18 @@ class ParticleSystem
 
         void setTranslation(float* trans)
         {
-            _params.translation.x = trans[0];
-            _params.translation.y = trans[1];
-            _params.translation.z = trans[2];
+            _translation.x = trans[0];
+            _translation.y = trans[1];
+            _translation.z = trans[2];
         }
 
         void setRotation(float* rot)
         {
-            _params.rotation.x = rot[0];
-            _params.rotation.y = rot[1];
-            _params.rotation.z = rot[2];
+            _rotation.x = rot[0];
+            _rotation.y = rot[1];
+            _rotation.z = rot[2];
         }
-
+        
         float getParticleRadius()
         {
             return _params.particleRadius;
@@ -151,6 +151,7 @@ class ParticleSystem
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
         void initSpout(float spoutRadius, float jitter, uint numParticles);
+        void addParticles(float spoutRadius, float jitter);
 
     protected: // data
         bool _systemInitialized; 
@@ -166,6 +167,13 @@ class ParticleSystem
         uint  *_cellEnd;         
 
         uint *_numNeighbors;
+
+        // Spout Movement Information
+        float3 _rotation;
+        float3 _translation;
+        uint _spoutSize;
+        uint _numTimesteps;
+        float _initialVel;
 
 
 

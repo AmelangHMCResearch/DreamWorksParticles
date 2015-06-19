@@ -76,7 +76,7 @@ struct integrate_functor
         vel += force * _deltaTime / 2;
 
         // set this to zero to disable collisions with cube sides
-#if 1
+#if 0
 
         if (pos.x > 4.0f - params.particleRadius && vel.x > 0.0f)
         {
@@ -110,7 +110,7 @@ struct integrate_functor
 
 #endif
 
-        if (pos.y < -4.0f + params.particleRadius && vel.y < 0.0f)
+        if (pos.y < -4.0f + params.particleRadius)
         {
             pos.y = -4.0f + params.particleRadius;
             vel.y *= params.boundaryDamping;
