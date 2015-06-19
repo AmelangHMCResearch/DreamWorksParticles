@@ -720,6 +720,13 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
 
     mInterrupt = false;
     for (bool stop = false; !stop; ) {
+
+        // testing the particle sim code
+        
+
+
+
+
         if (needsDisplay()) render();
 
         // eval fps
