@@ -46,7 +46,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _gridSize(gridSize),
     dummy_iterationsSinceLastResort(0)
 {
-    _timer = new EventTimer(5); 
+    _timer = new EventTimer(6); 
     _numGridCells = _gridSize.x * _gridSize.y * _gridSize.z;
 
     // set simulation parameters

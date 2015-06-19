@@ -6,33 +6,44 @@
 
 EventTimer::EventTimer() 
 {
-    m_times = NULL;
+    _times = NULL;
+    _start = NULL;
+    _stop = NULL;
+    _devStart = NULL;
+    _devStop = NULL;
 }
 
 EventTimer::EventTimer(unsigned int numTimers)
 {
-    m_times = new float[numTimers];
+    _times = new float[numTimers];
+    _start = new struct timeval[numTimers];
+    _stop = new struct timeval[numTimers];
+    _devStart = new cudaEvent_t[numTimers];
+    _devStop = new cudaEvent_t[numTimers];
 
     for (int i = 0; i < numTimers; ++i) {
-        m_times[i] = 0;
+        _times[i] = 0;
     }
 }
 
 EventTimer::~EventTimer()
 {  
-    printf("yo\n");
-    delete[] m_times;
+    delete [] _times;
+    delete [] _start;
+    delete [] _stop;
+    delete [] _devStart;
+    delete [] _devStop;
 }
 
 void EventTimer::startTimer(unsigned int timerNum, bool runKernel)
 { 
     if (runKernel) {
-        cudaEventCreate(&m_devstart);
-        cudaEventCreate(&m_devstop);
-        cudaEventRecord(m_devstart);
+        cudaEventCreate(&_devStart[timerNum]);
+        cudaEventCreate(&_devStop[timerNum]);
+        cudaEventRecord(_devStart[timerNum]);
     }
     else {
-        gettimeofday(&m_start, 0);
+        gettimeofday(&_start[timerNum], 0);
     }
 }
 
@@ -40,24 +51,24 @@ void EventTimer::stopTimer(unsigned int timerNum, bool runKernel)
 {
     float tempTime = 0;
     if (runKernel) {
-        cudaEventRecord(m_devstop);
-        cudaEventSynchronize(m_devstop);
-        cudaEventElapsedTime(&tempTime, m_devstart, m_devstop);
+        cudaEventRecord(_devStop[timerNum]);
+        cudaEventSynchronize(_devStop[timerNum]);
+        cudaEventElapsedTime(&tempTime, _devStart[timerNum], _devStop[timerNum]);
     }
     else {
-        gettimeofday(&m_stop, 0);
-        tempTime = (float)(1000.0 * (m_stop.tv_sec - m_start.tv_sec)
-                   + (0.001 * (m_stop.tv_usec - m_start.tv_usec)));
+        gettimeofday(&_stop[timerNum], 0);
+        tempTime = (float)(1000.0 * (_stop[timerNum].tv_sec - _start[timerNum].tv_sec)
+                   + (0.001 * (_stop[timerNum].tv_usec - _start[timerNum].tv_usec)));
     }
-    m_times[timerNum] += tempTime;
+    _times[timerNum] += tempTime;
 }
 
 float EventTimer::getTime(unsigned int timerNum)
 {
-    return m_times[timerNum];
+    return _times[timerNum];
 }
 
 float* EventTimer::getTimes()
 {
-    return m_times;
+    return _times;
 }

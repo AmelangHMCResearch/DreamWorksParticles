@@ -56,7 +56,7 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 5000; // run until exit
+int numIterations = 3000; // run until exit
 
 // simulation parameters
 float timestep = 0.5f;
@@ -123,9 +123,9 @@ writeTimes(const float* times,
     const std::string appendedFilename = filename + std::string(".csv");
     FILE* file = fopen(appendedFilename.c_str(), "a");
     fprintf(file, "%d, ", numParticles);
-    for (unsigned int i = 0; i < 5; ++i) {
+    for (unsigned int i = 0; i < 6; ++i) {
         fprintf(file, "%f", times[i]);
-        if (i != 4) {
+        if (i != 5) {
             fprintf(file, ",");
         }
     }
@@ -176,6 +176,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
     psystem->reset(ParticleSystem::CONFIG_GRID);
+    psystem->startTimer(5);
 
     if (bUseOpenGL)
     {
@@ -312,10 +313,9 @@ void display()
 
     computeFPS();
 
-    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
+    //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
-
         glutLeaveMainLoop();
     }
 }
@@ -732,6 +732,7 @@ main(int argc, char **argv)
 
     glutMainLoop();
 
+    psystem->stopTimer(5);
     float* times = psystem->getTime();
     writeTimes(times, "broadcastTimings", numParticles, gridSize.x);
 

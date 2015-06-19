@@ -36,9 +36,11 @@ class EventTimer
 	    // Returns array of timings for all timers
 	    float* getTimes();
     private:
-        float* m_times;
-        struct timeval m_start, m_stop;
-        cudaEvent_t m_devstart, m_devstop;
+        float *_times;
+        struct timeval *_start;
+        struct timeval *_stop;
+        cudaEvent_t *_devStart;
+        cudaEvent_t *_devStop;
 };
 
 #endif
