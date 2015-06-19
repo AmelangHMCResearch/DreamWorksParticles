@@ -756,7 +756,7 @@ main(int argc, char **argv)
 
     numParticles = NUM_PARTICLES;
     uint gridDim = GRID_SIZE;
-    numIterations = 5000;
+    numIterations = 3000;
     std::string testVersion = "Broadcast Reads No Tex"; 
 
     if (argc > 1)

@@ -120,17 +120,12 @@ __device__ int3 calcGridPos(float3 p)
 // calculate address in grid from position (clamping to edges)
 __device__ uint calcGridHash(int3 gridPos)
 {
+#if 1
     gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     gridPos.y = gridPos.y & (params.gridSize.y-1);
     gridPos.z = gridPos.z & (params.gridSize.z-1);
     return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
-}
-
-__device__ uint calcNewGridHash(int3 gridPos)
-{
-    //gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
-    //gridPos.y = gridPos.y & (params.gridSize.y-1);
-    //gridPos.z = gridPos.z & (params.gridSize.z-1);
+#else
     uint hash = 0;
     hash = hash | (gridPos.x & 1) | (gridPos.y & 1) << 1 | (gridPos.z & 1) << 2;
     hash = hash | (gridPos.x & 0x2) << 2 | (gridPos.y & 0x2) << 3 | (gridPos.z & 0x2) << 4;
@@ -142,6 +137,8 @@ __device__ uint calcNewGridHash(int3 gridPos)
     hash = hash | (gridPos.x & 0x80) << 14 | (gridPos.y & 0x80) << 15 | (gridPos.z & 0x80) << 16;
 
     return hash;
+
+#endif 
 }
 
 // calculate grid hash value for each particle

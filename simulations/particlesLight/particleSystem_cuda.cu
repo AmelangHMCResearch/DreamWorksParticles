@@ -243,7 +243,7 @@ extern "C"
         checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
         checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
 #endif
-#if 1
+#if 0
         checkCudaErrors(cudaBindTexture(0, readOrderTex, readOrder, 9*sizeof(int)));
 #endif
 
@@ -251,7 +251,7 @@ extern "C"
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 64, numBlocks, numThreads);
 
-#if 1
+#if 0
             // execute the kernel
             eventTimer->startTimer(4, true);
             collideBroadcastD<<< numBlocks, numThreads >>>((float4 *)newVel,
@@ -289,7 +289,7 @@ extern "C"
         checkCudaErrors(cudaUnbindTexture(cellStartTex));
         checkCudaErrors(cudaUnbindTexture(cellEndTex));
 #endif
-#if 1
+#if 0
         checkCudaErrors(cudaUnbindTexture(readOrderTex));
 #endif
 
