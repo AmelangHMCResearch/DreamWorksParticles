@@ -73,6 +73,7 @@ endif
 
 # architecture
 HOST_ARCH   := $(shell uname -m)
+HOST_NAME   := $(shell uname -n)
 TARGET_ARCH ?= $(HOST_ARCH)
 ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
     TARGET_SIZE := 64
@@ -127,10 +128,18 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     endif
 endif
 HOST_COMPILER ?= g++
-NVCC          := /opt/cuda/bin/nvcc
+
+ifeq ($(HOST_NAME),treebeard)
+	NVCC          := /usr/local/cuda/bin/nvcc
+	NVCCFLAGS   := -O2 --compiler-bindir="/usr/bin" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
+else
+	NVCC := /opt/cuda/bin/nvcc
+	NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
+endif
+
 
 # internal flags
-NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
+
 CCFLAGS     :=
 LDFLAGS     :=
 
@@ -199,7 +208,7 @@ ifeq ($(TARGET_OS),darwin)
  ALL_LDFLAGS += -Xlinker -framework -Xlinker GLUT
 else
  LIBRARIES += -L../../common/lib/$(TARGET_OS)/$(TARGET_ARCH) $(GLLINK)
- LIBRARIES += -lGL -lGLU -lX11 -lXi -lXmu -lglut -lGLEW
+ LIBRARIES += -lGL -lGLU -lX11 -lXi -lXmu -lglut -lGLEW 
 endif
 
 # Gencode arguments
