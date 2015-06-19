@@ -120,6 +120,16 @@ class ParticleSystem
             return _numNeighbors;
         }
 
+        void startTimer(uint timerNum)
+        {
+            _timer->startTimer(timerNum, false);
+        }
+
+        void stopTimer(uint timerNum)
+        {
+            _timer->stopTimer(timerNum, false);
+        }
+
         float* getTime()
         {
             return _timer->getTimes();

@@ -324,10 +324,10 @@ extern "C"
                  EventTimer* timer)
     {
 
+#if 0
         // thread per particle
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 128, numBlocks, numThreads);
-
         float* tempPos;
         float* tempVel;
         float* tempForce;
@@ -351,7 +351,7 @@ extern "C"
 
         // execute the kernel
         timer->startTimer(4, true);
-        collideD<<< numBlocks, numThreads >>>(tempPos,
+        collideNewD<<< numBlocks, numThreads >>>(tempPos,
                                               tempVel,
                                               tempForce,
                                               cellIndex,
@@ -379,6 +379,42 @@ extern "C"
         freeArray(tempPos);
         freeArray(tempVel);
         freeArray(tempForce);
+#else
+    #if USE_TEX
+        checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
+        checkCudaErrors(cudaBindTexture(0, velTex, vel, numParticles*sizeof(float4)));
+        checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
+        checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
+#endif
+
+        // thread per particle
+        uint numThreads, numBlocks;
+        computeGridSize(numParticles, 256, numBlocks, numThreads);
+
+        // execute the kernel
+        timer->startTimer(4, true);
+        collideD<<< numBlocks, numThreads >>>((float4 *)pos,
+                                              (float4 *)vel,
+                                              (float4 *)force,
+                                              cellIndex,
+                                              cellStart,
+                                              cellEnd,
+                                              numParticles,
+                                              numNeighbors);
+        timer->stopTimer(4, true);
+    
+        // check if kernel invocation generated an error
+        getLastCudaError("Kernel execution failed");
+
+#if USE_TEX
+        checkCudaErrors(cudaUnbindTexture(posTex));
+        checkCudaErrors(cudaUnbindTexture(velTex));
+        checkCudaErrors(cudaUnbindTexture(cellStartTex));
+        checkCudaErrors(cudaUnbindTexture(cellEndTex));
+#endif
+
+
+#endif
     }
 
     bool checkForResort(bool *pointHasMovedMoreThanThreshold)

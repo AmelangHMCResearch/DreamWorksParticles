@@ -404,11 +404,55 @@ float3 collideSpheres(float3 posA, float3 posB,
     return force;
 }
 
+// collide a particle against all other particles in a given cell
+__device__
+float3 collideCell(int3    gridPos,
+                   uint    index,
+                   float3  particlePos,
+                   float3  particleVel,
+                   float4 *pos,
+                   float4 *vel,
+                   uint   *cellStart,
+                   uint   *cellEnd,
+                   uint*   numNeighbors)
+{
+    uint cellIndex = calcCellIndex(gridPos);
+    uint neighbors = 0; 
+
+    // get start of bucket for this cell
+    uint startIndex = FETCH(cellStart, cellIndex);
+
+    float3 force = make_float3(0.0f);
+
+    if (startIndex != 0xffffffff)          // cell is not empty
+    {
+        // iterate over particles in this cell
+        uint endIndex = FETCH(cellEnd, cellIndex);
+
+        for (uint j=startIndex; j<endIndex; j++)
+        {
+            if (j != index)                // check not colliding with self
+            {
+                float3 pos2 = make_float3(FETCH(pos, j));
+                float3 vel2 = make_float3(FETCH(vel, j));
+
+                // collide two spheres
+                force += collideSpheres(particlePos, pos2, particleVel, vel2, params.particleRadius, 
+                                        params.particleRadius, params.attraction);
+                ++neighbors; 
+            }
+        }
+    }
+    numNeighbors[index + 1] = neighbors; 
+
+    return force;
+}
+
 
 
 // collide a particle against all other particles in a given cell
 __device__
-float3 collideCell(int3    gridPos,
+float3 collideNewCell(int3    gridPos,
                    uint    index,
                    float3  particlePos,
                    float3  particleVel,
@@ -460,7 +504,7 @@ float3 collideCell(int3    gridPos,
 }
 
 __global__
-void collideD(float *nPos,               // input: position
+void collideNewD(float *nPos,               // input: position
               float *nVel,               // input: velocity
               float *force,             // output: forces
               uint   *cellIndex,    
@@ -503,7 +547,7 @@ void collideD(float *nPos,               // input: position
             for (int x=-1; x<=1; x++)
             {
                 int3 neighborPos = gridPos + make_int3(x, y, z);
-                particleForce += collideCell(neighborPos, index, particlePos, particleVel, nPos, nVel, 
+                particleForce += collideNewCell(neighborPos, index, particlePos, particleVel, nPos, nVel, 
                                              cellStart, cellEnd, numParticles, numNeighbors);
             }
         }
@@ -517,6 +561,58 @@ void collideD(float *nPos,               // input: position
     force[index] = particleForce.x;
     force[index + numParticles] = particleForce.y;
     force[index + 2 * numParticles] = particleForce.z;
+}
+
+__global__
+void collideD(float4 *pos,               // input: position
+              float4 *vel,               // input: velocity
+              float4 *force,             // output: forces
+              uint   *cellIndex,    
+              uint   *cellStart,
+              uint   *cellEnd,
+              uint    numParticles,
+              uint*   numNeighbors)
+{
+    uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
+
+    if (index >= numParticles) return;
+
+    // Make this a command line flag at some point
+    /*if (index == 0) {
+        ++numNeighbors[0]; 
+    }
+    numNeighbors[index + 1] = 0; */
+
+    // read particle data from sorted arrays
+    float3 particlePos = make_float3(FETCH(pos, index));
+    float3 particleVel = make_float3(FETCH(vel, index));
+
+    // get address in grid
+    int3 gridPos = calcGridPos(particlePos);
+
+    // examine neighbouring cells
+    float3 particleForce = make_float3(0.0f);
+
+    for (int z=-1; z<=1; z++)
+    {
+        for (int y=-1; y<=1; y++)
+        {
+            for (int x=-1; x<=1; x++)
+            {
+                int3 neighborPos = gridPos + make_int3(x, y, z);
+                particleForce += collideCell(neighborPos, index, particlePos, particleVel, pos, vel, 
+                                             cellStart, cellEnd, numNeighbors);
+            }
+        }
+    }
+
+    // collide with cursor sphere
+    particleForce += collideSpheres(particlePos, params.colliderPos, particleVel, 
+                                    make_float3(0.0f, 0.0f, 0.0f), 
+                                    params.particleRadius, params.colliderRadius, 0.0f);
+
+    // Note: Is 1.0 reasonable???
+    force[index] = make_float4(particleForce, 1.0f);
 }
 
 #endif
