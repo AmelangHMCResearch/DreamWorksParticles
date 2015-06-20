@@ -236,6 +236,14 @@ void computeFPS()
     }*/
 }
 
+float3 rotate(float3* rotMatrix, float3 pos) {
+    float3 result;
+    result.x = rotMatrix[0].x * pos.x + rotMatrix[0].y * pos.y + rotMatrix[0].z * pos.z;
+    result.y = rotMatrix[1].x * pos.x + rotMatrix[1].y * pos.y + rotMatrix[1].z * pos.z;
+    result.z = rotMatrix[2].x * pos.x + rotMatrix[2].y * pos.y + rotMatrix[2].z * pos.z;
+    return result;
+}
+
 void display()
 {
     // update the simulation
@@ -276,6 +284,15 @@ void display()
     glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+
+    float3 x2Rotate[3] = {make_float3(1, 0, 0),
+                         make_float3(0, cos(normal.x), sin(normal.x)),
+                         make_float3(0, -1.0 * sin(normal.x), cos(normal.x))};
+    float3 y2Rotate[3] = {make_float3(cos(normal.y), 0, -1.0 * sin(normal.y)),
+                         make_float3(0, 1, 0),
+                         make_float3(sin(normal.y), 0, cos(normal.y))};
+
+
 
     // cube
     glColor3f(1.0, 1.0, 1.0);

@@ -544,6 +544,7 @@ ParticleSystem::addParticles(float spoutRadius, float jitter)
 
     float3 center = _translation;
     float3 normal = _rotation; 
+    printf("x: %5.3f, y: %5.3f\n", normal.x, normal.y);
     normal.x = normal.x * (3.141592/180.0);
     normal.y = normal.y * (3.141592/180.0);
 
