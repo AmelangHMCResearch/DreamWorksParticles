@@ -242,7 +242,9 @@ ifneq (,$(and $(PYTHON_VERSION),$(PYTHON_LIB_DIR),$(PYTHON_INCL_DIR), \
     has_python := yes
 endif
 
-INCLDIRS := -I . -I .. -I /usr/include/python2.7 -isystem $(BOOST_INCL_DIR) -isystem $(ILMBASE_INCL_DIR) -isystem $(TBB_INCL_DIR)
+INCLDIRS := -I . -I .. -I /usr/include/python2.7 -I /home/research/DreamWorksParticles/simulations/particlesLight \
+			-I /home/research/DreamWorksParticles/common/inc -I /usr/local/cuda-7.0/targets/x86_64-linux/include/ \
+			-isystem $(BOOST_INCL_DIR) -isystem $(ILMBASE_INCL_DIR) -isystem $(TBB_INCL_DIR)
 ifeq (yes,$(has_blosc))
     INCLDIRS += -isystem $(BLOSC_INCL_DIR)
 endif
@@ -264,6 +266,12 @@ ifneq (2,$(strip $(GLFW_MAJOR_VERSION)))
     CXXFLAGS += -DOPENVDB_USE_GLFW_3
 endif
 
+GLEW_LIB_DIR := /home/research/DreamWorksParticles/common/lib/linux/x86_64
+GLEW_LIB := -lGLEW
+
+CUDA_LIB_DIR := /usr/local/cuda-7.0/targets/x86_64-linux/lib
+CUDA_LIB := -lcuda -lcudart
+
 LIBS := \
     -ldl -lm -lz \
     -L$(ILMBASE_LIB_DIR) $(HALF_LIB) \
@@ -275,6 +283,8 @@ LIBS_RPATH := \
     -Wl,-rpath,$(ILMBASE_LIB_DIR) -L$(ILMBASE_LIB_DIR) $(HALF_LIB) \
     -Wl,-rpath,$(TBB_LIB_DIR) -L$(TBB_LIB_DIR) $(TBB_LIB) \
     -Wl,-rpath,$(BOOST_LIB_DIR) -L$(BOOST_LIB_DIR) $(BOOST_LIB) \
+    -Wl,-rpath,$(GLEW_LIB_DIR) -L$(GLEW_LIB_DIR) $(GLEW_LIB) \
+    -Wl,-rpath,$(CUDA_LIB_DIR) -L$(CUDA_LIB_DIR) $(CUDA_LIB)\
 #
 ifeq (yes,$(has_blosc))
     LIBS += -L$(BLOSC_LIB_DIR) $(BLOSC_LIB)
@@ -510,6 +520,13 @@ LIBVIEWER_SRC_NAMES := \
     viewer/RenderModules.cc \
     viewer/Viewer.cc \
 #
+PARTICLE_SRC_NAMES := \
+    ../simulations/particlesLight/particleSystem.cpp \
+	../simulations/particlesLight/event_timer.cpp \
+	../simulations/particlesLight/particleSystem_cuda.cu \
+	../simulations/particlesLight/render_particles.cpp \
+	../simulations/particlesLight/shaders.cpp \
+#
 ifdef MBSD
     LIBVIEWER_FLAGS := -framework Cocoa -framework OpenGL -framework IOKit
 else
@@ -576,6 +593,8 @@ OBJ_NAMES := $(SRC_NAMES:.cc=.o)
 UNITTEST_OBJ_NAMES := $(UNITTEST_SRC_NAMES:.cc=.o)
 LIBVIEWER_OBJ_NAMES := $(LIBVIEWER_SRC_NAMES:.cc=.o)
 PYTHON_OBJ_NAMES := $(PYTHON_SRC_NAMES:.cc=.o)
+PARTICLE_OBJ_NAMES := $(PARTICLE_SRC_NAMES:.cpp=.o)
+PARTICLE_OBJ_NAMES := $(PARTICLE_OBJ_NAMES:.cu=.o)
 
 LIB_MAJOR_VERSION=$(shell grep 'define OPENVDB_LIBRARY_MAJOR_VERSION_NUMBER ' \
     version.h | sed 's/[^0-9]*//g')
@@ -745,7 +764,7 @@ $(LIBVIEWER_OBJ_NAMES): %.o: %.cc
 
 vdb_view: $(LIBOPENVDB) $(LIBVIEWER_OBJ_NAMES) cmd/openvdb_view/main.cc
 	@echo "Building $@ because of $(list_deps)"
-	$(CXX) $(CXXFLAGS) -o $@ cmd/openvdb_view/main.cc $(LIBVIEWER_OBJ_NAMES) \
+	$(CXX) $(CXXFLAGS) -o $@ cmd/openvdb_view/main.cc $(LIBVIEWER_OBJ_NAMES) $(PARTICLE_OBJ_NAMES) \
 	    -I . -Wl,-rpath,$(GLFW_LIB_DIR) -L$(GLFW_LIB_DIR) $(GLFW_LIB) \
 	    $(LIBOPENVDB_RPATH) -L$(CURDIR) $(LIBOPENVDB) \
 	    $(LIBVIEWER_FLAGS) $(LIBS_RPATH) $(BOOST_THREAD_LIB) $(CONCURRENT_MALLOC_LIB)

@@ -48,6 +48,11 @@
 #include <boost/thread/thread.hpp>
 #include <time.h> // for nanosleep()
 
+// added for particle simulation
+#include "particleSystem.h"
+#include "render_particles.h"
+
+
 #ifdef OPENVDB_USE_GLFW_3
 //#define GLFW_INCLUDE_GLU
 #include <GLFW/glfw3.h>
@@ -127,6 +132,25 @@ private:
     bool mShiftIsDown, mCtrlIsDown, mShowInfo;
     bool mInterrupt;
     int mWinWidth, mWinHeight;
+
+    // added for particle simulation
+    
+    // particle simulation data
+    bool bPause;
+    ParticleSystem *psystem;
+    ParticleRenderer *renderer;
+
+    // particle simulation parameters
+    float timestep;
+    float damping;
+    float gravity;
+    int ballr;
+
+    float collideSpring;
+    float collideDamping;
+    float collideShear;
+    float collideAttraction;
+
 #if GLFW_VERSION_MAJOR >= 3
     GLFWwindow* mWindow;
 #endif
@@ -722,7 +746,25 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
     for (bool stop = false; !stop; ) {
 
         // testing the particle sim code
-        
+
+
+        // update the simulation
+        if (!bPause)
+        {
+            psystem->setDamping(damping);
+            psystem->setGravity(-gravity);
+            psystem->setCollideSpring(collideSpring);
+            psystem->setCollideDamping(collideDamping);
+            psystem->setCollideShear(collideShear);
+            psystem->setCollideAttraction(collideAttraction);
+
+            psystem->update(timestep);
+
+            if (renderer)
+            {
+                renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
+            }
+        }
 
 
 
