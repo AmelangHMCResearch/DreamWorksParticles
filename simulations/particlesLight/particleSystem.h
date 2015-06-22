@@ -151,7 +151,10 @@ class ParticleSystem
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
         void initSpout(float spoutRadius, float jitter, uint numParticles);
-        void addParticles(float spoutRadius, float jitter);
+        void addParticles(const float spoutRadius,
+                          const float spoutInPlaneOffset,
+                          const float spoutVerticalOffset,
+                          const float particleJitterPercentOfRadius);
 
     protected: // data
         bool _systemInitialized; 

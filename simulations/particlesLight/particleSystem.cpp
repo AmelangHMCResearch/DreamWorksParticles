@@ -247,9 +247,14 @@ ParticleSystem::update(float deltaTime)
         _numActiveParticles == 0) {
         _numTimesteps = 0;
         const float spoutRadius = 0.5f;
+        const float spoutInPlaneOffset = 0.0f;
+        const float spoutVerticalOffset = .5f;
         // Room for jitter as a percentage of particle radius
-        const float jitterPercent = 0.1f;
-        addParticles(spoutRadius, jitterPercent);
+        const float particleJitterPercentOfRadius = 0.1f;
+        addParticles(spoutRadius,
+                     spoutInPlaneOffset,
+                     spoutVerticalOffset,
+                     particleJitterPercentOfRadius);
     }
     ++_numTimesteps;
 
@@ -494,12 +499,12 @@ float3 crossProduct(float3 a, float3 b) {
     float3 result;
     result.x = a.y * b.z - a.z * b.y;
     result.y = a.z * b.x - a.x * b.z;
-    result.z = a.x * b.y - a.y * b.z;
+    result.z = a.x * b.y - a.y * b.x;
     return result;
 }
 
 float dotProduct(float3 a, float3 b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z; 
+    return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 float3 scalarMult(float a, float3 b) {
@@ -562,7 +567,10 @@ std::vector<float2> genParticlePos(float particleRadius, float radius)
 }
 
 void
-ParticleSystem::addParticles(const float spoutRadius, const float jitterPercent)
+ParticleSystem::addParticles(const float spoutRadius,
+                             const float spoutInPlaneOffset,
+                             const float spoutVerticalOffset,
+                             const float particleJitterPercentOfRadius)
 {
 
     const float3 unrotatedCameraPosition = -1. * _translation;
@@ -588,7 +596,7 @@ ParticleSystem::addParticles(const float spoutRadius, const float jitterPercent)
       rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
 
     const float jitterDistance =
-      _params.particleRadius * jitterPercent;
+      _params.particleRadius * particleJitterPercentOfRadius;
 
     const std::vector<float2> positionsOfNewParticlesInThePlane =
       genParticlePos(_params.particleRadius + jitterDistance, 0.15f);
@@ -606,25 +614,42 @@ ParticleSystem::addParticles(const float spoutRadius, const float jitterPercent)
     }
 
     const float3 cameraDirection = -1 * normalize(cameraPosition);
+
+    // form the 3d direction which represents straight down on the screen
+    float3 spoutScreenVerticalDirection = make_float3(0.f, -1.f, 0.f);
+    spoutScreenVerticalDirection =
+      spoutScreenVerticalDirection -
+      dotProduct(spoutScreenVerticalDirection,
+                 cameraDirection) * cameraDirection;
+    spoutScreenVerticalDirection =
+      normalize(spoutScreenVerticalDirection);
+    // now, the spout is the camera position plus some offset down the screen
+    const float3 spoutPosition =
+      cameraPosition +
+      spoutVerticalOffset * spoutScreenVerticalDirection +
+      spoutInPlaneOffset * cameraDirection;
+    const float3 spoutDirection = -1 * normalize(spoutPosition);
+
     // goal: make two axes within the plane of the spout's exit
     // strategy: use gram-schmidt orthogonalization
     float3 axis1 = make_float3(frand(), frand(), frand());
+    //float3 axis1 = make_float3(1.f, 0.f, 0.f);
     // subtract off component in same direction as camera
-    const float originalAxis1DotCameraDirection =
-      dotProduct(axis1, cameraDirection);
-    axis1 = axis1 - originalAxis1DotCameraDirection * cameraDirection;
-    // axis1 is now orthogonal to cameraDirection
+    const float originalAxis1DotSpoutDirection =
+      dotProduct(axis1, spoutDirection);
+    axis1 = axis1 - originalAxis1DotSpoutDirection * spoutDirection;
+    // axis1 is now orthogonal to spoutDirection
     axis1 = normalize(axis1);
     // axis1 is now normal and ready to use
     // now, form a second axis by taking the cross product of the two we have
-    const float3 axis2 = crossProduct(cameraDirection, axis1);
+    const float3 axis2 = crossProduct(spoutDirection, axis1);
 
     // use the camera direction as the initial velocity direction
-    const float3 newVel = scalarMult(_initialVel, cameraDirection);
+    const float3 newVel = scalarMult(_initialVel, spoutDirection);
     for (int i = 0; i < newNumParticles - _numActiveParticles; ++i)
     {
         const float3 newParticlesPosition =
-          cameraPosition +
+          spoutPosition +
           positionsOfNewParticlesInThePlane[i].x * axis1 +
           positionsOfNewParticlesInThePlane[i].y * axis2;
         _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
