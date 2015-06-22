@@ -480,7 +480,7 @@ float findRadius(float2 radius) {
     return sqrt(radius.x * radius.x + radius.y * radius.y);
 }
 
-float3 rotate(float3* rotMatrix, float3 pos) {
+float3 rotatePoint(float3* rotMatrix, float3 pos) {
     float3 result;
     result.x = rotMatrix[0].x * pos.x + rotMatrix[0].y * pos.y + rotMatrix[0].z * pos.z;
     result.y = rotMatrix[1].x * pos.x + rotMatrix[1].y * pos.y + rotMatrix[1].z * pos.z;
@@ -505,6 +505,23 @@ float3 scalarMult(float a, float3 b) {
     b.y = b.y * a;
     b.z = b.z * a;
     return b;
+}
+
+float3 operator+(const float3 & a, const float3 & b) {
+  return make_float3(a.x+b.x, a.y+b.y, a.z+b.z);
+}
+
+float3 operator-(const float3 & a, const float3 & b) {
+  return make_float3(a.x-b.x, a.y-b.y, a.z-b.z);
+}
+
+float3 operator*(const float alpha, const float3 & b) {
+  return scalarMult(alpha, b);
+}
+
+float3 normalize(const float3 & a) {
+  const float magnitude = sqrt(dotProduct(a, a));
+  return scalarMult(1. / magnitude, a);
 }
 
 // Generates grid with side length radius based on hexagonal dense packing pattern
@@ -542,57 +559,71 @@ void
 ParticleSystem::addParticles(float spoutRadius, float jitter)
 {
 
-    float3 center = _translation;
-    float3 normal = _rotation; 
-    printf("x: %5.3f, y: %5.3f\n", normal.x, normal.y);
-    normal.x = normal.x * (3.141592/180.0);
-    normal.y = normal.y * (3.141592/180.0);
+    const float3 unrotatedCameraPosition = -1. * _translation;
+    float3 rotations = _rotation;
+    rotations.x = rotations.x * (3.141592/180.0);
+    rotations.y = rotations.y * (3.141592/180.0);
 
-    float3 xRotate[3] = {make_float3(1, 0, 0),
-                         make_float3(0, cos(normal.x), -1.0 * sin(normal.x)),
-                         make_float3(0, sin(normal.x), cos(normal.x))};
-    float3 yRotate[3] = {make_float3(cos(normal.y), 0, sin(normal.y)),
-                         make_float3(0, 1, 0),
-                         make_float3(-1.0 * sin(normal.y), 0, cos(normal.y))};
-    float3 x2Rotate[3] = {make_float3(1, 0, 0),
-                         make_float3(0, cos(normal.x), sin(normal.x)),
-                         make_float3(0, -1.0 * sin(normal.x), cos(normal.x))};
-    float3 y2Rotate[3] = {make_float3(cos(normal.y), 0, -1.0 * sin(normal.y)),
-                         make_float3(0, 1, 0),
-                         make_float3(sin(normal.y), 0, cos(normal.y))};
+    // rotation matrices are the transpose (inverse) of what we apply to
+    //  drawing.
+    float3 xRotation[3] = {make_float3(1, 0, 0),
+                          make_float3(0, cos(rotations.x), sin(rotations.x)),
+                          make_float3(0, -1.0 * sin(rotations.x), cos(rotations.x))};
+    float3 yRotation[3] = {make_float3(cos(rotations.y), 0, -1.0 * sin(rotations.y)),
+                          make_float3(0, 1, 0),
+                          make_float3(sin(rotations.y), 0, cos(rotations.y))};
 
+    // we apply x, then y because of the rules of transpose.
+    // when drawing, we do T*Rx*Ry.
+    // we now want to do the inverse, which is the transpose of the rotations.
+    // that means we need (Rx*Ry)^T, which is Ry^T*Rx^T.
+    // so, we first apply transposed x rotation, then transposed y.
+    const float3 cameraPosition =
+      rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
 
-    float3 cameraVec = rotate(x2Rotate, rotate(y2Rotate, center));
-
-
-    std::vector<float2> startingPos = genParticlePos(_params.particleRadius* (1.0f + jitter), 0.15f);
+    const std::vector<float2> positionsOfNewParticlesInThePlane =
+      genParticlePos(_params.particleRadius * (1.0f + jitter), 0.15f);
 
     uint newNumParticles;
     uint amountToCopy;
-    _spoutSize = startingPos.size();
+    _spoutSize = positionsOfNewParticlesInThePlane.size();
     if (_numActiveParticles + _spoutSize < _numParticles) {
-        newNumParticles = _numActiveParticles + _spoutSize; 
+        newNumParticles = _numActiveParticles + _spoutSize;
         amountToCopy = _spoutSize;
     }
     else {
-        newNumParticles = _numParticles; 
+        newNumParticles = _numParticles;
         amountToCopy = _numParticles - _numActiveParticles;
     }
 
-    float3 newVel = make_float3(_initialVel, _initialVel, _initialVel);
-    float aDotB = dotProduct(newVel, cameraVec);
-    float bDotB = dotProduct(cameraVec, cameraVec);
-    newVel = scalarMult(aDotB/ bDotB, cameraVec); 
+    const float3 cameraDirection = -1 * normalize(cameraPosition);
+    // goal: make two axes within the plane of the spout's exit
+    // strategy: use gram-schmidt orthogonalization
+    float3 axis1 = make_float3(frand(), frand(), frand());
+    // subtract off component in same direction as camera
+    const float originalAxis1DotCameraDirection =
+      dotProduct(axis1, cameraDirection);
+    axis1 = axis1 - originalAxis1DotCameraDirection * cameraDirection;
+    // axis1 is now orthogonal to cameraDirection
+    axis1 = normalize(axis1);
+    // axis1 is now normal and ready to use
+    // now, form a second axis by taking the cross product of the two we have
+    const float3 axis2 = crossProduct(cameraDirection, axis1);
 
+    // use the camera direction as the initial velocity direction
+    const float3 newVel = scalarMult(_initialVel, cameraDirection);
     for (int i = 0; i < newNumParticles - _numActiveParticles; ++i)
     {
-        _pos[i*4] = startingPos[i].x - cameraVec.x + frand() * jitter;
-        _pos[i*4+1] = startingPos[i].y - cameraVec.y +  frand() * jitter;
-        _pos[i*4+2] = -1.0 * cameraVec.z + frand() * jitter;
+        const float3 newParticlesPosition =
+          cameraPosition +
+          positionsOfNewParticlesInThePlane[i].x * axis1 + positionsOfNewParticlesInThePlane[i].y * axis1;
+        _pos[i*4+0] = newParticlesPosition.x + frand() * jitter;
+        _pos[i*4+1] = newParticlesPosition.y + frand() * jitter;
+        _pos[i*4+2] = newParticlesPosition.z + frand() * jitter;
         _pos[i*4+3] = 1.0f;
-        _vel[i*4] = -1.0 * newVel.x;
-        _vel[i*4+1] = -1.0 * newVel.y;
-        _vel[i*4+2] = -1.0 * newVel.z;
+        _vel[i*4+0] = 1.0 * newVel.x;
+        _vel[i*4+1] = 1.0 * newVel.y;
+        _vel[i*4+2] = 1.0 * newVel.z;
         _vel[i*4+3] = 0.0f;
     }
 

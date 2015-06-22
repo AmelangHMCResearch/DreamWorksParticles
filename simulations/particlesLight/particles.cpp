@@ -285,15 +285,6 @@ void display()
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
-    float3 x2Rotate[3] = {make_float3(1, 0, 0),
-                         make_float3(0, cos(normal.x), sin(normal.x)),
-                         make_float3(0, -1.0 * sin(normal.x), cos(normal.x))};
-    float3 y2Rotate[3] = {make_float3(cos(normal.y), 0, -1.0 * sin(normal.y)),
-                         make_float3(0, 1, 0),
-                         make_float3(sin(normal.y), 0, cos(normal.y))};
-
-
-
     // cube
     glColor3f(1.0, 1.0, 1.0);
     glutWireCube(8.0);
@@ -737,7 +728,7 @@ main(int argc, char **argv)
     
     initMenus();
     
-    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    //glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
