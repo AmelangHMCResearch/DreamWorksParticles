@@ -243,11 +243,13 @@ ParticleSystem::update(float deltaTime)
 {
     assert(_systemInitialized);
 
-    if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius || _numActiveParticles == 0) {
+    if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius ||
+        _numActiveParticles == 0) {
         _numTimesteps = 0;
-        float spoutRadius = 0.5f;
-        float jitter = 0.1f;       // Room for jitter as a percentage of particle radius
-        addParticles(spoutRadius, jitter);
+        const float spoutRadius = 0.5f;
+        // Room for jitter as a percentage of particle radius
+        const float jitterPercent = 0.1f;
+        addParticles(spoutRadius, jitterPercent);
     }
     ++_numTimesteps;
 
@@ -527,20 +529,24 @@ float3 normalize(const float3 & a) {
 // Generates grid with side length radius based on hexagonal dense packing pattern
 std::vector<float2> genParticlePos(float particleRadius, float radius)
 {
-    std::vector<float2> grid; 
-    float cellWidth = 2 * particleRadius;
-    float cellLength = 2 * sqrt(2 * particleRadius * particleRadius);
-    uint gridWidth = ceil(2 * radius / cellWidth);
-    uint gridLength = ceil(2 * radius / cellLength);
+    std::vector<float2> grid;
+    const float cellWidth  = 2 * particleRadius;
+    const float cellLength = 2 * sqrt(3 * particleRadius * particleRadius);
+    const uint gridWidth   = ceil(2 * radius / cellWidth) + 2;
+    const uint gridLength  = ceil(2 * radius / cellLength) + 2;
+    // avoid all the intermediate mallocs
+    grid.reserve(gridWidth * gridLength * 2);
     for (int i = 0; i < gridLength; ++i) {
         for (int j = 0; j < gridWidth; ++j) {
-            float2 newIntersection = make_float2(-1.0 * radius + j * cellWidth, -1.0 * radius + i * cellLength);
+            const float2 newIntersection =
+              make_float2(-1.0 * radius + j * cellWidth,
+                          -1.0 * radius + i * cellLength);
             grid.push_back(newIntersection);
             if (i > 0 && j > 0) {
-                float2 center;
-                center.x = newIntersection.x - 0.5 * cellWidth;
-                center.y = newIntersection.y - 0.5 * cellLength;
-                grid.push_back(center); 
+                const float2 center =
+                  make_float2(newIntersection.x - 0.5 * cellWidth,
+                              newIntersection.y - 0.5 * cellLength);
+                grid.push_back(center);
             }
         }
     }
@@ -556,7 +562,7 @@ std::vector<float2> genParticlePos(float particleRadius, float radius)
 }
 
 void
-ParticleSystem::addParticles(float spoutRadius, float jitter)
+ParticleSystem::addParticles(const float spoutRadius, const float jitterPercent)
 {
 
     const float3 unrotatedCameraPosition = -1. * _translation;
@@ -581,8 +587,11 @@ ParticleSystem::addParticles(float spoutRadius, float jitter)
     const float3 cameraPosition =
       rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
 
+    const float jitterDistance =
+      _params.particleRadius * jitterPercent;
+
     const std::vector<float2> positionsOfNewParticlesInThePlane =
-      genParticlePos(_params.particleRadius * (1.0f + jitter), 0.15f);
+      genParticlePos(_params.particleRadius + jitterDistance, 0.15f);
 
     uint newNumParticles;
     uint amountToCopy;
@@ -616,10 +625,11 @@ ParticleSystem::addParticles(float spoutRadius, float jitter)
     {
         const float3 newParticlesPosition =
           cameraPosition +
-          positionsOfNewParticlesInThePlane[i].x * axis1 + positionsOfNewParticlesInThePlane[i].y * axis1;
-        _pos[i*4+0] = newParticlesPosition.x + frand() * jitter;
-        _pos[i*4+1] = newParticlesPosition.y + frand() * jitter;
-        _pos[i*4+2] = newParticlesPosition.z + frand() * jitter;
+          positionsOfNewParticlesInThePlane[i].x * axis1 +
+          positionsOfNewParticlesInThePlane[i].y * axis2;
+        _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
         _pos[i*4+3] = 1.0f;
         _vel[i*4+0] = 1.0 * newVel.x;
         _vel[i*4+1] = 1.0 * newVel.y;
