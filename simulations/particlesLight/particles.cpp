@@ -49,6 +49,7 @@
 #include <string>
 
 #include "particleSystem.h"
+#include "voxelObject.h"
 #include "render_particles.h"
 #include "paramgl.h"
 #include "event_timer.h"
@@ -57,6 +58,7 @@
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
 int numIterations = 3000; // run until exit
+bool usingObject = false;
 
 // simulation parameters
 float timestep = 0.5f;
@@ -95,9 +97,7 @@ enum { M_VIEW = 0, M_MOVE };
 
 ParticleSystem *psystem = 0;
 
-// fps
-static int fpsCount = 0;
-static int fpsLimit = 1;
+VoxelObject *voxelObject = 0;
 
 ParticleRenderer *renderer = 0;
 
@@ -174,6 +174,12 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
+    float voxelSize = 1.0f/32.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+    uint cubeSize = 32;    // Dimension of each side of the cube
+    float3 origin = make_float3(0, 0, 0);
+    voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+
+
     psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
     psystem->reset(ParticleSystem::CONFIG_GRID);
     psystem->startTimer(5);
@@ -219,24 +225,6 @@ void initGL(int *argc, char **argv)
     glutReportErrors();
 }
 
-void computeFPS()
-{
-    frameCount++;
-    fpsCount++;
-
-    /*if (fpsCount == fpsLimit)
-    {
-        char fps[256];
-        // float ifps = 1.f / (sdkGetAverageTimerValue(&timer) / 1000.f);
-        // sprintf(fps, "CUDA Particles (%d particles): %3.1f fps", numParticles, ifps);
-
-        glutSetWindowTitle(fps);
-        fpsCount = 0;
-
-        fpsLimit = (int)MAX(ifps, 1.f);
-    }*/
-}
-
 void display()
 {
 
@@ -250,7 +238,7 @@ void display()
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
 
-        psystem->update(timestep);
+        psystem->update(timestep, voxelObject);
 
         if (renderer)
         {
@@ -311,7 +299,8 @@ void display()
     glutSwapBuffers();
     glutReportErrors();
 
-    computeFPS();
+    // Keep track of frames to calculate FPS at end
+    ++frameCount; 
 
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
@@ -515,7 +504,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
             break;
 
         case 13:
-            psystem->update(timestep);
+            psystem->update(timestep, voxelObject);
 
             if (renderer)
             {
@@ -702,6 +691,10 @@ main(int argc, char **argv)
         if (checkCmdLineFlag(argc, (const char **) argv, "i"))
         {
             numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
+        }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-o"))
+        {
+            usingObject = true;
         }
 
     }

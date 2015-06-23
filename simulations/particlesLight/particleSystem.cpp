@@ -12,6 +12,7 @@
 #include "particleSystem.h"
 #include "particleSystem.cuh"
 #include "particles_kernel.cuh"
+#include "voxelObject.h" 
 #include "event_timer.h" 
 
 #include <cuda_runtime.h>
@@ -232,7 +233,7 @@ ParticleSystem::_finalize()
 
 // step the simulation
 void
-ParticleSystem::update(float deltaTime)
+ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
 {
     assert(_systemInitialized);
 
@@ -267,14 +268,14 @@ ParticleSystem::update(float deltaTime)
                         dPos,
                         _numParticles,
                         _timer);
-#if 0
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
                       _dev_particleIndex, 
                       _numParticles, 
                       _timer);
-
+        
+        // Create temporary arrays to allow texture memory use for pos/vel reads
         float* tempPos;
         float* tempVel;
         allocateArray((void **)&tempPos, _numParticles*4*sizeof(float));
@@ -305,27 +306,6 @@ ParticleSystem::update(float deltaTime)
                                     _timer);
         freeArray(tempPos);
         freeArray(tempVel);
-
-#else
-        // sort particles based on hash
-        sortParticlesOnce(_dev_cellIndex, 
-                          dPos,
-                          _dev_vel,
-                          _numParticles, 
-                          _timer);
-    
-        // reorder particle arrays into sorted order and
-        // find start and end of each cell
-        findCellStart(_dev_cellStart,
-                      _dev_cellEnd,
-                      _dev_cellIndex,
-                      dPos,
-                      _dev_posAfterLastSort,
-                      _numParticles,
-                      _numGridCells,
-                      _timer);
-
-#endif
         // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {

@@ -14,6 +14,7 @@
 
 #include <helper_functions.h>
 #include "particles_kernel.cuh"
+#include "voxelObject.h"
 #include "vector_functions.h"
 #include "event_timer.h" 
 
@@ -37,7 +38,7 @@ class ParticleSystem
             VELOCITY,
         };
 
-        void update(float deltaTime);
+        void update(float deltaTime, VoxelObject *voxelObject);
         void reset(ParticleConfig config);
 
         void   setArray(ParticleArray array, const float *data, int start, int count);

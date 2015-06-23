@@ -37,7 +37,32 @@ texture<uint, 1, cudaReadModeElementType> cellEndTex;
 // simulation parameters in constant memory
 __constant__ SimParams params;
 
+// VoxelObject Functions:
+__device__
+float3 getVoxelGridPos(float3 pos)
+{
+    // Figure it out later?
+}
 
+__device__
+bool voxelIsActive(float3 voxelGridPos, bool *activeVoxel) 
+{
+    // Also later, whatever
+}
+
+__device__
+float3 calcForceFromVoxel(float3 voxelGridPos, 
+                          float4 *voxelPos, 
+                          float4 *particlePos, 
+                          float4 *particleVel,
+                          float4 *particleForce)
+{
+    // Later
+}
+
+
+
+// Particle System Kernels/Functions
 struct integrate_functor
 {
     float _deltaTime;
