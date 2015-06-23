@@ -50,4 +50,12 @@ struct SimParams
     float movementThreshold;
 };
 
+struct ObjectParams
+{
+    float _voxelSize; 
+    unsigned int _cubeSize;
+    unsigned int _numVoxels;
+    float3 _origin;       
+};
+
 #endif

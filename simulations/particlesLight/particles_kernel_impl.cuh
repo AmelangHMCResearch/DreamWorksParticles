@@ -36,28 +36,97 @@ texture<uint, 1, cudaReadModeElementType> cellEndTex;
 
 // simulation parameters in constant memory
 __constant__ SimParams params;
+__constant__ ObjectParams objParams;
 
 // VoxelObject Functions:
 __device__
-float3 getVoxelGridPos(float3 pos)
+int3 getVoxelGridPos(float3 pos)
 {
-    // Figure it out later?
+    float3 relativePos = pos - objParams._origin; 
+    int3 intPos;
+    intPos.x = floor((relativePos.x / objParams._voxelSize)); 
+    intPos.y = floor((relativePos.y / objParams._voxelSize)); 
+    intPos.z = floor((relativePos.z / objParams._voxelSize)); 
+    return intPos;
 }
 
 __device__
-bool voxelIsActive(float3 voxelGridPos, bool *activeVoxel) 
+bool posIsOutOfBounds(int3 voxelGridPos)
 {
-    // Also later, whatever
+    if (voxelGridPos.x <= -1.0 * objParams._cubeSize / 2.0 || voxelGridPos.x >= objParams._cubeSize / 2.0) {
+        return true;
+    }
+    if (voxelGridPos.y <= -1.0 * objParams._cubeSize / 2.0 || voxelGridPos.y >= objParams._cubeSize / 2.0) {
+        return true;
+    }
+    if (voxelGridPos.z <= -1.0 * objParams._cubeSize / 2.0 || voxelGridPos.z >= objParams._cubeSize / 2.0) {
+        return true;
+    }
+    return false;
 }
 
 __device__
-float3 calcForceFromVoxel(float3 voxelGridPos, 
-                          float4 *voxelPos, 
-                          float4 *particlePos, 
-                          float4 *particleVel,
-                          float4 *particleForce)
+float3 findForce(float3 particlePos, float3 voxelPos, float3 particleVel) 
 {
-    // Later
+    float3 force = make_float3(0.0f);
+
+    float xDist = abs(particlePos.x - voxelPos.x);
+    float yDist = abs(particlePos.y - voxelPos.y);
+    float zDist = abs(particlePos.z - voxelPos.z);
+
+    if (xDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
+        return force; 
+    }
+    if (yDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
+        return force; 
+    }
+    if (zDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
+        return force; 
+    }
+
+    if (xDist < (objParams._cubeSize / 2.0 )) { 
+        force.x = -1.0 * particleVel.x; 
+    } 
+    if (yDist < (objParams._cubeSize / 2.0 )) {
+        force.y = -1.0 * particleVel.y;
+    }
+    if (zDist < (objParams._cubeSize / 2.0 )) {
+        force.y = -1.0 * particleVel.y;
+    }
+
+    float cornerDistance_sq = ((xDist - objParams._cubeSize / 2.0 ) * (xDist - objParams._cubeSize / 2.0 )) +
+                         ((yDist - objParams._cubeSize / 2.0 ) * (yDist - objParams._cubeSize / 2.0 ) +
+                         ((zDist - objParams._cubeSize / 2.0 ) * (zDist - objParams._cubeSize / 2.0 )));
+
+    if (cornerDistance_sq < (params.particleRadius * params.particleRadius)) {
+        force.x = -1.0 * particleVel.x;
+        force.y = -1.0 * particleVel.y;
+        force.z = -1.0 * particleVel.z;
+    }
+
+    return force;
+}
+
+__device__
+float3 calcForceFromVoxel(int3 voxelGridPos, 
+                          float4 *voxelPos,
+                          bool  *activeVoxel,  
+                          float3 particlePos,
+                          float3 particleVel)
+{
+    uint voxelIndex = ((voxelGridPos.z + (objParams._cubeSize / 2.0))*objParams._cubeSize * objParams._cubeSize) + ((voxelGridPos.y + (objParams._cubeSize / 2.0)) * objParams._cubeSize) + (voxelGridPos.x + (objParams._cubeSize / 2.0));
+
+    // Check that voxel is active
+    float3 force = make_float3(0.0f);
+    if (posIsOutOfBounds(voxelGridPos) || !activeVoxel[voxelIndex]) {
+        return force;
+    }
+
+    // Calculate force from voxel
+    float3 voxelCenter = make_float3(voxelPos[voxelIndex]);
+    force = findForce(particlePos, voxelCenter, particleVel);
+
+    return force;
 }
 
 
@@ -516,6 +585,8 @@ __global__
 void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
+              bool   *activeVoxel,
+              float4 *voxelPos,
               uint   *cellIndex,    
               uint   *cellStart,
               uint   *cellEnd,
@@ -542,6 +613,7 @@ void collideD(float4 *pos,               // input: position
     // examine neighbouring cells
     float3 particleForce = make_float3(0.0f);
 
+    // Collide with other Particles
     for (int z=-1; z<=1; z++)
     {
         for (int y=-1; y<=1; y++)
@@ -549,11 +621,28 @@ void collideD(float4 *pos,               // input: position
             for (int x=-1; x<=1; x++)
             {
                 int3 neighborPos = gridPos + make_int3(x, y, z);
-                particleForce += collideCell(neighborPos, index, particlePos, particleVel, pos, vel, 
+                float3 tempForce = collideCell(neighborPos, index, particlePos, particleVel, pos, vel, 
                                              cellStart, cellEnd, numNeighbors);
+                particleForce += tempForce;
             }
         }
     }
+
+    // Collide with voxels of voxel object.
+    int3 voxelGridPos = getVoxelGridPos(particlePos);
+    float3 forceFromObject = make_float3(0.0);
+    for (int z = -1; z <= 1; ++z) {
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                int3 neighborVoxel = voxelGridPos + make_int3(x, y, z);
+                float3 tempForce = calcForceFromVoxel(neighborVoxel, voxelPos, activeVoxel, particlePos, particleVel);
+                if (length(tempForce) > length(forceFromObject)) {
+                    forceFromObject = tempForce;
+                }
+            }
+        }
+    }
+    particleForce += forceFromObject;
 
     // collide with cursor sphere
     particleForce += collideSpheres(particlePos, params.colliderPos, particleVel, 

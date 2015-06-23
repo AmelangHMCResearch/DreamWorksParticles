@@ -35,10 +35,20 @@ public:
     void initObject(ObjectShape shape);
     void initShape(ObjectShape shape);
 
-    float* getPosArray();
-
     float getVoxelSize() {
-    	return _voxelSize;
+    	return _objectParams._voxelSize;
+    }
+
+    unsigned int getCubeSize() {
+        return _objectParams._cubeSize;
+    }
+
+    float3 getOrigin() {
+        return _objectParams._origin;
+    }
+
+    unsigned int getNumVoxels() {
+        return _objectParams._numVoxels;
     }
 
     unsigned int getCurrentReadBuffer() const
@@ -51,9 +61,14 @@ public:
         return _colorVBO;
     }
 
-    unsigned int getNumVoxels() {
-    	return _numVoxels;
+    bool* getActiveVoxels()
+    {
+        return _dev_activeVoxel;
     }
+
+    float* getPosArray();
+
+    void unbindPosArray();
 
     unsigned int createVBO(unsigned int size);
 
@@ -74,10 +89,7 @@ private:
     struct cudaGraphicsResource *_cuda_colorvbo_resource; // handles OpenGL-CUDA exchange
 
 	// Parameters
-	float _voxelSize;
-	unsigned int _cubeSize;  
-    unsigned int _numVoxels; 
-    float3 _origin; 
+	ObjectParams _objectParams;
 	
 };
 

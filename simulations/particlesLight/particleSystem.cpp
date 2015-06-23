@@ -316,6 +316,8 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     collide(dPos,
             _dev_vel,
             _dev_force,
+            voxelObject->getActiveVoxels(),
+            voxelObject->getPosArray(),
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -328,6 +330,8 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
+    voxelObject->unbindPosArray();
+
     if (_usingOpenGL)
     {
         unmapGLBufferObject(_cuda_posvbo_resource);

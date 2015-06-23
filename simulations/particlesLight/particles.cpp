@@ -174,9 +174,9 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    float voxelSize = 1.0f/32.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-    uint cubeSize = 32;    // Dimension of each side of the cube
-    float3 origin = make_float3(0, 0, 0);
+    float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+    uint cubeSize = 4;    // Dimension of each side of the cube
+    float3 origin = make_float3(0, -3.5f, 0);
     voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
 
 
@@ -188,7 +188,6 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     {
         renderer = new ParticleRenderer;
         renderer->setParticleRadius(psystem->getParticleRadius());
-        renderer->setColorBuffer(psystem->getColorBuffer());
     }
 
 }
@@ -280,6 +279,16 @@ void display()
     */
     if (renderer && displayEnabled)
     {
+        renderer->setColorBuffer(psystem->getColorBuffer());
+        renderer->setPointSize(psystem->getParticleRadius());
+        renderer->display(displayMode);
+    }
+
+    if (renderer)
+    {
+        renderer->setColorBuffer(voxelObject->getColorBuffer());
+        renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
+        renderer->setPointSize(50 * voxelObject->getVoxelSize());
         renderer->display(displayMode);
     }
 
@@ -715,8 +724,8 @@ main(int argc, char **argv)
     glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    // glutMouseFunc(mouse);
-    // glutMotionFunc(motion);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
     // glutKeyboardFunc(key);
     // glutSpecialFunc(special);
     glutIdleFunc(idle);

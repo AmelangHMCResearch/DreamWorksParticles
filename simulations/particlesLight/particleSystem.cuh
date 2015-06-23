@@ -24,6 +24,7 @@ extern "C"
     void unmapGLBufferObject(struct cudaGraphicsResource *cuda_vbo_resource);
 
     void setParameters(SimParams *hostParams);
+    void setObjectParameters(ObjectParams *hostParams);
 
     void integrateSystem(float *pos,
                          float *vel,
@@ -86,6 +87,8 @@ extern "C"
     void collide(float *pos,
                  float *vel,
                  float *force,
+                 bool  *activeVoxel,
+                 float *voxelPos,
                  uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,
