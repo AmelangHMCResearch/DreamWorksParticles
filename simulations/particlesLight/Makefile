@@ -140,7 +140,7 @@ endif
 
 # internal flags
 
-CCFLAGS     :=
+CCFLAGS     := -g
 LDFLAGS     :=
 
 # build flags

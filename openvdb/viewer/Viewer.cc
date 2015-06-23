@@ -28,6 +28,9 @@
 //
 ///////////////////////////////////////////////////////////////////////////
 
+#include <GL/glew.h>
+
+
 #include "Viewer.h"
 
 #include "Camera.h"
@@ -48,11 +51,14 @@
 #include <boost/thread/thread.hpp>
 #include <time.h> // for nanosleep()
 
+
+
 // added for particle simulation
 #include "particleSystem.h"
 #include "render_particles.h"
 
 
+    
 #ifdef OPENVDB_USE_GLFW_3
 //#define GLFW_INCLUDE_GLU
 #include <GLFW/glfw3.h>
@@ -137,6 +143,7 @@ private:
     
     // particle simulation data
     bool bPause;
+    bool displayEnabled;
     ParticleSystem *psystem;
     ParticleRenderer *renderer;
 
@@ -150,6 +157,9 @@ private:
     float collideDamping;
     float collideShear;
     float collideAttraction;
+
+    ParticleRenderer::DisplayMode displayMode;
+
 
 #if GLFW_VERSION_MAJOR >= 3
     GLFWwindow* mWindow;
@@ -450,8 +460,6 @@ ThreadManager::doViewTask(void* arg)
 
 
 ////////////////////////////////////////
-
-
 ViewerImpl::ViewerImpl()
     : mDidInit(false)
     , mCamera(new Camera)
@@ -463,6 +471,21 @@ ViewerImpl::ViewerImpl()
     , mCtrlIsDown(false)
     , mShowInfo(true)
     , mInterrupt(false)
+    // particle simulation data
+    , bPause(false)
+    , psystem(0)
+    , renderer(0)
+    // particle simulation parameters
+    , timestep(0.5f)
+    , damping(1.0f)
+    , gravity(0.0003f)
+    , ballr(10)
+    , collideSpring(0.5f)
+    , collideDamping(0.02f)
+    , collideShear(0.1f)
+    , collideAttraction(0.0f)
+    , displayMode(ParticleRenderer::PARTICLE_SPHERES)
+    , displayEnabled(true)
 #if GLFW_VERSION_MAJOR >= 3
     , mWindow(NULL)
 #endif
@@ -563,6 +586,26 @@ ViewerImpl::open(int width, int height)
                 glfwGetCurrentContext(), glfwMakeContextCurrent);
             glfwMakeContextCurrent(mWindow);
             BitmapFont13::initialize();
+
+                // added for particle simulation
+    
+                // must be called after glfwMakeContextCurrent() (see http://stackoverflow.com/questions/11266567/glgenbuffers-crashing-with-segmentation-fault-c-glfw-glew)
+                glewInit();
+                printf("GLEW initialized. Starting to initialize particle system\n");
+                uint3 gridSize = {256, 256, 256};
+                psystem = new ParticleSystem(100000, gridSize, true);
+                psystem->reset(ParticleSystem::CONFIG_GRID);
+                psystem->startTimer(5);
+
+                printf("Particle system initialized.\n");
+
+                printf("GLEW initialized. Starting to initialize particle renderer\n");
+                
+                renderer = new ParticleRenderer;
+                renderer->setParticleRadius(psystem->getParticleRadius());
+                renderer->setColorBuffer(psystem->getColorBuffer());
+                
+                printf("Particle renderer initialized.\n");
         }
     }
     mCamera->setWindow(mWindow);
@@ -575,7 +618,9 @@ ViewerImpl::open(int width, int height)
         glfwSetWindowSizeCallback(mWindow, windowSizeCB);
         glfwSetWindowRefreshCallback(mWindow, windowRefreshCB);
     }
-    return (mWindow != NULL);
+
+
+    return (mWindow != NULL);   
 }
 #else // if GLFW_VERSION_MAJOR <= 2
 bool
@@ -751,6 +796,10 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
         // update the simulation
         if (!bPause)
         {
+            // printf("unpaused!\n");
+            // if (psystem) {
+            //     printf("psystem initialized\n");
+            // }
             psystem->setDamping(damping);
             psystem->setGravity(-gravity);
             psystem->setCollideSpring(collideSpring);
@@ -766,6 +815,9 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
             }
         }
 
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        
 
 
 
@@ -852,6 +904,20 @@ ViewerImpl::render()
     }
 
     mClipBox->disableClipping();
+
+    // draw particle simulation
+    // render
+    // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // // view transform
+    // glMatrixMode(GL_MODELVIEW);
+    // glLoadIdentity();
+
+    if (renderer && displayEnabled)
+    {
+        printf("Displaying particles\n");
+        renderer->display(displayMode);
+    }
 
     // Render text
 

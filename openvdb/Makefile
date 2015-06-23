@@ -764,7 +764,7 @@ $(LIBVIEWER_OBJ_NAMES): %.o: %.cc
 
 vdb_view: $(LIBOPENVDB) $(LIBVIEWER_OBJ_NAMES) cmd/openvdb_view/main.cc
 	@echo "Building $@ because of $(list_deps)"
-	$(CXX) $(CXXFLAGS) -o $@ cmd/openvdb_view/main.cc $(LIBVIEWER_OBJ_NAMES) $(PARTICLE_OBJ_NAMES) \
+	$(CXX) $(CXXFLAGS) -g -o $@ cmd/openvdb_view/main.cc $(LIBVIEWER_OBJ_NAMES) $(PARTICLE_OBJ_NAMES) \
 	    -I . -Wl,-rpath,$(GLFW_LIB_DIR) -L$(GLFW_LIB_DIR) $(GLFW_LIB) \
 	    $(LIBOPENVDB_RPATH) -L$(CURDIR) $(LIBOPENVDB) \
 	    $(LIBVIEWER_FLAGS) $(LIBS_RPATH) $(BOOST_THREAD_LIB) $(CONCURRENT_MALLOC_LIB)
