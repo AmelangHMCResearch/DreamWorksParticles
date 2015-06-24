@@ -138,7 +138,7 @@ extern "C"
                          bool *pointHasMovedMoreThanThreshold,
                          EventTimer* timer)                 
     {
-#if 0
+#if 1
         thrust::device_ptr<float4> pos4((float4 *)pos);
         thrust::device_ptr<float4> vel4((float4 *)vel);
         thrust::device_ptr<float4> force4((float4 *)force);

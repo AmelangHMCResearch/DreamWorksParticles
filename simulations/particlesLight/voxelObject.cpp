@@ -42,6 +42,9 @@ void VoxelObject::initObject(ObjectShape shape)
 
     registerGLBufferObject(_posVBO, &_cuda_posvbo_resource);
  
+
+    initShape(shape);
+
     // Create the color buff
     _colorVBO = createVBO(_objectParams._numVoxels * 4 * sizeof(float));
     registerGLBufferObject(_colorVBO, &_cuda_colorvbo_resource);
@@ -54,12 +57,10 @@ void VoxelObject::initObject(ObjectShape shape)
         *ptr++ = 1.0;
         *ptr++ = 0.0;
         *ptr++ = 0.0;
-        *ptr++ = 1.0f;
+        *ptr++ = (float) _activeVoxel[i];
     }
     glUnmapBufferARB(GL_ARRAY_BUFFER);
 
-    // Place voxels at correct positions; 
-    initShape(shape);
 }
 
 void VoxelObject::initShape(ObjectShape shape)
@@ -100,7 +101,36 @@ void VoxelObject::initShape(ObjectShape shape)
         break;
         case VOXEL_SPHERE:
         {
-            // To Fill in Later
+            for (unsigned int z = 0; z < _objectParams._cubeSize; z++)
+            {
+                for (unsigned int y = 0; y < _objectParams._cubeSize; y++)
+                {
+                    for (unsigned int x = 0; x < _objectParams._cubeSize; x++)
+                    {
+                        unsigned int i = (z*_objectParams._cubeSize * _objectParams._cubeSize) + (y * _objectParams._cubeSize) + x;
+
+                        if (i < _objectParams._numVoxels)
+                        {
+                            float xPos = _objectParams._origin.x + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            float yPos = _objectParams._origin.y + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
+                            float zPos = _objectParams._origin.z + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            float radius = sqrt((xPos - _objectParams._origin.x) * (xPos - _objectParams._origin.x) + 
+                                                (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
+                                                (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
+                            if (radius <= (_objectParams._cubeSize * _objectParams._voxelSize) / 2.0) {
+                                _activeVoxel[i] = 1;
+                                // Calculate center of voxels for use in VBO rendering
+                                _pos[i*4] = xPos;
+                                _pos[i*4+1] = yPos;
+                                _pos[i*4+2] = zPos;
+                                _pos[i*4+3] = 1.0f;
+                            } else {
+                                _activeVoxel[i] = 0;
+                            }
+                        }
+                    }
+                }
+            }
         }
         break;
     }

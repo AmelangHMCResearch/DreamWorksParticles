@@ -57,11 +57,11 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 3000; // run until exit
+int numIterations = 100000; // run until exit
 bool usingObject = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -176,9 +176,8 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
     uint cubeSize = 4;    // Dimension of each side of the cube
-    float3 origin = make_float3(0, -3.5f, 0);
+    float3 origin = make_float3(0, -3.5, 0);
     voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
-
 
     psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
     psystem->reset(ParticleSystem::CONFIG_GRID);
@@ -217,6 +216,9 @@ void initGL(int *argc, char **argv)
     }
 
 #endif
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.25, 0.25, 0.25, 1.0);
@@ -280,6 +282,7 @@ void display()
     if (renderer && displayEnabled)
     {
         renderer->setColorBuffer(psystem->getColorBuffer());
+        renderer->setParticleRadius(psystem->getParticleRadius());
         renderer->setPointSize(psystem->getParticleRadius());
         renderer->display(displayMode);
     }
@@ -288,6 +291,7 @@ void display()
     {
         renderer->setColorBuffer(voxelObject->getColorBuffer());
         renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
+        renderer->setParticleRadius(voxelObject->getVoxelSize());
         renderer->setPointSize(50 * voxelObject->getVoxelSize());
         renderer->display(displayMode);
     }

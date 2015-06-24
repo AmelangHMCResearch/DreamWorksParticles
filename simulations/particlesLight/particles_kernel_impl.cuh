@@ -51,6 +51,14 @@ int3 getVoxelGridPos(float3 pos)
 }
 
 __device__
+uint getVoxelIndex(int3 voxelGridPos)
+{
+    return ((voxelGridPos.z + (objParams._cubeSize / 2))*objParams._cubeSize * objParams._cubeSize) 
+          + ((voxelGridPos.y + (objParams._cubeSize / 2)) * objParams._cubeSize) 
+          + (voxelGridPos.x + (objParams._cubeSize / 2));
+}
+
+__device__
 bool posIsOutOfBounds(int3 voxelGridPos)
 {
     if (voxelGridPos.x <= -1.0 * objParams._cubeSize / 2.0 || voxelGridPos.x >= objParams._cubeSize / 2.0) {
@@ -66,67 +74,98 @@ bool posIsOutOfBounds(int3 voxelGridPos)
 }
 
 __device__
-float3 findForce(float3 particlePos, float3 voxelPos, float3 particleVel) 
-{
-    float3 force = make_float3(0.0f);
-
-    float xDist = abs(particlePos.x - voxelPos.x);
-    float yDist = abs(particlePos.y - voxelPos.y);
-    float zDist = abs(particlePos.z - voxelPos.z);
-
-    if (xDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
-        return force; 
+float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 voxelPos, bool *activeVoxel) {
+    float halfSide = objParams._voxelSize / 2.0;
+    float distFromPosX = halfSide - (particlePos.x - voxelPos.x); 
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(1, 0, 0))]) {
+        distFromPosX += halfSide; 
     }
-    if (yDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
-        return force; 
-    }
-    if (zDist >= (objParams._cubeSize / 2.0 + params.particleRadius)) { 
-        return force; 
+    float distFromNegX = objParams._voxelSize - distFromPosX; 
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(-1, 0, 0))]) {
+        distFromNegX += halfSide; 
     }
 
-    if (xDist < (objParams._cubeSize / 2.0 )) { 
-        force.x = -1.0 * particleVel.x; 
-    } 
-    if (yDist < (objParams._cubeSize / 2.0 )) {
-        force.y = -1.0 * particleVel.y;
+    float distFromPosY = halfSide - (particlePos.y - voxelPos.y);
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(0, 1, 0))]) {
+        distFromPosY += halfSide; 
     }
-    if (zDist < (objParams._cubeSize / 2.0 )) {
-        force.y = -1.0 * particleVel.y;
-    }
-
-    float cornerDistance_sq = ((xDist - objParams._cubeSize / 2.0 ) * (xDist - objParams._cubeSize / 2.0 )) +
-                         ((yDist - objParams._cubeSize / 2.0 ) * (yDist - objParams._cubeSize / 2.0 ) +
-                         ((zDist - objParams._cubeSize / 2.0 ) * (zDist - objParams._cubeSize / 2.0 )));
-
-    if (cornerDistance_sq < (params.particleRadius * params.particleRadius)) {
-        force.x = -1.0 * particleVel.x;
-        force.y = -1.0 * particleVel.y;
-        force.z = -1.0 * particleVel.z;
+    float distFromNegY = objParams._voxelSize - distFromPosY;
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(0, -1, 0))]) {
+        distFromNegY += halfSide; 
     }
 
-    return force;
+    float distFromPosZ = halfSide - (particlePos.z - voxelPos.z);
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(0, 0, 1))]) {
+        distFromPosZ += halfSide; 
+    }
+    float distFromNegZ = objParams._voxelSize - distFromPosZ;
+    if (activeVoxel[getVoxelIndex(voxelGridPos + make_int3(0, 0, -1))]) {
+        distFromNegZ += halfSide; 
+    }
+
+    float minXDist, minYDist, minZDist;
+
+
+    float3 face = make_float3(0.0f);
+    if (distFromPosX < distFromNegX) {
+        face.x = 1.0;
+        minXDist = distFromPosX;
+    } else {
+        face.x = -1.0;
+        minXDist = distFromNegX;
+    }
+    if (distFromPosY < distFromNegY) {
+        face.y = 1.0;
+        minYDist = distFromPosY;
+    } else {
+        face.y = -1.0;
+        minYDist = distFromNegY;
+    }
+    if (distFromPosZ < distFromNegZ) {
+        face.z = 1.0;
+        minZDist = distFromPosZ;
+    } else {
+        face.z = -1.0;
+        minZDist = distFromNegZ;
+    }
+    face.x = face.x && (minXDist < minYDist) && (minXDist < minZDist);
+    face.y = face.y && (minYDist < minXDist) && (minYDist < minZDist);
+    face.z = face.z && (minZDist < minXDist) && (minZDist < minYDist);
+    
+    return face;
 }
+
 
 __device__
 float3 calcForceFromVoxel(int3 voxelGridPos, 
                           float4 *voxelPos,
                           bool  *activeVoxel,  
                           float3 particlePos,
-                          float3 particleVel)
+                          float3 particleVel,
+                          float3 force)
 {
-    uint voxelIndex = ((voxelGridPos.z + (objParams._cubeSize / 2.0))*objParams._cubeSize * objParams._cubeSize) + ((voxelGridPos.y + (objParams._cubeSize / 2.0)) * objParams._cubeSize) + (voxelGridPos.x + (objParams._cubeSize / 2.0));
+    uint voxelIndex = getVoxelIndex(voxelGridPos);
 
     // Check that voxel is active
-    float3 force = make_float3(0.0f);
     if (posIsOutOfBounds(voxelGridPos) || !activeVoxel[voxelIndex]) {
-        return force;
+        return make_float3(0.0f);
     }
 
     // Calculate force from voxel
     float3 voxelCenter = make_float3(voxelPos[voxelIndex]);
-    force = findForce(particlePos, voxelCenter, particleVel);
+    float3 direction = findNearestFace(voxelGridPos, particlePos, voxelCenter, activeVoxel);
+    particleVel.x = particleVel.x * (1 && direction.x);
+    particleVel.y = particleVel.y * (1 && direction.y);
+    particleVel.z = particleVel.z * (1 && direction.z);
+    //float magnitude = -1.0 * / (objParams._cubeSize / 2.0) * length(particlePos - voxelCenter) + 5; 
+    float3 newForce = -1.0 * 5 * length(particleVel) / (objParams._cubeSize / 2.0) * length(particlePos - voxelCenter) * direction + 5 * length(particleVel) * direction;
 
-    return force;
+    float3 baseForce = newForce; 
+    baseForce.x += -1.0 * force.x * (1 && direction.x);
+    baseForce.y += -1.0 * force.y * (1 && direction.y);
+    baseForce.z += -1.0 * force.z * (1 && direction.z); 
+
+    return baseForce;
 }
 
 
@@ -220,6 +259,7 @@ struct integrate_functor
             if (movementMagnitude >= params.movementThreshold) {
                 *_pointHasMovedMoreThanThreshold = true;
             }
+            if (movementMagnitude >= 1.0/32.0) printf("Has moved %f\n", movementMagnitude);
         }
     }
 };
@@ -628,20 +668,10 @@ void collideD(float4 *pos,               // input: position
         }
     }
 
-    // Collide with voxels of voxel object.
+    // Check for collisions with voxel object
     int3 voxelGridPos = getVoxelGridPos(particlePos);
-    float3 forceFromObject = make_float3(0.0);
-    for (int z = -1; z <= 1; ++z) {
-        for (int y = -1; y <= 1; ++y) {
-            for (int x = -1; x <= 1; ++x) {
-                int3 neighborVoxel = voxelGridPos + make_int3(x, y, z);
-                float3 tempForce = calcForceFromVoxel(neighborVoxel, voxelPos, activeVoxel, particlePos, particleVel);
-                if (length(tempForce) > length(forceFromObject)) {
-                    forceFromObject = tempForce;
-                }
-            }
-        }
-    }
+
+    float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
     particleForce += forceFromObject;
 
     // collide with cursor sphere
