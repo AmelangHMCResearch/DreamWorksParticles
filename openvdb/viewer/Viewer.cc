@@ -160,6 +160,8 @@ private:
 
     ParticleRenderer::DisplayMode displayMode;
 
+    float modelView[16];
+
 
 #if GLFW_VERSION_MAJOR >= 3
     GLFWwindow* mWindow;
@@ -788,6 +790,11 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
 #endif
 
     mInterrupt = false;
+    float camera_trans[] = {0, 0, -15};
+    float camera_rot[]   = {0, 0, 0};
+    float camera_trans_lag[] = {0, 0, -3};
+    float camera_rot_lag[] = {0, 0, 0};
+    const float inertia = 0.1f;
     for (bool stop = false; !stop; ) {
 
         // testing the particle sim code
@@ -817,11 +824,48 @@ ViewerImpl::view(const openvdb::GridCPtrVec& gridList)
 
         // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+            // render
+        //     glfwMakeContextCurrent(mWindow);
+
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // // view transform
+        // glMatrixMode(GL_MODELVIEW);
+        // glLoadIdentity();
         
+        // for (int c = 0; c < 3; ++c)
+        // {
+        //     camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
+        //     camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
+        // }
+        
+        // glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
+        // glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
+        // glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+
+        // glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+
+        // cube
+        // glColor3f(1.0, 1.0, 1.0);
+
+        // collider
+        /*
+        glPushMatrix();
+        float3 p = psystem->getColliderPos();
+        glTranslatef(p.x, p.y, p.z);
+        glColor3f(1.0, 0.0, 0.0);
+        glutSolidSphere(psystem->getColliderRadius(), 20, 10);
+        glPopMatrix();
+        */
+        // if (renderer && displayEnabled)
+        // {
+        //     renderer->display(displayMode);
+        // }
 
 
-
+        // TODO !!!
         if (needsDisplay()) render();
+        // render();
 
         // eval fps
         ++frame;
@@ -891,6 +935,13 @@ ViewerImpl::render()
     glfwMakeContextCurrent(mWindow);
 #endif
 
+    if (renderer && displayEnabled)
+    {
+        printf("Displaying particles\n");
+        renderer->setColorBuffer(psystem->getColorBuffer());
+        renderer->display(displayMode);
+    }
+
     mCamera->aim();
 
     // draw scene
@@ -905,19 +956,29 @@ ViewerImpl::render()
 
     mClipBox->disableClipping();
 
+
     // draw particle simulation
     // render
     // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // // view transform
+    // view transform
     // glMatrixMode(GL_MODELVIEW);
     // glLoadIdentity();
+    
+    
+    // for (int c = 0; c < 3; ++c)
+    // {
+    //     camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
+    //     camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
+    // }
+    
+    // glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
+    // glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
+    // glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
 
-    if (renderer && displayEnabled)
-    {
-        printf("Displaying particles\n");
-        renderer->display(displayMode);
-    }
+    // glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+
+    
 
     // Render text
 
