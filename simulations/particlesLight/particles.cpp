@@ -54,9 +54,9 @@
 #include "event_timer.h"
 
 // Parameters you might be interested in changing (also command line)
-uint numParticles = 16384;
+uint numParticles = 999424;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 5000; // run until exit
+int numIterations = 100000; // run until exit
 
 // simulation parameters
 float timestep = 0.5f;
@@ -738,7 +738,6 @@ main(int argc, char **argv)
     glutIdleFunc(idle);
 
     //glutCloseFunc(cleanup);
-
     glutMainLoop();
 
     float* times = psystem->getTime();

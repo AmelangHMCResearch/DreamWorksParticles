@@ -256,6 +256,9 @@ ParticleSystem::update(float deltaTime)
                      spoutVerticalOffset,
                      particleJitterPercentOfRadius);
     }
+    if (_numActiveParticles == _numParticles) {
+        exit(0);
+    }
     ++_numTimesteps;
 
     float *dPos;
