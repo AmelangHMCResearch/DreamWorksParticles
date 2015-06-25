@@ -150,6 +150,7 @@ extern "C"
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
                          float *pos,
+                         float *vel,
                          int    numParticles,
                          EventTimer* timer)
     {
@@ -161,6 +162,7 @@ extern "C"
         calcCellIndicesD<<< numBlocks, numThreads >>>(cellIndex,
                                                particleIndex,
                                                (float4 *) pos,
+                                               (float4 *) vel,
                                                numParticles);
         timer->stopTimer(1, true);
 

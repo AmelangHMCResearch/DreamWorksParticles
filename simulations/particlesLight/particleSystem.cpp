@@ -297,6 +297,7 @@ ParticleSystem::update(float deltaTime)
         calcCellIndices(_dev_cellIndex,
                         _dev_particleIndex,
                         dPos,
+                        _dev_vel,
                         _numActiveParticles,
                         _timer);
     
@@ -342,11 +343,11 @@ ParticleSystem::update(float deltaTime)
     } else {
         ++dummy_iterationsSinceLastResort;
     }
-    /*_numActiveParticles = _numActiveParticles - numParticlesToRemove;
+    _numActiveParticles = _numActiveParticles - numParticlesToRemove;
     if (_numActiveParticles < 0) {
         _numActiveParticles = 0; 
-    }*/
-    //printf("NumParticles: %d NumRemoved: %d\n", _numActiveParticles, numParticlesToRemove);
+    }
+    printf("NumParticles: %d NumRemoved: %d\n", _numActiveParticles, numParticlesToRemove);
 
     // process collisions
     collide(dPos,
@@ -649,7 +650,7 @@ ParticleSystem::addParticles(const float spoutRadius,
         _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
         _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
         _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
-        _pos[i*4+3] = 0.0f;
+        _pos[i*4+3] = 1.0f;
         _vel[i*4+0] = 1.0 * newVel.x;
         _vel[i*4+1] = 1.0 * newVel.y;
         _vel[i*4+2] = 1.0 * newVel.z;

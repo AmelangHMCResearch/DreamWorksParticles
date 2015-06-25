@@ -39,6 +39,7 @@ extern "C"
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
                          float *pos,
+                         float *vel,
                          int    numParticles,
                          EventTimer* timer);
 

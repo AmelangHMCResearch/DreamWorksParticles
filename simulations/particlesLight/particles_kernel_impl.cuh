@@ -63,6 +63,7 @@ struct integrate_functor
         volatile float4 forceData = thrust::get<2>(t);
         volatile float4 posAfterLastSortData = thrust::get<3>(t);
         float3 pos = make_float3(posData.x, posData.y, posData.z);
+        float iters = velData.w;
         float3 vel = make_float3(velData.x, velData.y, velData.z);
         float3 force = make_float3(forceData.x, forceData.y, forceData.z);
         float3 posAfterLastSort = make_float3(posAfterLastSortData.x, posAfterLastSortData.y, posAfterLastSortData.z);
@@ -119,14 +120,15 @@ struct integrate_functor
             vel.y *= params.boundaryDamping;
         }
 
-        if (posData.w >= 10) {
+        if (iters >= 100) {
             atomicAdd(_numParticlesToRemove, 1);
             *_pointHasMovedMoreThanThreshold = true;
         }
+        ++iters;
 
         // store new position and velocity
-        thrust::get<0>(t) = make_float4(pos, ++posData.w);
-        thrust::get<1>(t) = make_float4(vel, velData.w);
+        thrust::get<0>(t) = make_float4(pos, posData.w);
+        thrust::get<1>(t) = make_float4(vel, iters);
 
         if (_posAfterLastSortIsValid) {
             float3 movementSinceLastSort = pos - posAfterLastSort;
@@ -139,17 +141,17 @@ struct integrate_functor
 };
 
 // calculate position in uniform grid
-__device__ int3 calcPreRemovalGridPos(float4 p)
+__device__ int3 calcPreRemovalGridPos(float3 p, float numIters)
 {
     int3 gridPos;
     gridPos.x = floor((p.x - params.worldOrigin.x) / (params.cellSize.x + 2*params.movementThreshold));
     gridPos.y = floor((p.y - params.worldOrigin.y) / (params.cellSize.y + 2*params.movementThreshold));
     gridPos.z = floor((p.z - params.worldOrigin.z) / (params.cellSize.z + 2*params.movementThreshold));
-    /*if (p.w >= 10) {
+    if (numIters >= 10) {
         gridPos.x = 255;
         gridPos.y = 255;
         gridPos.z = 255;
-    }*/
+    }
     return gridPos;
 }
 
@@ -179,16 +181,17 @@ __global__
 void calcCellIndicesD(uint   *cellIndex,  // output
                       uint   *particleIndex, // output
                       float4 *pos,               // input: positions
+                      float4 *vel,
                       uint    numParticles)
 {
     uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
 
-    volatile float4 p = pos[index];
+    volatile float3 p = make_float3(pos[index]);
 
     // get address in grid
-    int3 gridPos = calcPreRemovalGridPos(p);
+    int3 gridPos = calcPreRemovalGridPos(p, vel[index].w);
     uint hash = calcCellIndex(gridPos);
 
 
@@ -289,9 +292,6 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
         pos[index] = threadPos;
         oldPos[index] = threadPos;
         vel[index] = threadVel;
-        if (index >= numParticles - 67) {
-            //printf("%d, %f\n", index, threadPos.w);
-        }
     }
 }
 
