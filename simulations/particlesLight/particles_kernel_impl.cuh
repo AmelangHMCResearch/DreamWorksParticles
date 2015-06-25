@@ -43,12 +43,15 @@ struct integrate_functor
     float _deltaTime;
     bool  _posAfterLastSortIsValid;
     bool *_pointHasMovedMoreThanThreshold;
+    uint *_numParticlesToRemove;
 
     __host__ __device__
-    integrate_functor(float deltaTime, bool posAfterLastSortIsValid, bool *pointHasMovedMoreThanThreshold)
+    integrate_functor(float deltaTime, bool posAfterLastSortIsValid, 
+                      bool *pointHasMovedMoreThanThreshold, uint *numParticlesToRemove)
         : _deltaTime(deltaTime),
           _posAfterLastSortIsValid(posAfterLastSortIsValid),
-          _pointHasMovedMoreThanThreshold(pointHasMovedMoreThanThreshold) {}
+          _pointHasMovedMoreThanThreshold(pointHasMovedMoreThanThreshold),
+          _numParticlesToRemove(numParticlesToRemove) {}
 
     template <typename Tuple>
     __device__
@@ -116,8 +119,13 @@ struct integrate_functor
             vel.y *= params.boundaryDamping;
         }
 
+        if (posData.w >= 10) {
+            atomicAdd(_numParticlesToRemove, 1);
+            *_pointHasMovedMoreThanThreshold = true;
+        }
+
         // store new position and velocity
-        thrust::get<0>(t) = make_float4(pos, posData.w);
+        thrust::get<0>(t) = make_float4(pos, ++posData.w);
         thrust::get<1>(t) = make_float4(vel, velData.w);
 
         if (_posAfterLastSortIsValid) {
@@ -129,6 +137,22 @@ struct integrate_functor
         }
     }
 };
+
+// calculate position in uniform grid
+__device__ int3 calcPreRemovalGridPos(float4 p)
+{
+    int3 gridPos;
+    gridPos.x = floor((p.x - params.worldOrigin.x) / (params.cellSize.x + 2*params.movementThreshold));
+    gridPos.y = floor((p.y - params.worldOrigin.y) / (params.cellSize.y + 2*params.movementThreshold));
+    gridPos.z = floor((p.z - params.worldOrigin.z) / (params.cellSize.z + 2*params.movementThreshold));
+    /*if (p.w >= 10) {
+        gridPos.x = 255;
+        gridPos.y = 255;
+        gridPos.z = 255;
+    }*/
+    return gridPos;
+}
+
 
 // calculate position in uniform grid
 __device__ int3 calcGridPos(float3 p)
@@ -164,8 +188,9 @@ void calcCellIndicesD(uint   *cellIndex,  // output
     volatile float4 p = pos[index];
 
     // get address in grid
-    int3 gridPos = calcGridPos(make_float3(p.x, p.y, p.z));
+    int3 gridPos = calcPreRemovalGridPos(p);
     uint hash = calcCellIndex(gridPos);
+
 
     // store grid hash and particle index
     cellIndex[index] = hash;
@@ -264,67 +289,9 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
         pos[index] = threadPos;
         oldPos[index] = threadPos;
         vel[index] = threadVel;
-    }
-}
-
-// Find the start of each cell in the sorted cell indices
-__global__
-void findCellStartD(uint   *cellStart,        // output: cell start index
-                    uint   *cellEnd,          // output: cell end index
-                    uint   *cellIndex,        // input: sorted cell indices
-                    float4 *pos,
-                    float4 *oldPos,           // Place to save old positions
-                    uint    numParticles)
-{
-    extern __shared__ uint sharedHash[];    // blockSize + 1 elements
-    uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
-
-    uint hash;
-
-    // handle case when no. of particles not multiple of block size
-    if (index < numParticles)
-    {
-        hash = cellIndex[index];
-
-        // Load hash data into shared memory so that we can look
-        // at neighboring particle's hash value without loading
-        // two hash values per thread
-        sharedHash[threadIdx.x+1] = hash;
-
-        if (index > 0 && threadIdx.x == 0)
-        {
-            // first thread in block must load neighbor particle hash
-            sharedHash[0] = cellIndex[index-1];
+        if (index >= numParticles - 67) {
+            //printf("%d, %f\n", index, threadPos.w);
         }
-    }
-
-    __syncthreads();
-
-    if (index < numParticles)
-    {
-        // If this particle has a different cell index to the previous
-        // particle then it must be the first particle in the cell,
-        // so store the index of this particle in the cell.
-        // As it isn't the first particle, it must also be the cell end of
-        // the previous particle's cell
-
-        if (index == 0 || hash != sharedHash[threadIdx.x])
-        {
-            cellStart[hash] = index;
-
-            if (index > 0)
-                cellEnd[sharedHash[threadIdx.x]] = index;
-        }
-
-        if (index == numParticles - 1)
-        {
-            cellEnd[hash] = index + 1;
-        }
-
-        // Now, store the oldPositions. 
-        float4 particlePos = FETCH(pos, index);   // macro does either global read or texture fetch
-
-        oldPos[index] = particlePos;
     }
 }
 

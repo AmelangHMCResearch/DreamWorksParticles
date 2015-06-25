@@ -48,6 +48,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _dev_cellStart(0),
     _dev_cellEnd(0),
     _gridSize(gridSize),
+    _dev_numParticlesToRemove(0),
     dummy_iterationsSinceLastResort(0)
 {
     _timer = new EventTimer(5); 
@@ -160,6 +161,9 @@ ParticleSystem::_initialize()
     allocateArray((void **)&_dev_force, memSize);
     checkCudaErrors(cudaMemset(_dev_force, 0, memSize));
 
+    allocateArray((void **)&_dev_numParticlesToRemove, sizeof(uint));
+    checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
+
     allocateArray((void **) &_dev_numNeighbors, (_numParticles+1)*sizeof(uint)); 
     checkCudaErrors(cudaMemset(_dev_numNeighbors, 0, (_numParticles + 1) * sizeof(uint)));
 
@@ -226,6 +230,7 @@ ParticleSystem::_finalize()
     freeArray(_dev_particleIndex);
     freeArray(_dev_cellStart);
     freeArray(_dev_cellEnd);
+    freeArray(_dev_numParticlesToRemove);
     freeArray(_dev_pointHasMovedMoreThanThreshold);
 
     if (_usingOpenGL)
@@ -256,9 +261,7 @@ ParticleSystem::update(float deltaTime)
                      spoutVerticalOffset,
                      particleJitterPercentOfRadius);
     }
-    if (_numActiveParticles == _numParticles) {
-        exit(0);
-    }
+
     ++_numTimesteps;
 
     float *dPos;
@@ -280,9 +283,13 @@ ParticleSystem::update(float deltaTime)
                     _numActiveParticles,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
+                    _dev_numParticlesToRemove,
                     _timer);
 
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
+    uint numParticlesToRemove; 
+    checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
 
     if (needToResort) {
 
@@ -292,7 +299,6 @@ ParticleSystem::update(float deltaTime)
                         dPos,
                         _numActiveParticles,
                         _timer);
-#if 1
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
@@ -331,31 +337,16 @@ ParticleSystem::update(float deltaTime)
         freeArray(tempPos);
         freeArray(tempVel);
 
-#else
-        // sort particles based on hash
-        sortParticlesOnce(_dev_cellIndex, 
-                          dPos,
-                          _dev_vel,
-                          _numParticles, 
-                          _timer);
-    
-        // reorder particle arrays into sorted order and
-        // find start and end of each cell
-        findCellStart(_dev_cellStart,
-                      _dev_cellEnd,
-                      _dev_cellIndex,
-                      dPos,
-                      _dev_oldPos,
-                      _numParticles,
-                      _numGridCells,
-                      _timer);
-
-#endif
         // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {
         ++dummy_iterationsSinceLastResort;
     }
+    /*_numActiveParticles = _numActiveParticles - numParticlesToRemove;
+    if (_numActiveParticles < 0) {
+        _numActiveParticles = 0; 
+    }*/
+    //printf("NumParticles: %d NumRemoved: %d\n", _numActiveParticles, numParticlesToRemove);
 
     // process collisions
     collide(dPos,
@@ -658,7 +649,7 @@ ParticleSystem::addParticles(const float spoutRadius,
         _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
         _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
         _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
-        _pos[i*4+3] = 1.0f;
+        _pos[i*4+3] = 0.0f;
         _vel[i*4+0] = 1.0 * newVel.x;
         _vel[i*4+1] = 1.0 * newVel.y;
         _vel[i*4+2] = 1.0 * newVel.z;

@@ -192,6 +192,7 @@ class ParticleSystem
         uint *_dev_particleIndex;// particle index for each particle
         uint *_dev_cellStart;        // index of start of each cell in sorted list
         uint *_dev_cellEnd;          // index of end of cell
+        uint *_dev_numParticlesToRemove; 
 
         uint   _posVBO;            // vertex buffer object for particle positions
         uint   _colorVBO;          // vertex buffer object for colors

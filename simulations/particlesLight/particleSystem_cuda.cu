@@ -130,6 +130,7 @@ extern "C"
                          uint numParticles,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
+                         uint *numParticlesToRemove,
                          EventTimer* timer)                 
     {
         thrust::device_ptr<float4> pos4((float4 *)pos);
@@ -142,7 +143,7 @@ extern "C"
             thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4, force4, posAfterLastSort4)),
             thrust::make_zip_iterator(thrust::make_tuple(pos4+numParticles, vel4+numParticles, 
                                                          force4+numParticles, posAfterLastSort4+numParticles)),
-            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
+            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold, numParticlesToRemove));
         timer->stopTimer(0, false);
     }
 
@@ -175,21 +176,6 @@ extern "C"
         thrust::sort_by_key(thrust::device_ptr<uint>(cellIndex),
                             thrust::device_ptr<uint>(cellIndex + numParticles),
                             thrust::device_ptr<uint>(particleIndex));
-        timer->stopTimer(2, false);
-    }
-
-    void sortParticlesOnce(uint *cellIndex, 
-                       float *pos,
-                       float *vel, 
-                       uint numParticles, 
-                       EventTimer* timer)
-    {
-        timer->startTimer(2, false);
-        thrust::device_ptr<float4> pos4((float4 *)pos);
-        thrust::device_ptr<float4> vel4((float4 *)vel);
-        thrust::sort_by_key(thrust::device_ptr<uint>(cellIndex),
-                            thrust::device_ptr<uint>(cellIndex + numParticles),
-                            thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4)));
         timer->stopTimer(2, false);
     }
 
@@ -273,43 +259,6 @@ extern "C"
 #endif
 
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
-    }
-
-    void findCellStart(uint  *cellStart,
-                       uint  *cellEnd,
-                       uint  *cellIndex,
-                       float *pos,
-                       float *oldPos,
-                       uint   numParticles,
-                       uint   numCells,
-                       EventTimer* timer)
-    {
-        uint numThreads, numBlocks;
-        computeGridSize(numParticles, 256, numBlocks, numThreads);
-
-        // set all cells to empty
-        checkCudaErrors(cudaMemset(cellStart, 0xffffffff, numCells*sizeof(uint)));
-
-
-#if USE_TEX
-        checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
-#endif
-
-        uint smemSize = sizeof(uint)*(numThreads+1);
-        timer->startTimer(3, true);
-        findCellStartD<<< numBlocks, numThreads, smemSize>>>(
-            cellStart,
-            cellEnd,
-            cellIndex,
-            (float4 *)pos,
-            (float4 *)oldPos,
-            numParticles);
-        timer->stopTimer(3, true);
-        getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
-
-#if USE_TEX
-        checkCudaErrors(cudaUnbindTexture(posTex));
-#endif
     }
 
     void collide(float *pos,

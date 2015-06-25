@@ -33,6 +33,7 @@ extern "C"
                          uint numParticles,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
+                         uint *numParticlesToRemove,
                          EventTimer* timer);
 
     void calcCellIndices(uint  *cellIndex,
@@ -43,12 +44,6 @@ extern "C"
 
     void sortParticles(uint *cellIndex, 
                        uint *particleIndex, 
-                       uint numParticles, 
-                       EventTimer* timer);
-
-    void sortParticlesOnce(uint *cellIndex, 
-                       float *pos,
-                       float *vel, 
                        uint numParticles, 
                        EventTimer* timer);
 
@@ -73,15 +68,6 @@ extern "C"
                                      uint   numParticles,
                                      uint   numCells,
                                      EventTimer* timer);
-
-    void findCellStart(uint  *cellStart,
-                       uint  *cellEnd,
-                       uint  *cellIndex,
-                       float *pos,
-                       float *oldPos,
-                       uint   numParticles,
-                       uint   numCells,
-                       EventTimer* timer);
 
     void collide(float *pos,
                  float *vel,
