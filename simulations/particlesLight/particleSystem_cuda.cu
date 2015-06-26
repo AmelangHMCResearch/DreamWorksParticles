@@ -162,7 +162,9 @@ extern "C"
                                                       (float4 *) force,
                                                       (float4 *) posAfterLastSort, 
                                                       deltaTime,
-                                                      numParticles, 
+                                                      numParticles,
+                                                      (float4 *) voxelPos, 
+                                                      activeVoxel,  
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold);
         timer->stopTimer(0, false);

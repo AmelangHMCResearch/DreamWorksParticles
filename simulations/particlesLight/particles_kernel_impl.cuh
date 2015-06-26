@@ -144,10 +144,13 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
                           float3 particleVel,
                           float3 force)
 {
-    uint voxelIndex = getVoxelIndex(voxelGridPos);
 
     // Check that voxel is active
-    if (posIsOutOfBounds(voxelGridPos) || !activeVoxel[voxelIndex]) {
+    if (posIsOutOfBounds(voxelGridPos)) {
+        return make_float3(0.0f);
+    }
+    uint voxelIndex = getVoxelIndex(voxelGridPos);
+    if (!activeVoxel[voxelIndex]) {
         return make_float3(0.0f);
     }
 
@@ -158,12 +161,12 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
     particleVel.y = particleVel.y * (1 && direction.y);
     particleVel.z = particleVel.z * (1 && direction.z);
     //float magnitude = -1.0 * / (objParams._cubeSize / 2.0) * length(particlePos - voxelCenter) + 5; 
-    float3 newForce = -1.0 * 5 * length(particleVel) / (objParams._cubeSize / 2.0) * length(particlePos - voxelCenter) * direction + 5 * length(particleVel) * direction;
-
-    float3 baseForce = newForce; 
-    baseForce.x += -1.0 * force.x * (1 && direction.x);
-    baseForce.y += -1.0 * force.y * (1 && direction.y);
-    baseForce.z += -1.0 * force.z * (1 && direction.z); 
+    //float3 newForce = -1.0 * 5 * length(particleVel) / (objParams._cubeSize / 2.0) * length(particlePos - voxelCenter) * direction + 5 * length(particleVel) * direction;
+    float magnitude = objParams._voxelSize - dot(particlePos - voxelCenter, direction);
+    float3 baseForce = 10 * magnitude * direction; 
+    //baseForce.x += -1.0 * force.x * (1 && direction.x);
+    //baseForce.y += -1.0 * force.y * (1 && direction.y);
+    //baseForce.z += -1.0 * force.z * (1 && direction.z); 
 
     return baseForce;
 }
@@ -259,7 +262,6 @@ struct integrate_functor
             if (movementMagnitude >= params.movementThreshold) {
                 *_pointHasMovedMoreThanThreshold = true;
             }
-            if (movementMagnitude >= 1.0/32.0) printf("Has moved %f\n", movementMagnitude);
         }
     }
 };
