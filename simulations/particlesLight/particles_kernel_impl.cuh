@@ -119,12 +119,17 @@ struct integrate_functor
             pos.y = -4.0f + params.particleRadius;
             vel.y *= params.boundaryDamping;
         }
-
-        if (iters >= 100) {
+        // Check for particles to be removed by height or time
+        if ((params.limitParticleLifeByTime && (iters >= params.maxIterations)) ||
+            (params.limitParticleLifeByHeight && (pos.x < params.maxDistance)))
+        {
             atomicAdd(_numParticlesToRemove, 1);
             *_pointHasMovedMoreThanThreshold = true;
         }
-        ++iters;
+        // Increment time particle has been alive if limiting by time
+        if (params.limitParticleLifeByTime) {
+            ++iters;
+        }
 
         // store new position and velocity
         thrust::get<0>(t) = make_float4(pos, posData.w);
@@ -139,22 +144,6 @@ struct integrate_functor
         }
     }
 };
-
-// calculate position in uniform grid
-__device__ int3 calcPreRemovalGridPos(float3 p, float numIters)
-{
-    int3 gridPos;
-    gridPos.x = floor((p.x - params.worldOrigin.x) / (params.cellSize.x + 2*params.movementThreshold));
-    gridPos.y = floor((p.y - params.worldOrigin.y) / (params.cellSize.y + 2*params.movementThreshold));
-    gridPos.z = floor((p.z - params.worldOrigin.z) / (params.cellSize.z + 2*params.movementThreshold));
-    if (numIters >= 10) {
-        gridPos.x = 255;
-        gridPos.y = 255;
-        gridPos.z = 255;
-    }
-    return gridPos;
-}
-
 
 // calculate position in uniform grid
 __device__ int3 calcGridPos(float3 p)
@@ -173,7 +162,18 @@ __device__ uint calcCellIndex(int3 gridPos)
     gridPos.y = gridPos.y & (params.gridSize.y-1);
     gridPos.z = gridPos.z & (params.gridSize.z-1);
     return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
+}
 
+// calculate address in grid from position (clamping to edges)
+__device__ uint calcPreRemovalCellIndex(int3 gridPos, float numIters, float height)
+{
+    if ((numIters > params.maxIterations && params.limitParticleLifeByTime) || (params.limitParticleLifeByHeight && (height < params.maxDistance))) {
+        return params.numCells;
+    }
+    gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
+    gridPos.y = gridPos.y & (params.gridSize.y-1);
+    gridPos.z = gridPos.z & (params.gridSize.z-1);
+    return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
 }
 
 // calculate cell index for each particle
@@ -191,8 +191,8 @@ void calcCellIndicesD(uint   *cellIndex,  // output
     volatile float3 p = make_float3(pos[index]);
 
     // get address in grid
-    int3 gridPos = calcPreRemovalGridPos(p, vel[index].w);
-    uint hash = calcCellIndex(gridPos);
+    int3 gridPos = calcGridPos(p);
+    uint hash = calcPreRemovalCellIndex(gridPos, vel[index].w, p.x);
 
 
     // store grid hash and particle index

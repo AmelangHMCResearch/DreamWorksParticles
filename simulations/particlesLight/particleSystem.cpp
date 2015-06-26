@@ -28,7 +28,7 @@
 #include <GL/glew.h>
 #include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool limitLifeByTime, bool limitLifeByHeight) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -62,6 +62,10 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.particleRadius = 1.0f / 64.0f;
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
+    _params.limitParticleLifeByHeight = limitLifeByHeight;
+    _params.limitParticleLifeByTime = limitLifeByTime;
+    _params.maxIterations = 1000;
+    _params.maxDistance = -3.0f;
 
     _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
@@ -167,11 +171,11 @@ ParticleSystem::_initialize()
     allocateArray((void **) &_dev_numNeighbors, (_numParticles+1)*sizeof(uint)); 
     checkCudaErrors(cudaMemset(_dev_numNeighbors, 0, (_numParticles + 1) * sizeof(uint)));
 
-    allocateArray((void **)&_dev_cellIndex, _numParticles*sizeof(uint));
+    allocateArray((void **)&_dev_cellIndex, _numParticles*sizeof(uint) + 1);
     allocateArray((void **)&_dev_particleIndex, _numParticles*sizeof(uint));
 
-    allocateArray((void **)&_dev_cellStart, _numGridCells*sizeof(uint));
-    allocateArray((void **)&_dev_cellEnd, _numGridCells*sizeof(uint));
+    allocateArray((void **)&_dev_cellStart, _numGridCells*sizeof(uint) + 1);
+    allocateArray((void **)&_dev_cellEnd, _numGridCells*sizeof(uint) + 1);
 
     allocateArray((void **)&_dev_pointHasMovedMoreThanThreshold, sizeof(bool));
     cudaMemset(_dev_pointHasMovedMoreThanThreshold, true, sizeof(bool));
@@ -274,7 +278,7 @@ ParticleSystem::update(float deltaTime)
     // update constants
     setParameters(&_params);
 
-    // integrate
+    // integrate system and count number of particles that need to be removed
     integrateSystem(dPos,
                     _dev_vel,
                     _dev_force,
@@ -287,6 +291,8 @@ ParticleSystem::update(float deltaTime)
                     _timer);
 
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
+
+    // Pull over the number of particles that need to be removed from the GPU, and reset count to 0
     uint numParticlesToRemove; 
     checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
@@ -343,11 +349,10 @@ ParticleSystem::update(float deltaTime)
     } else {
         ++dummy_iterationsSinceLastResort;
     }
-    _numActiveParticles = _numActiveParticles - numParticlesToRemove;
-    if (_numActiveParticles < 0) {
-        _numActiveParticles = 0; 
+
+    if (_numActiveParticles > numParticlesToRemove) {
+        _numActiveParticles = _numActiveParticles - numParticlesToRemove;
     }
-    printf("NumParticles: %d NumRemoved: %d\n", _numActiveParticles, numParticlesToRemove);
 
     // process collisions
     collide(dPos,
@@ -362,8 +367,8 @@ ParticleSystem::update(float deltaTime)
             _timer);
     
 
-    /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
-                               (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
+    checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
+                               (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if (_usingOpenGL)

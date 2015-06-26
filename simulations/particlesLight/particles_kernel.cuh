@@ -48,6 +48,12 @@ struct SimParams
     float boundaryDamping;
 
     float movementThreshold;
+
+    bool limitParticleLifeByTime;
+    bool limitParticleLifeByHeight;
+
+    float maxDistance;
+    uint maxIterations;
 };
 
 #endif

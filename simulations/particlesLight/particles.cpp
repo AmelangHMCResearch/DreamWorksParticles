@@ -57,6 +57,8 @@
 uint numParticles = 999424;
 uint3 gridSize = {256, 256, 256};
 int numIterations = 100000; // run until exit
+bool limitLifeByHeight = false;
+bool limitLifeByTime = false;
 
 // simulation parameters
 float timestep = 0.5f;
@@ -141,7 +143,7 @@ void calcNumNeighbors(const uint* neighbors, uint* neighborStats, const uint num
             neighborStats[numNeighbors] += 1;
         }
         else {
-            //printf("Neighbors is %d\n", numNeighbors);
+            printf("Neighbors is %d. Total is %d. Index is %d\n", numNeighbors, psystem->getNumActiveParticles(), i);
         }
     }
 
@@ -157,6 +159,9 @@ writeNeighbors(const uint* neighbors,
     memset(neighborStats, 0, maxNeighbors*sizeof(uint)); 
     calcNumNeighbors(neighbors, neighborStats, numParticles, maxNeighbors);
     FILE* file = fopen(appendedFilename.c_str(), "a");
+    if (file == NULL) {
+        printf("Error opening file\n");
+    }
     fprintf(file, "%d, ", numParticles);
     fprintf(file, "%d, ", neighbors[0]);
     for (int i=0; i < maxNeighbors; ++i) {
@@ -174,7 +179,7 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, limitLifeByTime, limitLifeByHeight);
     psystem->reset(ParticleSystem::CONFIG_SPOUT);
 
     if (bUseOpenGL)
@@ -262,7 +267,7 @@ void display()
 
         if (renderer)
         {
-            renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
+            renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumActiveParticles());
         }
     }
     // render
@@ -321,7 +326,7 @@ void display()
 
     computeFPS();
 
-    //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
+    writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
 
@@ -712,6 +717,17 @@ main(int argc, char **argv)
         {
             numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
         }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-h"))
+        {
+            limitLifeByHeight = true;
+        }
+
+        if (checkCmdLineFlag(argc, (const char **) argv, "-t"))
+        {
+            printf("Picked up flag\n");
+            limitLifeByTime = true;
+        }
+
 
     }
 

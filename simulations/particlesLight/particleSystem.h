@@ -21,7 +21,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL);
+        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool limitLifeByTime, bool limitLifeByHeight);
         ~ParticleSystem();
 
         enum ParticleConfig
@@ -46,6 +46,10 @@ class ParticleSystem
         int    getNumParticles() const
         {
             return _numParticles;
+        }
+        int    getNumActiveParticles() const
+        {
+            return _numActiveParticles;
         }
 
         unsigned int getCurrentReadBuffer() const
