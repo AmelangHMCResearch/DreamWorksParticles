@@ -274,6 +274,8 @@ void integrateSystemD(float4 *pos,
                  float4 *posAfterLastSort, 
                  float deltaTime,
                  uint numParticles, 
+                 float4 * voxelPos, 
+                 bool *activeVoxel,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold)
 {
@@ -328,6 +330,17 @@ void integrateSystemD(float4 *pos,
         threadPos.y = -4.0f + params.particleRadius;
         threadVel.y *= params.boundaryDamping;
     }
+
+    int3 voxelGridPos = getVoxelGridPos(threadPos);
+    if (!posIsOutOfBounds(voxelGridPos)) {
+        uint voxelIndex = getVoxelIndex(voxelGridPos);
+        if (activeVoxel[voxelIndex]) {
+            threadVel.x = threadVel.y = threadVel.z = 0.0;
+          
+        } 
+    }
+    
+    
     // store new position and velocity
     pos[index] = make_float4(threadPos, 1.0f);
     vel[index] = make_float4(threadVel, 1.0f);
@@ -671,10 +684,10 @@ void collideD(float4 *pos,               // input: position
     }
 
     // Check for collisions with voxel object
-    int3 voxelGridPos = getVoxelGridPos(particlePos);
+    //int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-    float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
-    particleForce += forceFromObject;
+    //float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
+    //particleForce += forceFromObject;
 
     // collide with cursor sphere
     particleForce += collideSpheres(particlePos, params.colliderPos, particleVel, 

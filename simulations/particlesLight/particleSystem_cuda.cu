@@ -134,11 +134,13 @@ extern "C"
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
+                         float *voxelPos,
+                         bool *activeVoxels,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
                          EventTimer* timer)                 
     {
-#if 1
+#if 0
         thrust::device_ptr<float4> pos4((float4 *)pos);
         thrust::device_ptr<float4> vel4((float4 *)vel);
         thrust::device_ptr<float4> force4((float4 *)force);
@@ -163,8 +165,8 @@ extern "C"
                                                       (float4 *) posAfterLastSort, 
                                                       deltaTime,
                                                       numParticles,
-                                                      (float4 *) voxelPos, 
-                                                      activeVoxel,  
+                                                      (float4 *) voxelPos,
+                                                      activeVoxels,  
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold);
         timer->stopTimer(0, false);

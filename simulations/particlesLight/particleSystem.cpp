@@ -254,9 +254,12 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                     _dev_posAfterLastSort,
                     deltaTime,
                     _numParticles,
+                    voxelObject->getPosArray(),
+                    voxelObject->getActiveVoxels(),
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _timer);
+    voxelObject->unbindPosArray();
 
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
 

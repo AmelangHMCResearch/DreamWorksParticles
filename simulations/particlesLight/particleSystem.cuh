@@ -27,14 +27,16 @@ extern "C"
     void setObjectParameters(ObjectParams *hostParams);
 
     void integrateSystem(float *pos,
-                         float *vel,
-                         float *force,
-                         float *posAfterLastSort,
-                         float deltaTime,
-                         uint numParticles,
-                         bool posAfterLastSortIsValid,
-                         bool *pointHasMovedMoreThanThreshold,
-                         EventTimer* timer);
+                 float *vel,
+                 float *force,
+                 float *posAfterLastSort, 
+                 float deltaTime,
+                 uint numParticles, 
+                 float *voxelPos, 
+                 bool *activeVoxel,  
+                 bool posAfterLastSortIsValid, 
+                 bool *pointHasMovedMoreThanThreshold,
+                 EventTimer* timer);
 
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,

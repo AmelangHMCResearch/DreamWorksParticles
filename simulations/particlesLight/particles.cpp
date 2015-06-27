@@ -176,7 +176,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
     uint cubeSize = 4;    // Dimension of each side of the cube
-    float3 origin = make_float3(-1.0, -3.5, -1.0);
+    float3 origin = make_float3(-0.0, -3.5, -0.0);
     voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
 
     psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
