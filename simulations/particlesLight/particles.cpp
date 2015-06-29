@@ -57,7 +57,7 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 100000; // run until exit
+int numIterations = 15000; // run until exit
 bool usingObject = false;
 
 // simulation parameters
@@ -81,7 +81,7 @@ float camera_rot[]   = {0, 0, 0};
 float camera_trans_lag[] = {0, 0, -3};
 float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
-ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
+ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
 
 int mode = 0;
 bool displayEnabled = true;
@@ -174,9 +174,9 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-    uint cubeSize = 4;    // Dimension of each side of the cube
-    float3 origin = make_float3(-0.0, -3.5, -0.0);
+    float voxelSize = 1.0f/16.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+    uint cubeSize = 16;    // Dimension of each side of the cube
+    float3 origin = make_float3(0.0, -3.5, 0.0);
     voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
 
     psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
@@ -293,7 +293,7 @@ void display()
         renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
         renderer->setParticleRadius(voxelObject->getVoxelSize());
         renderer->setPointSize(50 * voxelObject->getVoxelSize());
-        renderer->display(displayMode);
+        //renderer->display(displayMode);
     }
 
     /*

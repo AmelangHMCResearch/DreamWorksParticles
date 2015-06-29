@@ -54,7 +54,7 @@ void VoxelObject::initObject(ObjectShape shape)
     float *ptr = data;
     for (unsigned int i = 0; i < _objectParams._numVoxels; i++)
     {
-        *ptr++ = 1.0;
+        *ptr++ = 0.0;
         *ptr++ = 0.0;
         *ptr++ = 0.0;
         *ptr++ = (float) _activeVoxel[i];
@@ -83,9 +83,9 @@ void VoxelObject::initShape(ObjectShape shape)
                         {
                             _activeVoxel[i] = 1;
                             // Calculate center of voxels for use in VBO rendering
-                            _pos[i*4] = _objectParams._origin.x + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+1] = _objectParams._origin.y + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
-                            _pos[i*4+2] = _objectParams._origin.z + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
+                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
                             _pos[i*4+3] = 1.0f;
                         }
                     }
