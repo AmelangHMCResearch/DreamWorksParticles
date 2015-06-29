@@ -57,11 +57,11 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 15000; // run until exit
+int numIterations = 150000; // run until exit
 bool usingObject = false;
 
 // simulation parameters
-float timestep = 0.1f;
+float timestep = 0.01f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -293,7 +293,7 @@ void display()
         renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
         renderer->setParticleRadius(voxelObject->getVoxelSize());
         renderer->setPointSize(50 * voxelObject->getVoxelSize());
-        //renderer->display(displayMode);
+        renderer->display(displayMode);
     }
 
     /*

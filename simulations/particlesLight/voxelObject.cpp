@@ -30,6 +30,9 @@ void VoxelObject::initObject(ObjectShape shape)
 
     _pos = new float[4 * _objectParams._numVoxels];
     _activeVoxel = new bool[_objectParams._numVoxels];
+    for (int i = 0; i < _objectParams._numVoxels; ++i) {
+        _activeVoxel[i] == 0;
+    }
 
     // Allocate active voxel array on GPU
     allocateArray((void **) &_dev_activeVoxel, memSize);
@@ -96,7 +99,23 @@ void VoxelObject::initShape(ObjectShape shape)
 
         case VOXEL_PLANE:
         {
-            // To fill in Later
+            for (unsigned int z = 0; z < _objectParams._cubeSize; z++)
+            {
+                for (unsigned int x = 0; x < _objectParams._cubeSize; x++)
+                {
+                    unsigned int i = (z*_objectParams._cubeSize * _objectParams._cubeSize) + x;
+
+                    if (i < _objectParams._numVoxels)
+                    {
+                        _activeVoxel[i] = 1;
+                        // Calculate center of voxels for use in VBO rendering
+                        _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                        _pos[i*4+1] = _objectParams._origin.y;
+                        _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                        _pos[i*4+3] = 1.0f;
+                    }
+                }
+            }
         }
         break;
         case VOXEL_SPHERE:
@@ -124,8 +143,6 @@ void VoxelObject::initShape(ObjectShape shape)
                                 _pos[i*4+1] = yPos;
                                 _pos[i*4+2] = zPos;
                                 _pos[i*4+3] = 1.0f;
-                            } else {
-                                _activeVoxel[i] = 0;
                             }
                         }
                     }

@@ -12,7 +12,7 @@
 #ifndef PARTICLES_KERNEL_H
 #define PARTICLES_KERNEL_H
 
-#define USE_HARD_CUBE 0
+#define USE_HARD_CUBE 1
 
 #define USE_TEX 1
 

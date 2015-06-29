@@ -59,7 +59,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
 
-    _params.worldOrigin = make_float3(-1.0f, -1.0f, -1.0f);
+    _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
@@ -433,9 +433,9 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
 
                 if (i < numParticles)
                 {
-                    _pos[i*4] = (spacing * x) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+1] = (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+2] = (spacing * z) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
+                    _pos[i*4] = (spacing * x) - 0.5 * size[0] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
+                    _pos[i*4+1] = (spacing * y) - 0.5 * size[1] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
+                    _pos[i*4+2] = (spacing * z)  - 0.5 * size[2] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
                     _pos[i*4+3] = 1.0f;
                     _vel[i*4] = 0.0f;
                     _vel[i*4+1] = 0.0f;
