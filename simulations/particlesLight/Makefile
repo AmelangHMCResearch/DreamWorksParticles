@@ -99,6 +99,8 @@ endif
 ifeq ($(TARGET_OS),darwin)
     ifeq ($(shell expr `xcodebuild -version | grep -i xcode | awk '{print $$2}' | cut -d'.' -f1` \>= 5),1)
         HOST_COMPILER ?= clang++
+        NVCC ?= /Developer/NVIDIA/CUDA-7.0/bin/nvcc -ccbin $(HOST_COMPILER)
+        NVCCFLAGS ?= -m${TARGET_SIZE} --compiler-options "-framework OpenGL"
     endif
 else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
@@ -133,8 +135,8 @@ ifeq ($(HOST_NAME),treebeard)
 	NVCC          := /usr/local/cuda/bin/nvcc
 	NVCCFLAGS   := -O2 --compiler-bindir="/usr/bin" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
 else
-	NVCC := /opt/cuda/bin/nvcc
-	NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
+	NVCC ?= /opt/cuda/bin/nvcc
+	NVCCFLAGS   ?= -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
 endif
 
 
