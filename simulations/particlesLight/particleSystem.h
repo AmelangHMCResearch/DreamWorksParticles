@@ -22,7 +22,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL);
+        ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL, bool useObject);
         ~ParticleSystem();
 
         enum ParticleConfig

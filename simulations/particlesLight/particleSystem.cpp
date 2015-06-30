@@ -28,7 +28,7 @@
 #include <algorithm>
 #include <GL/glew.h>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL, bool useObject) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -72,6 +72,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.globalDamping = 1.0f;
     // fixed initial value for cell padding / movement threshold
     _params.movementThreshold = 0.2*_params.particleRadius;
+
+    _params.usingObject = useObject;
 
     _initialize();
 }
@@ -244,6 +246,13 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
         dPos = (float *) mapGLBufferObject(&_cuda_posvbo_resource);
     }
 
+    float *voxelPos = NULL;
+    bool *voxelIsActive = NULL;
+    if (_params.usingObject) {
+        voxelPos = voxelObject->getPosArray();
+        voxelIsActive = voxelObject->getActiveVoxels();
+    }
+
     // update constants
     setParameters(&_params);
 
@@ -254,13 +263,11 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                     _dev_posAfterLastSort,
                     deltaTime,
                     _numParticles,
-                    voxelObject->getPosArray(),
-                    voxelObject->getActiveVoxels(),
+                    voxelPos,
+                    voxelIsActive,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _timer);
-    voxelObject->unbindPosArray();
-
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
 
     if (needToResort) {
@@ -319,8 +326,8 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     collide(dPos,
             _dev_vel,
             _dev_force,
-            voxelObject->getActiveVoxels(),
-            voxelObject->getPosArray(),
+            voxelIsActive,
+            voxelPos,
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -333,7 +340,9 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
-    voxelObject->unbindPosArray();
+    if(_params.usingObject) {
+        voxelObject->unbindPosArray();
+    }
 
     if (_usingOpenGL)
     {

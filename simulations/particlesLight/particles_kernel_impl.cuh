@@ -292,39 +292,44 @@ void integrateSystemD(float4 *pos,
     float3 threadVel          = make_float3(vel[index]);
     float3 threadForce        = make_float3(force[index]);
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
-    // How they initially calculated the new velocity
+
     threadVel += threadForce * deltaTime / 2;
     threadVel += params.gravity * deltaTime;
     threadVel *= params.globalDamping;
 
 #if USE_HARD_CUBE
-    const int3 voxelGridPos = getVoxelGridPos(threadPos);
-    if (!posIsOutOfBounds(voxelGridPos)) {
-        const uint voxelIndex = getVoxelIndex(voxelGridPos);
-        if (activeVoxel[voxelIndex]) {
-            const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-            const float3 direction =
-              findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
-            if (direction.x != 0.0) {
-                if (threadVel.x * direction.x < 0) {
-                    threadVel.x *= -1.0;
+    if (params.usingObject) {
+        // Check that the particle is in the bounding box of the object
+        const int3 voxelGridPos = getVoxelGridPos(threadPos);
+        if (!posIsOutOfBounds(voxelGridPos)) {
+            // Check that the voxel the particle is in is active
+            const uint voxelIndex = getVoxelIndex(voxelGridPos);
+            if (activeVoxel[voxelIndex]) {
+                // Do the collision
+                const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
+                const float3 direction =
+                  findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
+                if (direction.x != 0.0) {
+                    if (threadVel.x * direction.x < 0) {
+                        threadVel.x *= -1.0;
+                    }
+                    threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 + 0.0001);
                 }
-                threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 + 0.0001);
-            }
-            else if (direction.y != 0.0) {
-                if (threadVel.y * direction.y < 0) {
-                    threadVel.y *= -1.0;
+                else if (direction.y != 0.0) {
+                    if (threadVel.y * direction.y < 0) {
+                        threadVel.y *= -1.0;
+                    }
+                    threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 + 0.0001);
                 }
-                threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 + 0.0001);
-            }
-            else {
-                if (threadVel.z * direction.z < 0) {
-                    threadVel.z *= -1.0;
+                else {
+                    if (threadVel.z * direction.z < 0) {
+                        threadVel.z *= -1.0;
+                    }
+                    threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 + 0.0001);
                 }
-                threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 + 0.0001);
-            }
-          
-        } 
+              
+            } 
+        }
     }
 #endif
     
@@ -711,11 +716,13 @@ void collideD(float4 *pos,               // input: position
     }
 
 #if !USE_HARD_CUBE
-    // Check for collisions with voxel object
-    int3 voxelGridPos = getVoxelGridPos(particlePos);
+    if (params.usingObject) {
+        // Check for collisions with voxel object
+        int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-    float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
-    particleForce += forceFromObject;
+        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
+        particleForce += forceFromObject;
+    }
 #endif
 
     // collide with cursor sphere

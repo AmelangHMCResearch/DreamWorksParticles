@@ -73,7 +73,7 @@ int numIterations = 150000; // run until exit
 bool usingObject = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -193,12 +193,14 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    float voxelSize = 1.0f/2.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-    uint cubeSize = 2;    // Dimension of each side of the cube
-    float3 origin = make_float3(0.0, -3.5, 0.0);
-    voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+    if (usingObject) {
+        float voxelSize = 1.0f/2.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 2;    // Dimension of each side of the cube
+        float3 origin = make_float3(0.0, -3.5, 0.0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+    }
 
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
+    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL, usingObject);
     psystem->reset(ParticleSystem::CONFIG_GRID);
     psystem->startTimer(5);
 

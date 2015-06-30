@@ -50,6 +50,8 @@ struct SimParams
     float boundaryDamping;
 
     float movementThreshold;
+
+    bool usingObject;
 };
 
 struct ObjectParams
