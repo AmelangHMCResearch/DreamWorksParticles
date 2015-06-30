@@ -40,17 +40,18 @@ __constant__ ObjectParams objParams;
 
 // VoxelObject Functions:
 __device__
-int3 getVoxelGridPos(float3 pos)
+int3 getVoxelGridPos(const float3 pos)
 {
     // Find pos of particle with respect to origin of object
-    float3 relativePos = pos - objParams._origin; 
+    const float3 lowerCorner = objParams._origin -
+      make_float3(objParams._cubeSize / 2.0 * objParams._voxelSize);
 
     // Divide by voxel size to get which voxel in each direction the particle is in
     // Voxel are numbered 0->cubeSize - 1, in the positive direction
     int3 voxelGridPos;
-    voxelGridPos.x = floor((relativePos.x - objParams._voxelSize / 2.0) / objParams._voxelSize) + ceil(objParams._cubeSize / 2.0); 
-    voxelGridPos.y = floor((relativePos.y - objParams._voxelSize / 2.0) / objParams._voxelSize) + ceil(objParams._cubeSize / 2.0); 
-    voxelGridPos.z = floor((relativePos.z - objParams._voxelSize / 2.0) / objParams._voxelSize) + ceil(objParams._cubeSize / 2.0); 
+    voxelGridPos.x = floor((pos.x - lowerCorner.x) / objParams._voxelSize);
+    voxelGridPos.y = floor((pos.y - lowerCorner.y) / objParams._voxelSize);
+    voxelGridPos.z = floor((pos.z - lowerCorner.z) / objParams._voxelSize);
 
     return voxelGridPos;
 }
@@ -283,18 +284,50 @@ void integrateSystemD(float4 *pos,
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold)
 {
-    uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    const uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
 
-    float3 threadPos = make_float3(pos[index]);
-    float3 threadVel = make_float3(vel[index]);
-    float3 threadForce = make_float3(force[index]);
-    float3 threadOldPos = make_float3(posAfterLastSort[index]);
+    float3 threadPos          = make_float3(pos[index]);
+    float3 threadVel          = make_float3(vel[index]);
+    float3 threadForce        = make_float3(force[index]);
+    const float3 threadOldPos = make_float3(posAfterLastSort[index]);
     // How they initially calculated the new velocity
     threadVel += threadForce * deltaTime / 2;
     threadVel += params.gravity * deltaTime;
     threadVel *= params.globalDamping;
+
+#if USE_HARD_CUBE
+    const int3 voxelGridPos = getVoxelGridPos(threadPos);
+    if (!posIsOutOfBounds(voxelGridPos)) {
+        const uint voxelIndex = getVoxelIndex(voxelGridPos);
+        if (activeVoxel[voxelIndex]) {
+            const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
+            const float3 direction =
+              findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
+            if (direction.x != 0.0) {
+                if (threadVel.x * direction.x < 0) {
+                    threadVel.x *= -1.0;
+                }
+                threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 + 0.0001);
+            }
+            else if (direction.y != 0.0) {
+                if (threadVel.y * direction.y < 0) {
+                    threadVel.y *= -1.0;
+                }
+                threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 + 0.0001);
+            }
+            else {
+                if (threadVel.z * direction.z < 0) {
+                    threadVel.z *= -1.0;
+                }
+                threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 + 0.0001);
+            }
+          
+        } 
+    }
+#endif
+    
     // new position = old position + velocity * deltaTime
     threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
     threadVel += threadForce * deltaTime / 2;
@@ -335,31 +368,6 @@ void integrateSystemD(float4 *pos,
         threadVel.y *= params.boundaryDamping;
     }
 
-#if USE_HARD_CUBE
-    int3 voxelGridPos = getVoxelGridPos(threadPos);
-    if (!posIsOutOfBounds(voxelGridPos)) {
-        uint voxelIndex = getVoxelIndex(voxelGridPos);
-        if (activeVoxel[voxelIndex]) {
-            float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-            float3 direction = findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
-            if (direction.x != 0.0) {
-                threadVel.x *= -1.0;
-                threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 - 0.01);
-            }
-            else if (direction.y != 0.0) {
-                threadVel.y *= -1.0;
-                threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 - 0.01);
-            }
-            else {
-                threadVel.z *= -1.0;
-                threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 - 0.01);
-            }
-          
-        } 
-    }
-#endif
-    
-    
     // store new position and velocity
     pos[index] = make_float4(threadPos, 1.0f);
     vel[index] = make_float4(threadVel, 1.0f);
