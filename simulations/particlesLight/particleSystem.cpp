@@ -12,6 +12,7 @@
 #include "particleSystem.h"
 #include "particleSystem.cuh"
 #include "particles_kernel.cuh"
+#include "voxelObject.h" 
 #include "event_timer.h" 
 
 #include <cuda_runtime.h>
@@ -27,7 +28,7 @@
 #include <algorithm>
 #include <GL/glew.h>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL, bool useObject) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -58,7 +59,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
 
-    _params.worldOrigin = make_float3(-1.0f, -1.0f, -1.0f);
+    _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
@@ -71,6 +72,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.globalDamping = 1.0f;
     // fixed initial value for cell padding / movement threshold
     _params.movementThreshold = 0.2*_params.particleRadius;
+
+    _params.usingObject = useObject;
 
     _initialize();
 }
@@ -232,7 +235,7 @@ ParticleSystem::_finalize()
 
 // step the simulation
 void
-ParticleSystem::update(float deltaTime)
+ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
 {
     assert(_systemInitialized);
 
@@ -241,6 +244,13 @@ ParticleSystem::update(float deltaTime)
     if (_usingOpenGL)
     {
         dPos = (float *) mapGLBufferObject(&_cuda_posvbo_resource);
+    }
+
+    float *voxelPos = NULL;
+    bool *voxelIsActive = NULL;
+    if (_params.usingObject) {
+        voxelPos = voxelObject->getPosArray();
+        voxelIsActive = voxelObject->getActiveVoxels();
     }
 
     // update constants
@@ -253,10 +263,11 @@ ParticleSystem::update(float deltaTime)
                     _dev_posAfterLastSort,
                     deltaTime,
                     _numParticles,
+                    voxelPos,
+                    voxelIsActive,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _timer);
-
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
 
     if (needToResort) {
@@ -267,14 +278,14 @@ ParticleSystem::update(float deltaTime)
                         dPos,
                         _numParticles,
                         _timer);
-#if 0
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
                       _dev_particleIndex, 
                       _numParticles, 
                       _timer);
-
+        
+        // Create temporary arrays to allow texture memory use for pos/vel reads
         float* tempPos;
         float* tempVel;
         allocateArray((void **)&tempPos, _numParticles*4*sizeof(float));
@@ -305,27 +316,6 @@ ParticleSystem::update(float deltaTime)
                                     _timer);
         freeArray(tempPos);
         freeArray(tempVel);
-
-#else
-        // sort particles based on hash
-        sortParticlesOnce(_dev_cellIndex, 
-                          dPos,
-                          _dev_vel,
-                          _numParticles, 
-                          _timer);
-    
-        // reorder particle arrays into sorted order and
-        // find start and end of each cell
-        findCellStart(_dev_cellStart,
-                      _dev_cellEnd,
-                      _dev_cellIndex,
-                      dPos,
-                      _dev_posAfterLastSort,
-                      _numParticles,
-                      _numGridCells,
-                      _timer);
-
-#endif
         // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {
@@ -336,6 +326,8 @@ ParticleSystem::update(float deltaTime)
     collide(dPos,
             _dev_vel,
             _dev_force,
+            voxelIsActive,
+            voxelPos,
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -348,6 +340,10 @@ ParticleSystem::update(float deltaTime)
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
+    if(_params.usingObject) {
+        voxelObject->unbindPosArray();
+    }
+
     if (_usingOpenGL)
     {
         unmapGLBufferObject(_cuda_posvbo_resource);
@@ -446,9 +442,9 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
 
                 if (i < numParticles)
                 {
-                    _pos[i*4] = (spacing * x) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+1] = (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+2] = (spacing * z) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
+                    _pos[i*4] = (spacing * x) - 0.5 * size[0] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
+                    _pos[i*4+1] = (spacing * y) - 0.5 * size[1] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
+                    _pos[i*4+2] = (spacing * z)  - 0.5 * size[2] * _params.particleRadius + _params.particleRadius + (frand()*2.0f)*jitter;
                     _pos[i*4+3] = 1.0f;
                     _vel[i*4] = 0.0f;
                     _vel[i*4+1] = 0.0f;

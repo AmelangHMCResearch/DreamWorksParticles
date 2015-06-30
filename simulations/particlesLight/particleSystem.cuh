@@ -24,16 +24,19 @@ extern "C"
     void unmapGLBufferObject(struct cudaGraphicsResource *cuda_vbo_resource);
 
     void setParameters(SimParams *hostParams);
+    void setObjectParameters(ObjectParams *hostParams);
 
     void integrateSystem(float *pos,
-                         float *vel,
-                         float *force,
-                         float *posAfterLastSort,
-                         float deltaTime,
-                         uint numParticles,
-                         bool posAfterLastSortIsValid,
-                         bool *pointHasMovedMoreThanThreshold,
-                         EventTimer* timer);
+                 float *vel,
+                 float *force,
+                 float *posAfterLastSort, 
+                 float deltaTime,
+                 uint numParticles, 
+                 float *voxelPos, 
+                 bool *activeVoxel,  
+                 bool posAfterLastSortIsValid, 
+                 bool *pointHasMovedMoreThanThreshold,
+                 EventTimer* timer);
 
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
@@ -86,6 +89,8 @@ extern "C"
     void collide(float *pos,
                  float *vel,
                  float *force,
+                 bool  *activeVoxel,
+                 float *voxelPos,
                  uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,

@@ -18,6 +18,18 @@
     - added support for automated testing and comparison to a reference value.
 */
 
+#define ENABLE_DEBUG_OUTPUT
+#ifdef ENABLE_DEBUG_OUTPUT
+#define debug(s, ...)                                           \
+  do {                                                          \
+    fprintf (stderr, "(%-30s:%40s:%4d) -- " s,                  \
+             __FILE__, __func__, __LINE__, ##__VA_ARGS__);      \
+    fflush (stderr);                                            \
+  } while (0)
+#else
+#define debug(s, ...)
+#endif
+
 // OpenGL Graphics includes
 #include <GL/glew.h>
 #if defined (WIN32)
@@ -49,6 +61,7 @@
 #include <string>
 
 #include "particleSystem.h"
+#include "voxelObject.h"
 #include "render_particles.h"
 #include "paramgl.h"
 #include "event_timer.h"
@@ -56,10 +69,11 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 3000; // run until exit
+int numIterations = 150000; // run until exit
+bool usingObject = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -74,12 +88,19 @@ const uint width = 640, height = 480;
 // view params
 int ox, oy;
 int buttonState = 0;
+#if 1
+// these are debugging values for the camera location
+float camera_trans[] = {0.05, 3.47, -1.57};
+float camera_rot[]   = {1, 56.6, 0};
+#else
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
+#endif
 float camera_trans_lag[] = {0, 0, -3};
 float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
-ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
+//ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
+ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
 
 int mode = 0;
 bool displayEnabled = true;
@@ -95,9 +116,7 @@ enum { M_VIEW = 0, M_MOVE };
 
 ParticleSystem *psystem = 0;
 
-// fps
-static int fpsCount = 0;
-static int fpsLimit = 1;
+VoxelObject *voxelObject = 0;
 
 ParticleRenderer *renderer = 0;
 
@@ -174,7 +193,14 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
+    if (usingObject) {
+        float voxelSize = 1.0f/2.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 2;    // Dimension of each side of the cube
+        float3 origin = make_float3(0.0, -3.5, 0.0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+    }
+
+    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL, usingObject);
     psystem->reset(ParticleSystem::CONFIG_GRID);
     psystem->startTimer(5);
 
@@ -182,7 +208,6 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     {
         renderer = new ParticleRenderer;
         renderer->setParticleRadius(psystem->getParticleRadius());
-        renderer->setColorBuffer(psystem->getColorBuffer());
     }
 
 }
@@ -212,29 +237,14 @@ void initGL(int *argc, char **argv)
     }
 
 #endif
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.25, 0.25, 0.25, 1.0);
 
     glutReportErrors();
-}
-
-void computeFPS()
-{
-    frameCount++;
-    fpsCount++;
-
-    /*if (fpsCount == fpsLimit)
-    {
-        char fps[256];
-        // float ifps = 1.f / (sdkGetAverageTimerValue(&timer) / 1000.f);
-        // sprintf(fps, "CUDA Particles (%d particles): %3.1f fps", numParticles, ifps);
-
-        glutSetWindowTitle(fps);
-        fpsCount = 0;
-
-        fpsLimit = (int)MAX(ifps, 1.f);
-    }*/
 }
 
 void display()
@@ -250,7 +260,7 @@ void display()
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
 
-        psystem->update(timestep);
+        psystem->update(timestep, voxelObject);
 
         if (renderer)
         {
@@ -271,15 +281,42 @@ void display()
         camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
     }
     
+#if 0
     glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
     glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
     glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+#else
+    glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
+    glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
+    glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
+#endif
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
     glutWireCube(8.0);
+
+    // now, to draw the voxels.
+    // for each voxel
+    if (voxelObject) {
+      const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
+      const float * voxelPositionArray = voxelObject->getCpuPosArray();
+      const float voxelSize = voxelObject->getVoxelSize();
+      for (unsigned int voxelIndex = 0;
+           voxelIndex < numberOfVoxels; ++voxelIndex) {
+        // save the matrix state
+        glPushMatrix();
+        // translate for this voxel
+        glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+                     voxelPositionArray[voxelIndex * 4 + 1],
+                     voxelPositionArray[voxelIndex * 4 + 2]);
+        glColor3f(1.0, 0.0, 0.0);
+        glutWireCube(voxelSize);
+        // reset the matrix state
+        glPopMatrix();
+      }
+    }
 
     // collider
     /*
@@ -292,8 +329,22 @@ void display()
     */
     if (renderer && displayEnabled)
     {
+        renderer->setColorBuffer(psystem->getColorBuffer());
+        renderer->setParticleRadius(psystem->getParticleRadius());
+        renderer->setPointSize(psystem->getParticleRadius());
         renderer->display(displayMode);
     }
+
+#if 0
+    if (renderer)
+      {
+        renderer->setColorBuffer(voxelObject->getColorBuffer());
+        renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
+        renderer->setParticleRadius(voxelObject->getVoxelSize());
+        renderer->setPointSize(50 * voxelObject->getVoxelSize());
+        renderer->display(displayMode);
+      }
+#endif
 
     /*
     if (displaySliders)
@@ -311,7 +362,8 @@ void display()
     glutSwapBuffers();
     glutReportErrors();
 
-    computeFPS();
+    // Keep track of frames to calculate FPS at end
+    ++frameCount; 
 
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
@@ -515,7 +567,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
             break;
 
         case 13:
-            psystem->update(timestep);
+            psystem->update(timestep, voxelObject);
 
             if (renderer)
             {
@@ -703,6 +755,10 @@ main(int argc, char **argv)
         {
             numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
         }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-o"))
+        {
+            usingObject = true;
+        }
 
     }
 
@@ -722,8 +778,8 @@ main(int argc, char **argv)
     glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    // glutMouseFunc(mouse);
-    // glutMotionFunc(motion);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
     // glutKeyboardFunc(key);
     // glutSpecialFunc(special);
     glutIdleFunc(idle);

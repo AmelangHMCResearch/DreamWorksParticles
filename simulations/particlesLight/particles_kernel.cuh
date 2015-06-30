@@ -12,6 +12,8 @@
 #ifndef PARTICLES_KERNEL_H
 #define PARTICLES_KERNEL_H
 
+#define USE_HARD_CUBE 1
+
 #define USE_TEX 1
 
 #if USE_TEX
@@ -48,6 +50,16 @@ struct SimParams
     float boundaryDamping;
 
     float movementThreshold;
+
+    bool usingObject;
+};
+
+struct ObjectParams
+{
+    float _voxelSize; 
+    unsigned int _cubeSize;
+    unsigned int _numVoxels;
+    float3 _origin;       
 };
 
 #endif
