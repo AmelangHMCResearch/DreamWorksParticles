@@ -13,4 +13,8 @@
  *
  */ 
 
+#include "gpuVoxelTree.h"
+
+#include <cuda_runtime.h>
+#include <helper_cuda.h>    // includes cuda.h and cuda_runtime_api.h
 

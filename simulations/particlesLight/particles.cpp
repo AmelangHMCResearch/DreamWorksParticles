@@ -316,7 +316,7 @@ void display()
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
-        glutLeaveMainLoop();
+        // glutLeaveMainLoop();
     }
 }
 
@@ -719,7 +719,7 @@ main(int argc, char **argv)
     
     initMenus();
     
-    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    // glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     // glutMouseFunc(mouse);

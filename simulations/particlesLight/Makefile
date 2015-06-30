@@ -273,8 +273,11 @@ render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
 shaders.o:shaders.cpp shaders.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
+gpuVoxelTree.o:gpuVoxelTree.cpp gpuVoxelTree.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
 particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o \
-	shaders.o event_timer.o
+	shaders.o event_timer.o gpuVoxelTree.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
@@ -283,7 +286,7 @@ run: build
 	$(EXEC) ./particles
 
 clean:
-	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o
+	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o gpuVoxelTree.o
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/particles
 
 clobber: clean
