@@ -51,6 +51,10 @@ public:
         return _objectParams._numVoxels;
     }
 
+    unsigned int getNumActive() {
+        return _numActiveVoxels;
+    }
+
     unsigned int getCurrentReadBuffer() const
     {
         return _posVBO;
@@ -68,6 +72,7 @@ public:
 
     float* getPosArray();
     float* getCpuPosArray();
+    bool* getCpuActiveVoxelArray();
 
     void unbindPosArray();
 
@@ -81,6 +86,7 @@ private:
 	// CPU Data
 	bool *_activeVoxel;
     float *_pos; 
+    unsigned int _numActiveVoxels;
 
     // GPU Data
     bool  *_dev_activeVoxel;

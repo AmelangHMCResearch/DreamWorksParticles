@@ -67,10 +67,14 @@
 #include "event_timer.h"
 
 // Parameters you might be interested in changing (also command line)
-uint numParticles = 16384;
+uint numParticles = 999424;
 uint3 gridSize = {256, 256, 256};
 int numIterations = 150000; // run until exit
+
 bool usingObject = false;
+bool usingSpout = false;
+bool limitLifeByHeight = false;
+bool limitLifeByTime = false;
 
 // simulation parameters
 float timestep = 0.1f;
@@ -88,9 +92,9 @@ const uint width = 640, height = 480;
 // view params
 int ox, oy;
 int buttonState = 0;
-#if 1
+#if 0
 // these are debugging values for the camera location
-float camera_trans[] = {0.05, 3.47, -1.57};
+float camera_trans[] = {0, 3, -15.0};
 float camera_rot[]   = {1, 56.6, 0};
 #else
 float camera_trans[] = {0, 0, -15};
@@ -160,7 +164,7 @@ void calcNumNeighbors(const uint* neighbors, uint* neighborStats, const uint num
             neighborStats[numNeighbors] += 1;
         }
         else {
-            //printf("Neighbors is %d\n", numNeighbors);
+            printf("Neighbors is %d. Total is %d. Index is %d\n", numNeighbors, psystem->getNumActiveParticles(), i);
         }
     }
 
@@ -176,6 +180,9 @@ writeNeighbors(const uint* neighbors,
     memset(neighborStats, 0, maxNeighbors*sizeof(uint)); 
     calcNumNeighbors(neighbors, neighborStats, numParticles, maxNeighbors);
     FILE* file = fopen(appendedFilename.c_str(), "a");
+    if (file == NULL) {
+        printf("Error opening file\n");
+    }
     fprintf(file, "%d, ", numParticles);
     fprintf(file, "%d, ", neighbors[0]);
     for (int i=0; i < maxNeighbors; ++i) {
@@ -194,14 +201,18 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/2.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint cubeSize = 2;    // Dimension of each side of the cube
+        float voxelSize = 1.0f/16.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 16;    // Dimension of each side of the cube
         float3 origin = make_float3(0.0, -3.5, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }
 
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL, usingObject);
-    psystem->reset(ParticleSystem::CONFIG_GRID);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight, usingObject);
+    ParticleSystem::ParticleConfig config = ParticleSystem::CONFIG_GRID;
+    if (usingSpout) {
+        config = ParticleSystem::CONFIG_SPOUT;
+    }
+    psystem->reset(config);
     psystem->startTimer(5);
 
     if (bUseOpenGL)
@@ -247,9 +258,13 @@ void initGL(int *argc, char **argv)
     glutReportErrors();
 }
 
+void computeFPS()
+{
+    frameCount++;
+}
+
 void display()
 {
-
     // update the simulation
     if (!bPause)
     {
@@ -259,12 +274,14 @@ void display()
         psystem->setCollideDamping(collideDamping);
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
+        psystem->setRotation(camera_rot);
+        psystem->setTranslation(camera_trans);
 
         psystem->update(timestep, voxelObject);
 
         if (renderer)
         {
-            renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
+            renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumActiveParticles());
         }
     }
     // render
@@ -302,19 +319,22 @@ void display()
     if (voxelObject) {
       const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
       const float * voxelPositionArray = voxelObject->getCpuPosArray();
+      const bool * activeVoxel = voxelObject->getCpuActiveVoxelArray();
       const float voxelSize = voxelObject->getVoxelSize();
       for (unsigned int voxelIndex = 0;
            voxelIndex < numberOfVoxels; ++voxelIndex) {
-        // save the matrix state
-        glPushMatrix();
-        // translate for this voxel
-        glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
-                     voxelPositionArray[voxelIndex * 4 + 1],
-                     voxelPositionArray[voxelIndex * 4 + 2]);
-        glColor3f(1.0, 0.0, 0.0);
-        glutWireCube(voxelSize);
-        // reset the matrix state
-        glPopMatrix();
+        if (activeVoxel[voxelIndex]) {
+            // save the matrix state
+            glPushMatrix();
+            // translate for this voxel
+            glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+                         voxelPositionArray[voxelIndex * 4 + 1],
+                         voxelPositionArray[voxelIndex * 4 + 2]);
+            glColor3f(1.0, 0.0, 0.0);
+            glutWireCube(voxelSize);
+            // reset the matrix state
+            glPopMatrix();
+        }
       }
     }
 
@@ -759,6 +779,19 @@ main(int argc, char **argv)
         {
             usingObject = true;
         }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-s"))
+        {
+            usingSpout = true;
+        }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-h"))
+        {
+            limitLifeByHeight = true;
+        }
+
+        if (checkCmdLineFlag(argc, (const char **) argv, "-t"))
+        {
+            limitLifeByTime = true;
+        }
 
     }
 
@@ -775,7 +808,7 @@ main(int argc, char **argv)
     
     initMenus();
     
-    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    //glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
@@ -785,7 +818,6 @@ main(int argc, char **argv)
     glutIdleFunc(idle);
 
     //glutCloseFunc(cleanup);
-
     glutMainLoop();
 
     psystem->stopTimer(5);

@@ -138,22 +138,12 @@ extern "C"
                          bool *activeVoxels,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
+                         uint *numParticlesToRemove,
                          EventTimer* timer)                 
     {
-#if 0
-        thrust::device_ptr<float4> pos4((float4 *)pos);
-        thrust::device_ptr<float4> vel4((float4 *)vel);
-        thrust::device_ptr<float4> force4((float4 *)force);
-        thrust::device_ptr<float4> posAfterLastSort4((float4 *)posAfterLastSort);
-
-        timer->startTimer(0, false);
-        thrust::for_each(
-            thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4, force4, posAfterLastSort4)),
-            thrust::make_zip_iterator(thrust::make_tuple(pos4+numParticles, vel4+numParticles, 
-                                                         force4+numParticles, posAfterLastSort4+numParticles)),
-            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
-        timer->stopTimer(0, false);
-#else
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -168,18 +158,22 @@ extern "C"
                                                       (float4 *) voxelPos,
                                                       activeVoxels,  
                                                       posAfterLastSortIsValid, 
-                                                      pointHasMovedMoreThanThreshold);
+                                                      pointHasMovedMoreThanThreshold,
+                                                      numParticlesToRemove);
         timer->stopTimer(0, false);
 
-#endif
     }
 
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
                          float *pos,
+                         float *vel,
                          int    numParticles,
                          EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -188,6 +182,7 @@ extern "C"
         calcCellIndicesD<<< numBlocks, numThreads >>>(cellIndex,
                                                particleIndex,
                                                (float4 *) pos,
+                                               (float4 *) vel,
                                                numParticles);
         timer->stopTimer(1, true);
 
@@ -213,6 +208,9 @@ extern "C"
                     uint   numParticles,
                     EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -252,6 +250,9 @@ extern "C"
                                      uint   numCells,
                                      EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -301,6 +302,9 @@ extern "C"
                  uint   numCells,
                  EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
 #if USE_TEX
         checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
         checkCudaErrors(cudaBindTexture(0, velTex, vel, numParticles*sizeof(float4)));

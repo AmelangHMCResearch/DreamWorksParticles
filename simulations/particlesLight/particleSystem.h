@@ -22,13 +22,14 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL, bool useObject);
+        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight, bool useObject);
         ~ParticleSystem();
 
         enum ParticleConfig
         {
             CONFIG_RANDOM,
             CONFIG_GRID,
+            CONFIG_SPOUT,
             _NUM_CONFIGS
         };
 
@@ -46,6 +47,10 @@ class ParticleSystem
         int    getNumParticles() const
         {
             return _numParticles;
+        }
+        int    getNumActiveParticles() const
+        {
+            return _numActiveParticles;
         }
 
         unsigned int getCurrentReadBuffer() const
@@ -91,6 +96,20 @@ class ParticleSystem
             _params.colliderPos = x;
         }
 
+        void setTranslation(float* trans)
+        {
+            _translation.x = trans[0];
+            _translation.y = trans[1];
+            _translation.z = trans[2];
+        }
+
+        void setRotation(float* rot)
+        {
+            _rotation.x = rot[0];
+            _rotation.y = rot[1];
+            _rotation.z = rot[2];
+        }
+        
         float getParticleRadius()
         {
             return _params.particleRadius;
@@ -146,12 +165,18 @@ class ParticleSystem
         void _finalize();
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
+        void initSpout(float spoutRadius, float jitter, uint numParticles);
+        void addParticles(const float spoutRadius,
+                          const float spoutInPlaneOffset,
+                          const float spoutVerticalOffset,
+                          const float particleJitterPercentOfRadius);
 
     protected: // data
         bool _systemInitialized; 
         bool _usingOpenGL;
         bool _posAfterLastSortIsValid; 
         uint _numParticles;
+        uint _numActiveParticles;
 
         // CPU data - Do we even need this?
         float *_pos;              
@@ -160,6 +185,13 @@ class ParticleSystem
         uint  *_cellEnd;         
 
         uint *_numNeighbors;
+
+        // Spout Movement Information
+        float3 _rotation;
+        float3 _translation;
+        uint _spoutSize;
+        uint _numTimesteps;
+        float _initialVel;
 
 
 
@@ -175,6 +207,7 @@ class ParticleSystem
         uint *_dev_particleIndex;// particle index for each particle
         uint *_dev_cellStart;        // index of start of each cell in sorted list
         uint *_dev_cellEnd;          // index of end of cell
+        uint *_dev_numParticlesToRemove; 
 
         uint   _posVBO;            // vertex buffer object for particle positions
         uint   _colorVBO;          // vertex buffer object for colors

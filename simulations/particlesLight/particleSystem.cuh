@@ -27,31 +27,27 @@ extern "C"
     void setObjectParameters(ObjectParams *hostParams);
 
     void integrateSystem(float *pos,
-                 float *vel,
-                 float *force,
-                 float *posAfterLastSort, 
-                 float deltaTime,
-                 uint numParticles, 
-                 float *voxelPos, 
-                 bool *activeVoxel,  
-                 bool posAfterLastSortIsValid, 
-                 bool *pointHasMovedMoreThanThreshold,
-                 EventTimer* timer);
+                         float *vel,
+                         float *force,
+                         float *posAfterLastSort, 
+                         float deltaTime,
+                         uint numParticles, 
+                         float *voxelPos, 
+                         bool *activeVoxel,  
+                         bool posAfterLastSortIsValid, 
+                         bool *pointHasMovedMoreThanThreshold,
+                         uint *numParticlesToRemove,
+                         EventTimer* timer);
 
     void calcCellIndices(uint  *cellIndex,
                          uint  *particleIndex,
                          float *pos,
+                         float *vel,
                          int    numParticles,
                          EventTimer* timer);
 
     void sortParticles(uint *cellIndex, 
                        uint *particleIndex, 
-                       uint numParticles, 
-                       EventTimer* timer);
-
-    void sortParticlesOnce(uint *cellIndex, 
-                       float *pos,
-                       float *vel, 
                        uint numParticles, 
                        EventTimer* timer);
 
@@ -76,15 +72,6 @@ extern "C"
                                      uint   numParticles,
                                      uint   numCells,
                                      EventTimer* timer);
-
-    void findCellStart(uint  *cellStart,
-                       uint  *cellEnd,
-                       uint  *cellIndex,
-                       float *pos,
-                       float *oldPos,
-                       uint   numParticles,
-                       uint   numCells,
-                       EventTimer* timer);
 
     void collide(float *pos,
                  float *vel,

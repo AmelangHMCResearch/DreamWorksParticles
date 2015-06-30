@@ -27,12 +27,16 @@
 #include <cstdlib>
 #include <algorithm>
 #include <GL/glew.h>
+#include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL, bool useObject) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight, bool useObject) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
+    _numActiveParticles(0),
     _posAfterLastSortIsValid(false),
+    _numTimesteps(0),
+    _initialVel(0.3f),
     _pos(0),
     _vel(0),
     _cellStart(0),
@@ -45,6 +49,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _dev_cellStart(0),
     _dev_cellEnd(0),
     _gridSize(gridSize),
+    _dev_numParticlesToRemove(0),
     dummy_iterationsSinceLastResort(0)
 {
     _timer = new EventTimer(6); 
@@ -58,6 +63,12 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.particleRadius = 1.0f / 64.0f;
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
+
+    _params.usingSpout = usingSpout;
+    _params.limitParticleLifeByHeight = limitLifeByHeight;
+    _params.limitParticleLifeByTime = limitLifeByTime;
+    _params.maxIterations = 1000;
+    _params.maxDistance = -3.0f;
 
     _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
@@ -74,6 +85,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, bool useOpenGL
     _params.movementThreshold = 0.2*_params.particleRadius;
 
     _params.usingObject = useObject;
+    setRotation(rot);
+    setTranslation(trans);
 
     _initialize();
 }
@@ -156,14 +169,17 @@ ParticleSystem::_initialize()
     allocateArray((void **)&_dev_force, memSize);
     checkCudaErrors(cudaMemset(_dev_force, 0, memSize));
 
+    allocateArray((void **)&_dev_numParticlesToRemove, sizeof(uint));
+    checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
+
     allocateArray((void **) &_dev_numNeighbors, (_numParticles+1)*sizeof(uint)); 
     checkCudaErrors(cudaMemset(_dev_numNeighbors, 0, (_numParticles + 1) * sizeof(uint)));
 
-    allocateArray((void **)&_dev_cellIndex, _numParticles*sizeof(uint));
+    allocateArray((void **)&_dev_cellIndex, _numParticles*sizeof(uint) + 1);
     allocateArray((void **)&_dev_particleIndex, _numParticles*sizeof(uint));
 
-    allocateArray((void **)&_dev_cellStart, _numGridCells*sizeof(uint));
-    allocateArray((void **)&_dev_cellEnd, _numGridCells*sizeof(uint));
+    allocateArray((void **)&_dev_cellStart, _numGridCells*sizeof(uint) + 1);
+    allocateArray((void **)&_dev_cellEnd, _numGridCells*sizeof(uint) + 1);
 
     allocateArray((void **)&_dev_pointHasMovedMoreThanThreshold, sizeof(bool));
     cudaMemset(_dev_pointHasMovedMoreThanThreshold, true, sizeof(bool));
@@ -222,6 +238,7 @@ ParticleSystem::_finalize()
     freeArray(_dev_particleIndex);
     freeArray(_dev_cellStart);
     freeArray(_dev_cellEnd);
+    freeArray(_dev_numParticlesToRemove);
     freeArray(_dev_pointHasMovedMoreThanThreshold);
 
     if (_usingOpenGL)
@@ -238,6 +255,24 @@ void
 ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
 {
     assert(_systemInitialized);
+
+    if (_params.usingSpout) {
+        if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius ||
+            _numActiveParticles == 0) {
+            _numTimesteps = 0;
+            const float spoutRadius = 0.5f;
+            const float spoutInPlaneOffset = 0.0f;
+            const float spoutVerticalOffset = .5f;
+            // Room for jitter as a percentage of particle radius
+            const float particleJitterPercentOfRadius = 0.1f;
+            addParticles(spoutRadius,
+                         spoutInPlaneOffset,
+                         spoutVerticalOffset,
+                         particleJitterPercentOfRadius);
+        }
+
+        ++_numTimesteps;
+    }
 
     float *dPos;
 
@@ -256,19 +291,25 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     // update constants
     setParameters(&_params);
 
-    // integrate
+    // integrate system and count number of particles that need to be removed
     integrateSystem(dPos,
                     _dev_vel,
                     _dev_force,
                     _dev_posAfterLastSort,
                     deltaTime,
-                    _numParticles,
+                    _numActiveParticles,
                     voxelPos,
                     voxelIsActive,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
+                    _dev_numParticlesToRemove,
                     _timer);
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
+
+    // Pull over the number of particles that need to be removed from the GPU, and reset count to 0
+    uint numParticlesToRemove; 
+    checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
 
     if (needToResort) {
 
@@ -276,26 +317,27 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
         calcCellIndices(_dev_cellIndex,
                         _dev_particleIndex,
                         dPos,
-                        _numParticles,
+                        _dev_vel,
+                        _numActiveParticles,
                         _timer);
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
                       _dev_particleIndex, 
-                      _numParticles, 
+                      _numActiveParticles, 
                       _timer);
         
         // Create temporary arrays to allow texture memory use for pos/vel reads
         float* tempPos;
         float* tempVel;
-        allocateArray((void **)&tempPos, _numParticles*4*sizeof(float));
-        allocateArray((void **)&tempVel, _numParticles*4*sizeof(float));
+        allocateArray((void **)&tempPos, _numActiveParticles*4*sizeof(float));
+        allocateArray((void **)&tempVel, _numActiveParticles*4*sizeof(float));
 
         copyArrays(dPos,
                    tempPos,
                    _dev_vel,
                    tempVel,
-                   _numParticles,
+                   _numActiveParticles,
                    _timer);
     
         // reorder particle arrays into sorted order and
@@ -311,7 +353,7 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                                     tempVel,
                                     &_posAfterLastSortIsValid,
                                     _dev_pointHasMovedMoreThanThreshold,
-                                    _numParticles,
+                                    _numActiveParticles,
                                     _numGridCells,
                                     _timer);
         freeArray(tempPos);
@@ -320,6 +362,12 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
         dummy_iterationsSinceLastResort = 0;
     } else {
         ++dummy_iterationsSinceLastResort;
+    }
+
+    if (_numActiveParticles > numParticlesToRemove) {
+        _numActiveParticles = _numActiveParticles - numParticlesToRemove;
+    } else {
+        _numActiveParticles = 0;
     }
 
     // process collisions
@@ -332,12 +380,13 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
             _dev_cellStart,
             _dev_cellEnd,
             _dev_numNeighbors,
-            _numParticles,
+            _numActiveParticles,
             _numGridCells,
             _timer);
+    
 
-    /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
-                               (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
+    checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
+                               (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if(_params.usingObject) {
@@ -456,9 +505,194 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
     }
 }
 
+float findRadius(float2 radius) {
+    return sqrt(radius.x * radius.x + radius.y * radius.y);
+}
+
+float3 rotatePoint(float3* rotMatrix, float3 pos) {
+    float3 result;
+    result.x = rotMatrix[0].x * pos.x + rotMatrix[0].y * pos.y + rotMatrix[0].z * pos.z;
+    result.y = rotMatrix[1].x * pos.x + rotMatrix[1].y * pos.y + rotMatrix[1].z * pos.z;
+    result.z = rotMatrix[2].x * pos.x + rotMatrix[2].y * pos.y + rotMatrix[2].z * pos.z;
+    return result;
+}
+
+float3 crossProduct(float3 a, float3 b) {
+    float3 result;
+    result.x = a.y * b.z - a.z * b.y;
+    result.y = a.z * b.x - a.x * b.z;
+    result.z = a.x * b.y - a.y * b.x;
+    return result;
+}
+
+float dotProduct(float3 a, float3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+float3 scalarMult(float a, float3 b) {
+    b.x = b.x * a;
+    b.y = b.y * a;
+    b.z = b.z * a;
+    return b;
+}
+
+float3 operator+(const float3 & a, const float3 & b) {
+  return make_float3(a.x+b.x, a.y+b.y, a.z+b.z);
+}
+
+float3 operator-(const float3 & a, const float3 & b) {
+  return make_float3(a.x-b.x, a.y-b.y, a.z-b.z);
+}
+
+float3 operator*(const float alpha, const float3 & b) {
+  return scalarMult(alpha, b);
+}
+
+float3 normalize(const float3 & a) {
+  const float magnitude = sqrt(dotProduct(a, a));
+  return scalarMult(1. / magnitude, a);
+}
+
+// Generates grid with side length radius based on hexagonal dense packing pattern
+std::vector<float2> genParticlePos(float particleRadius, float radius)
+{
+    std::vector<float2> grid;
+    const float cellWidth  = 2 * particleRadius;
+    const float cellLength = 2 * sqrt(3 * particleRadius * particleRadius);
+    const uint gridWidth   = ceil(2 * radius / cellWidth) + 2;
+    const uint gridLength  = ceil(2 * radius / cellLength) + 2;
+    // avoid all the intermediate mallocs
+    grid.reserve(gridWidth * gridLength * 2);
+    for (int i = 0; i < gridLength; ++i) {
+        for (int j = 0; j < gridWidth; ++j) {
+            const float2 newIntersection =
+              make_float2(-1.0 * radius + j * cellWidth,
+                          -1.0 * radius + i * cellLength);
+            grid.push_back(newIntersection);
+            if (i > 0 && j > 0) {
+                const float2 center =
+                  make_float2(newIntersection.x - 0.5 * cellWidth,
+                              newIntersection.y - 0.5 * cellLength);
+                grid.push_back(center);
+            }
+        }
+    }
+    std::vector<float2>::iterator i = grid.begin();
+    while (i != grid.end()) {
+        if (findRadius(*i) > radius) {
+            i = grid.erase(i);
+        } else {
+            ++i;
+        }
+    }
+    return grid;
+}
+
+void
+ParticleSystem::addParticles(const float spoutRadius,
+                             const float spoutInPlaneOffset,
+                             const float spoutVerticalOffset,
+                             const float particleJitterPercentOfRadius)
+{
+
+    const float3 unrotatedCameraPosition = -1. * _translation;
+    float3 rotations = _rotation;
+    rotations.x = rotations.x * (3.141592/180.0);
+    rotations.y = rotations.y * (3.141592/180.0);
+
+    // rotation matrices are the transpose (inverse) of what we apply to
+    //  drawing.
+    float3 xRotation[3] = {make_float3(1, 0, 0),
+                          make_float3(0, cos(rotations.x), sin(rotations.x)),
+                          make_float3(0, -1.0 * sin(rotations.x), cos(rotations.x))};
+    float3 yRotation[3] = {make_float3(cos(rotations.y), 0, -1.0 * sin(rotations.y)),
+                          make_float3(0, 1, 0),
+                          make_float3(sin(rotations.y), 0, cos(rotations.y))};
+
+    // we apply x, then y because of the rules of transpose.
+    // when drawing, we do T*Rx*Ry.
+    // we now want to do the inverse, which is the transpose of the rotations.
+    // that means we need (Rx*Ry)^T, which is Ry^T*Rx^T.
+    // so, we first apply transposed x rotation, then transposed y.
+    const float3 cameraPosition =
+      rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
+
+    const float jitterDistance =
+      _params.particleRadius * particleJitterPercentOfRadius;
+
+    const std::vector<float2> positionsOfNewParticlesInThePlane =
+      genParticlePos(_params.particleRadius + jitterDistance, 0.15f);
+
+    uint newNumParticles;
+    uint amountToCopy;
+    _spoutSize = positionsOfNewParticlesInThePlane.size();
+    if (_numActiveParticles + _spoutSize < _numParticles) {
+        newNumParticles = _numActiveParticles + _spoutSize;
+        amountToCopy = _spoutSize;
+    }
+    else {
+        newNumParticles = _numParticles;
+        amountToCopy = _numParticles - _numActiveParticles;
+    }
+
+    const float3 cameraDirection = -1 * normalize(cameraPosition);
+
+    // form the 3d direction which represents straight down on the screen
+    float3 spoutScreenVerticalDirection = make_float3(0.f, -1.f, 0.f);
+    spoutScreenVerticalDirection =
+      spoutScreenVerticalDirection -
+      dotProduct(spoutScreenVerticalDirection,
+                 cameraDirection) * cameraDirection;
+    spoutScreenVerticalDirection =
+      normalize(spoutScreenVerticalDirection);
+    // now, the spout is the camera position plus some offset down the screen
+    const float3 spoutPosition =
+      cameraPosition +
+      spoutVerticalOffset * spoutScreenVerticalDirection +
+      spoutInPlaneOffset * cameraDirection;
+    const float3 spoutDirection = -1 * normalize(spoutPosition);
+
+    // goal: make two axes within the plane of the spout's exit
+    // strategy: use gram-schmidt orthogonalization
+    float3 axis1 = make_float3(frand(), frand(), frand());
+    //float3 axis1 = make_float3(1.f, 0.f, 0.f);
+    // subtract off component in same direction as camera
+    const float originalAxis1DotSpoutDirection =
+      dotProduct(axis1, spoutDirection);
+    axis1 = axis1 - originalAxis1DotSpoutDirection * spoutDirection;
+    // axis1 is now orthogonal to spoutDirection
+    axis1 = normalize(axis1);
+    // axis1 is now normal and ready to use
+    // now, form a second axis by taking the cross product of the two we have
+    const float3 axis2 = crossProduct(spoutDirection, axis1);
+
+    // use the camera direction as the initial velocity direction
+    const float3 newVel = scalarMult(_initialVel, spoutDirection);
+    for (int i = 0; i < newNumParticles - _numActiveParticles; ++i)
+    {
+        const float3 newParticlesPosition =
+          spoutPosition +
+          positionsOfNewParticlesInThePlane[i].x * axis1 +
+          positionsOfNewParticlesInThePlane[i].y * axis2;
+        _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+3] = 1.0f;
+        _vel[i*4+0] = 1.0 * newVel.x;
+        _vel[i*4+1] = 1.0 * newVel.y;
+        _vel[i*4+2] = 1.0 * newVel.z;
+        _vel[i*4+3] = 0.0f;
+    }
+
+    setArray(POSITION, _pos, _numActiveParticles, amountToCopy);
+    setArray(VELOCITY, _vel, _numActiveParticles, amountToCopy);
+    _numActiveParticles = newNumParticles;
+}
+
 void
 ParticleSystem::reset(ParticleConfig config)
 {
+    srand(1973);
     switch (config)
     {
         default:
@@ -491,12 +725,32 @@ ParticleSystem::reset(ParticleConfig config)
                 uint gridSize[3];
                 gridSize[0] = gridSize[1] = gridSize[2] = s;
                 initGrid(gridSize, _params.particleRadius*2.0f, jitter, _numParticles);
+                _numActiveParticles = _numParticles;
+            }
+            break;
+        case CONFIG_SPOUT:
+            {
+                // Write the particles to a location off screen, otherwise they default to
+                // their old positions.
+                int p = 0, v = 0;
+
+                for (uint i=0; i < _numParticles; i++)
+                {
+                    _pos[4*i] = -15.0;
+                    _pos[4*i + 1] = -15.0;
+                    _pos[4*i + 2] = -15.0;
+                    _pos[4*i + 3] = 1.0f; // radius
+                    _vel[4*i] = 0.0f;
+                    _vel[4*i + 1] = 0.0f;
+                    _vel[4*i + 2] = 0.0f;
+                    _vel[4*i + 3] = 0.0f;
+                }
             }
             break;
     }
-
     setArray(POSITION, _pos, 0, _numParticles);
     setArray(VELOCITY, _vel, 0, _numParticles);
+
 }
 
 void

@@ -52,6 +52,12 @@ struct SimParams
     float movementThreshold;
 
     bool usingObject;
+    bool usingSpout;
+    bool limitParticleLifeByTime;
+    bool limitParticleLifeByHeight;
+
+    float maxDistance;
+    uint maxIterations;
 };
 
 struct ObjectParams
