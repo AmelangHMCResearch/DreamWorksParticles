@@ -28,7 +28,7 @@
 #include <GL/glew.h>
 #include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool limitLifeByTime, bool limitLifeByHeight) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -62,6 +62,8 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.particleRadius = 1.0f / 64.0f;
     _params.colliderPos = make_float3(-1.2f, -0.8f, 0.8f);
     _params.colliderRadius = 0.2f;
+
+    _params.usingSpout = usingSpout;
     _params.limitParticleLifeByHeight = limitLifeByHeight;
     _params.limitParticleLifeByTime = limitLifeByTime;
     _params.maxIterations = 1000;
@@ -252,21 +254,23 @@ ParticleSystem::update(float deltaTime)
 {
     assert(_systemInitialized);
 
-    if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius ||
-        _numActiveParticles == 0) {
-        _numTimesteps = 0;
-        const float spoutRadius = 0.5f;
-        const float spoutInPlaneOffset = 0.0f;
-        const float spoutVerticalOffset = .5f;
-        // Room for jitter as a percentage of particle radius
-        const float particleJitterPercentOfRadius = 0.1f;
-        addParticles(spoutRadius,
-                     spoutInPlaneOffset,
-                     spoutVerticalOffset,
-                     particleJitterPercentOfRadius);
-    }
+    if (_params.usingSpout) {
+        if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius ||
+            _numActiveParticles == 0) {
+            _numTimesteps = 0;
+            const float spoutRadius = 0.5f;
+            const float spoutInPlaneOffset = 0.0f;
+            const float spoutVerticalOffset = .5f;
+            // Room for jitter as a percentage of particle radius
+            const float particleJitterPercentOfRadius = 0.1f;
+            addParticles(spoutRadius,
+                         spoutInPlaneOffset,
+                         spoutVerticalOffset,
+                         particleJitterPercentOfRadius);
+        }
 
-    ++_numTimesteps;
+        ++_numTimesteps;
+    }
 
     float *dPos;
 
@@ -352,6 +356,8 @@ ParticleSystem::update(float deltaTime)
 
     if (_numActiveParticles > numParticlesToRemove) {
         _numActiveParticles = _numActiveParticles - numParticlesToRemove;
+    } else {
+        _numActiveParticles = 0;
     }
 
     // process collisions
@@ -703,6 +709,7 @@ ParticleSystem::reset(ParticleConfig config)
                 uint gridSize[3];
                 gridSize[0] = gridSize[1] = gridSize[2] = s;
                 initGrid(gridSize, _params.particleRadius*2.0f, jitter, _numParticles);
+                _numActiveParticles = _numParticles;
             }
             break;
         case CONFIG_SPOUT:

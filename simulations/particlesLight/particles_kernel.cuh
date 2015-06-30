@@ -49,6 +49,7 @@ struct SimParams
 
     float movementThreshold;
 
+    bool usingSpout;
     bool limitParticleLifeByTime;
     bool limitParticleLifeByHeight;
 

@@ -21,7 +21,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool limitLifeByTime, bool limitLifeByHeight);
+        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight);
         ~ParticleSystem();
 
         enum ParticleConfig

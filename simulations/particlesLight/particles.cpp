@@ -57,6 +57,8 @@
 uint numParticles = 999424;
 uint3 gridSize = {256, 256, 256};
 int numIterations = 100000; // run until exit
+
+bool usingSpout = false;
 bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
@@ -179,8 +181,12 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, limitLifeByTime, limitLifeByHeight);
-    psystem->reset(ParticleSystem::CONFIG_SPOUT);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight);
+    ParticleSystem::ParticleConfig config = ParticleSystem::CONFIG_GRID;
+    if (usingSpout) {
+        config = ParticleSystem::CONFIG_SPOUT;
+    }
+    psystem->reset(config);
 
     if (bUseOpenGL)
     {
@@ -717,6 +723,10 @@ main(int argc, char **argv)
         {
             numIterations = getCmdLineArgumentInt(argc, (const char **) argv, "i");
         }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-s"))
+        {
+            usingSpout = true;
+        }
         if (checkCmdLineFlag(argc, (const char **) argv, "-h"))
         {
             limitLifeByHeight = true;
@@ -724,7 +734,6 @@ main(int argc, char **argv)
 
         if (checkCmdLineFlag(argc, (const char **) argv, "-t"))
         {
-            printf("Picked up flag\n");
             limitLifeByTime = true;
         }
 

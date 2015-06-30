@@ -154,6 +154,9 @@ extern "C"
                          int    numParticles,
                          EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -188,6 +191,9 @@ extern "C"
                     uint   numParticles,
                     EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -227,6 +233,9 @@ extern "C"
                                      uint   numCells,
                                      EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -274,6 +283,9 @@ extern "C"
                  uint   numCells,
                  EventTimer* timer)
     {
+        if (numParticles == 0) {
+          return;
+        }
 #if USE_TEX
         checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
         checkCudaErrors(cudaBindTexture(0, velTex, vel, numParticles*sizeof(float4)));
