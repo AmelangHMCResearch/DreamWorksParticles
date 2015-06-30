@@ -67,6 +67,7 @@ public:
     }
 
     float* getPosArray();
+    float* getCpuPosArray();
 
     void unbindPosArray();
 

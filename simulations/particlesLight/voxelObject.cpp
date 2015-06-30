@@ -168,6 +168,10 @@ float* VoxelObject::getPosArray() {
     return dPos;
 }
 
+float* VoxelObject::getCpuPosArray() {
+    return _pos;
+}
+
 void VoxelObject::unbindPosArray() {
     unmapGLBufferObject(_cuda_posvbo_resource);
 }

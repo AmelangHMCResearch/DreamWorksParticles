@@ -18,6 +18,18 @@
     - added support for automated testing and comparison to a reference value.
 */
 
+#define ENABLE_DEBUG_OUTPUT
+#ifdef ENABLE_DEBUG_OUTPUT
+#define debug(s, ...)                                           \
+  do {                                                          \
+    fprintf (stderr, "(%-30s:%40s:%4d) -- " s,                  \
+             __FILE__, __func__, __LINE__, ##__VA_ARGS__);      \
+    fflush (stderr);                                            \
+  } while (0)
+#else
+#define debug(s, ...)
+#endif
+
 // OpenGL Graphics includes
 #include <GL/glew.h>
 #if defined (WIN32)
@@ -61,7 +73,7 @@ int numIterations = 150000; // run until exit
 bool usingObject = false;
 
 // simulation parameters
-float timestep = 0.01f;
+float timestep = 0.5f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -76,11 +88,18 @@ const uint width = 640, height = 480;
 // view params
 int ox, oy;
 int buttonState = 0;
+#if 1
+// these are debugging values for the camera location
+float camera_trans[] = {0.05, 3.47, -1.57};
+float camera_rot[]   = {1, 56.6, 0};
+#else
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
+#endif
 float camera_trans_lag[] = {0, 0, -3};
 float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
+//ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
 ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
 
 int mode = 0;
@@ -174,8 +193,8 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    float voxelSize = 1.0f/16.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-    uint cubeSize = 16;    // Dimension of each side of the cube
+    float voxelSize = 1.0f/2.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+    uint cubeSize = 2;    // Dimension of each side of the cube
     float3 origin = make_float3(0.0, -3.5, 0.0);
     voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
 
@@ -260,15 +279,42 @@ void display()
         camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
     }
     
+#if 0
     glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
     glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
     glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+#else
+    glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
+    glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
+    glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
+#endif
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
     glutWireCube(8.0);
+
+    // now, to draw the voxels.
+    // for each voxel
+    if (voxelObject) {
+      const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
+      const float * voxelPositionArray = voxelObject->getCpuPosArray();
+      const float voxelSize = voxelObject->getVoxelSize();
+      for (unsigned int voxelIndex = 0;
+           voxelIndex < numberOfVoxels; ++voxelIndex) {
+        // save the matrix state
+        glPushMatrix();
+        // translate for this voxel
+        glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+                     voxelPositionArray[voxelIndex * 4 + 1],
+                     voxelPositionArray[voxelIndex * 4 + 2]);
+        glColor3f(1.0, 0.0, 0.0);
+        glutWireCube(voxelSize);
+        // reset the matrix state
+        glPopMatrix();
+      }
+    }
 
     // collider
     /*
@@ -287,14 +333,16 @@ void display()
         renderer->display(displayMode);
     }
 
+#if 0
     if (renderer)
-    {
+      {
         renderer->setColorBuffer(voxelObject->getColorBuffer());
         renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
         renderer->setParticleRadius(voxelObject->getVoxelSize());
         renderer->setPointSize(50 * voxelObject->getVoxelSize());
         renderer->display(displayMode);
-    }
+      }
+#endif
 
     /*
     if (displaySliders)
