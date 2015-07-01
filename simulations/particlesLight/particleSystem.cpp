@@ -282,10 +282,10 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     }
 
     float *voxelPos = NULL;
-    bool *voxelIsActive = NULL;
+    int *voxelStrength = NULL;
     if (_params.usingObject) {
         voxelPos = voxelObject->getPosArray();
-        voxelIsActive = voxelObject->getActiveVoxels();
+        voxelStrength = voxelObject->getVoxelStrength();
     }
 
     // update constants
@@ -299,7 +299,7 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
                     deltaTime,
                     _numActiveParticles,
                     voxelPos,
-                    voxelIsActive,
+                    voxelStrength,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _dev_numParticlesToRemove,
@@ -374,7 +374,7 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     collide(dPos,
             _dev_vel,
             _dev_force,
-            voxelIsActive,
+            voxelStrength,
             voxelPos,
             _dev_cellIndex,
             _dev_cellStart,

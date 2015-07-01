@@ -77,7 +77,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.1f;
+float timestep = 0.5f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -201,9 +201,9 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/16.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint cubeSize = 16;    // Dimension of each side of the cube
-        float3 origin = make_float3(0.0, -3.5, 0.0);
+        float voxelSize = 1.0f/1.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 8;    // Dimension of each side of the cube
+        float3 origin = make_float3(0.0, 0.0, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }
 
@@ -319,7 +319,7 @@ void display()
     if (voxelObject) {
       const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
       const float * voxelPositionArray = voxelObject->getCpuPosArray();
-      const bool * activeVoxel = voxelObject->getCpuActiveVoxelArray();
+      const int * activeVoxel = voxelObject->getVoxelStrengthFromGPU();
       const float voxelSize = voxelObject->getVoxelSize();
       for (unsigned int voxelIndex = 0;
            voxelIndex < numberOfVoxels; ++voxelIndex) {
@@ -330,7 +330,7 @@ void display()
             glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
                          voxelPositionArray[voxelIndex * 4 + 1],
                          voxelPositionArray[voxelIndex * 4 + 2]);
-            glColor3f(1.0, 0.0, 0.0);
+            glColor3f(0.0, 0.0, 0.0);
             glutWireCube(voxelSize);
             // reset the matrix state
             glPopMatrix();

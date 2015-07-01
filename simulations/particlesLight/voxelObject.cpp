@@ -3,7 +3,7 @@
 
 VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSize, float3 origin)
   :  _pos(0),
-    _activeVoxel(0),
+    _voxelStrength(0),
     _numActiveVoxels(0)
 {
     _objectParams._voxelSize = voxelSize;
@@ -16,6 +16,9 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSi
 VoxelObject::~VoxelObject() 
 {
     delete [] _pos;
+    delete [] _voxelStrength;
+
+    freeArray(_dev_voxelStrength);
 
     unregisterGLBufferObject(_cuda_colorvbo_resource);
     unregisterGLBufferObject(_cuda_posvbo_resource);
@@ -30,13 +33,13 @@ void VoxelObject::initObject(ObjectShape shape)
 	unsigned int memSize = _objectParams._numVoxels * sizeof(float);
 
     _pos = new float[4 * _objectParams._numVoxels];
-    _activeVoxel = new bool[_objectParams._numVoxels];
+    _voxelStrength = new int[_objectParams._numVoxels];
     for (int i = 0; i < _objectParams._numVoxels; ++i) {
-        _activeVoxel[i] = false;
+        _voxelStrength[i] = 0;
     }
 
     // Allocate active voxel array on GPU
-    allocateArray((void **) &_dev_activeVoxel, memSize);
+    allocateArray((void **) &_dev_voxelStrength, sizeof(int) * _objectParams._numVoxels);
 
     // Create the VBO
     glGenBuffers(1, &_posVBO);
@@ -61,7 +64,7 @@ void VoxelObject::initObject(ObjectShape shape)
         *ptr++ = 0.0;
         *ptr++ = 0.0;
         *ptr++ = 0.0;
-        *ptr++ = (float) _activeVoxel[i];
+        *ptr++ = 1.0;
     }
     glUnmapBufferARB(GL_ARRAY_BUFFER);
 
@@ -85,7 +88,7 @@ void VoxelObject::initShape(ObjectShape shape)
 
                         if (i < _objectParams._numVoxels)
                         {
-                            _activeVoxel[i] = 1;
+                            _voxelStrength[i] = 1000;
                             ++_numActiveVoxels; 
                             // Calculate center of voxels for use in VBO rendering
                             _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
@@ -112,7 +115,7 @@ void VoxelObject::initShape(ObjectShape shape)
                         if (i < _objectParams._numVoxels)
                         {
                             if (y == 0) {
-                                _activeVoxel[i] = 1;
+                                _voxelStrength[i] = 1;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering
                                 _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
@@ -145,7 +148,7 @@ void VoxelObject::initShape(ObjectShape shape)
                                                 (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
                                                 (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
                             if (radius <= (_objectParams._cubeSize * _objectParams._voxelSize) / 2.0) {
-                                _activeVoxel[i] = 1;
+                                _voxelStrength[i] = 1;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering
                                 _pos[i*4] = xPos;
@@ -160,7 +163,7 @@ void VoxelObject::initShape(ObjectShape shape)
         }
         break;
     }
-    copyArrayToDevice((void *) _dev_activeVoxel, (void *) _activeVoxel, 0, _objectParams._numVoxels);
+    cudaMemcpy(_dev_voxelStrength, _voxelStrength, sizeof(int) * _objectParams._numVoxels, cudaMemcpyHostToDevice);
 
     // Copy position data to vbo
     unregisterGLBufferObject(_cuda_posvbo_resource);
@@ -181,8 +184,9 @@ float* VoxelObject::getCpuPosArray() {
     return _pos;
 }
 
-bool* VoxelObject::getCpuActiveVoxelArray() {
-    return _activeVoxel;
+int* VoxelObject::getVoxelStrengthFromGPU() {
+    cudaMemcpy(_voxelStrength, _dev_voxelStrength, sizeof(unsigned int) * _objectParams._numVoxels, cudaMemcpyDeviceToHost);
+    return _voxelStrength;
 }
 
 

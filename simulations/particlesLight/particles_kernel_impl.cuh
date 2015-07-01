@@ -142,7 +142,7 @@ float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 voxelPos) {
 __device__
 float3 calcForceFromVoxel(int3 voxelGridPos, 
                           float4 *voxelPos,
-                          bool  *activeVoxel,  
+                          int  *voxelStrength,  
                           float3 particlePos,
                           float3 particleVel,
                           float3 force)
@@ -154,7 +154,7 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
     }
     // Check that the particle is in an active voxel
     uint voxelIndex = getVoxelIndex(voxelGridPos);
-    if (!activeVoxel[voxelIndex]) {
+    if (!voxelStrength[voxelIndex]) {
         return make_float3(0.0f);
     }
 
@@ -189,7 +189,7 @@ void integrateSystemD(float4 *pos,
                  float deltaTime,
                  uint numParticles, 
                  float4 * voxelPos, 
-                 bool *activeVoxel,  
+                 int *voxelStrength,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold,
                  uint *numParticlesToRemove)
@@ -215,14 +215,18 @@ void integrateSystemD(float4 *pos,
         if (!posIsOutOfBounds(voxelGridPos)) {
             // Check that the voxel the particle is in is active
             const uint voxelIndex = getVoxelIndex(voxelGridPos);
-            if (activeVoxel[voxelIndex]) {
+            if (voxelStrength[voxelIndex]) {
                 // Do the collision
                 const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
                 const float3 direction = findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
+                if (voxelStrength[voxelIndex] > 0) {
+                    int newStrength = max(voxelStrength[voxelIndex] - 1, 0);
+                    int oldStrength = atomicMin(&voxelStrength[voxelIndex], newStrength);
+                }
 
                 int3 neighborVoxelGridPos = make_int3(voxelGridPos.x + (int) direction.x, voxelGridPos.y + (int) direction.y, voxelGridPos.z + (int) direction.z);
                 if (!posIsOutOfBounds(neighborVoxelGridPos)) {
-                    if (activeVoxel[getVoxelIndex(neighborVoxelGridPos)]) {
+                    if (voxelStrength[getVoxelIndex(neighborVoxelGridPos)]) {
                         iters = params.maxIterations * 2; 
                         atomicAdd(numParticlesToRemove, 1);
                         *pointHasMovedMoreThanThreshold = true;
@@ -256,7 +260,7 @@ void integrateSystemD(float4 *pos,
     threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
     threadVel += (threadForce * deltaTime / 2);
     // set this to zero to disable collisions with cube sides
-#if 1
+#if 0
     if (threadPos.x > 4.0f - params.particleRadius)
     {
         threadPos.x = 4.0f - params.particleRadius;
@@ -555,7 +559,7 @@ __global__
 void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
-              bool   *activeVoxel,
+              int   *voxelStrength,
               float4 *voxelPos,
               uint   *cellIndex,    
               uint   *cellStart,
@@ -603,7 +607,7 @@ void collideD(float4 *pos,               // input: position
         // Check for collisions with voxel object
         int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
+        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, voxelStrength, particlePos, particleVel, particleForce);
         particleForce += forceFromObject;
     }
 #endif

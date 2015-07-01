@@ -65,14 +65,14 @@ public:
         return _colorVBO;
     }
 
-    bool* getActiveVoxels()
+    int* getVoxelStrength()
     {
-        return _dev_activeVoxel;
+        return _dev_voxelStrength;
     }
 
     float* getPosArray();
     float* getCpuPosArray();
-    bool* getCpuActiveVoxelArray();
+    int* getVoxelStrengthFromGPU();
 
     void unbindPosArray();
 
@@ -84,12 +84,12 @@ public:
 private:
 
 	// CPU Data
-	bool *_activeVoxel;
+	int *_voxelStrength;
     float *_pos; 
     unsigned int _numActiveVoxels;
 
     // GPU Data
-    bool  *_dev_activeVoxel;
+    int *_dev_voxelStrength;
     unsigned int   _posVBO;            // vertex buffer object for particle positions
     unsigned int   _colorVBO;          // vertex buffer object for col
     struct cudaGraphicsResource *_cuda_posvbo_resource; // handles OpenGL-CUDA exchange
