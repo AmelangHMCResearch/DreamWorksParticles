@@ -4,12 +4,13 @@
 VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSize, float3 origin)
   :  _pos(0),
     _voxelStrength(0),
-    _numActiveVoxels(0)
+    _numActiveVoxels(0),
+    _maxVoxelStrength(1)
 {
-    _objectParams._voxelSize = voxelSize;
-    _objectParams._cubeSize = cubeSize; 
+    _objectParams._voxelSize = voxelSize; // Length of a side of a voxel
+    _objectParams._cubeSize = cubeSize;   // Number of voxels per side
     _objectParams._numVoxels = cubeSize * cubeSize * cubeSize;
-    _objectParams._origin = origin;
+    _objectParams._origin = origin;       // Position object is centered at
     initObject(shape);
 }
 
@@ -88,7 +89,7 @@ void VoxelObject::initShape(ObjectShape shape)
 
                         if (i < _objectParams._numVoxels)
                         {
-                            _voxelStrength[i] = 1000;
+                            _voxelStrength[i] = _maxVoxelStrength;
                             ++_numActiveVoxels; 
                             // Calculate center of voxels for use in VBO rendering
                             _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
@@ -115,7 +116,7 @@ void VoxelObject::initShape(ObjectShape shape)
                         if (i < _objectParams._numVoxels)
                         {
                             if (y == 0) {
-                                _voxelStrength[i] = 1;
+                                _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering
                                 _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
@@ -148,7 +149,7 @@ void VoxelObject::initShape(ObjectShape shape)
                                                 (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
                                                 (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
                             if (radius <= (_objectParams._cubeSize * _objectParams._voxelSize) / 2.0) {
-                                _voxelStrength[i] = 1;
+                                _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering
                                 _pos[i*4] = xPos;

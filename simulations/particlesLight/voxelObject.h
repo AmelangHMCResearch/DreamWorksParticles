@@ -84,6 +84,7 @@ public:
 private:
 
 	// CPU Data
+    int _maxVoxelStrength; 
 	int *_voxelStrength;
     float *_pos; 
     unsigned int _numActiveVoxels;

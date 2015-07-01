@@ -369,6 +369,7 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
     } else {
         _numActiveParticles = 0;
     }
+    //printf("Total: %d To remove: %d\n", _numActiveParticles, numParticlesToRemove);
 
     // process collisions
     collide(dPos,
