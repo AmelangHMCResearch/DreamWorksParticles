@@ -5,7 +5,7 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSi
   :  _pos(0),
     _voxelStrength(0),
     _numActiveVoxels(0),
-    _maxVoxelStrength(1)
+    _maxVoxelStrength(50000)
 {
     _objectParams._voxelSize = voxelSize; // Length of a side of a voxel
     _objectParams._cubeSize = cubeSize;   // Number of voxels per side

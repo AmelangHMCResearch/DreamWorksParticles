@@ -80,7 +80,8 @@ bool posIsOutOfBounds(int3 voxelGridPos)
 }
 
 __device__
-bool isActiveVoxel(int3 voxelGridPos, int* voxelStrength) {
+bool isActiveVoxel(int3 voxelGridPos, int* voxelStrength) 
+{
     if (posIsOutOfBounds(voxelGridPos)) {
         return false;
     }
@@ -91,7 +92,74 @@ bool isActiveVoxel(int3 voxelGridPos, int* voxelStrength) {
 }
 
 __device__
-float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 particleVel, float3 voxelPos, int *voxelStrength) {
+bool pointsIntersectFace(float knownCoord, float3 oldPos, float3 newPos) {
+    // Must pass arguments such that oldPos.x and newPos.x are the same
+    // Component as knownCoord. X, Y, and Z here don't correspond to the
+    // real coordinates
+    float y, z; 
+    float t = (knownCoord - oldPos.x) / (newPos.x - oldPos.x); 
+    y = oldPos.y + (newPos.y - oldPos.y) * t; 
+    z = oldPos.z + (newPos.z - oldPos.z) * t;
+    if (abs(y) < objParams._voxelSize && abs(z) < objParams._voxelSize) {
+        return true;
+    } else {
+        return false;
+    }
+
+
+}
+
+__device__
+float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
+                          float3 voxelPos, int *voxelStrength) 
+{
+    float3 relOldPos = particleOldPos - voxelPos;
+    float3 relNewPos = particlePos - voxelPos; 
+    for (int z = -1; z <= 1; ++z) {
+        for (int y = -1; y <= 1; ++ y) {
+            for (int x = -1; x <= 1; ++x) {
+                if ((x==0 && y==0) || (x==0 && z==0) || (y==0 && z==0)) {
+                    float3 direction = make_float3(x, y, z); 
+                    if (direction.x != 0) {
+                        if (direction.x * relOldPos.x > objParams._voxelSize / 2.0) {
+                            //if (direction.x == 1) printf("Dir: %f, %f, %f RelOld: %f\n", direction.x, direction.y, direction.z, relOldPos.x);
+                            if (pointsIntersectFace(direction.x * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.x, relOldPos.y, relOldPos.z), 
+                                                     make_float3(relNewPos.x, relNewPos.y, relNewPos.z))) {
+                                return direction;
+                            }
+                        }
+                    }
+                    else if (direction.y != 0) {
+                        if (direction.y * relOldPos.y > objParams._voxelSize / 2.0) {
+                            if (pointsIntersectFace(direction.y * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.y, relOldPos.x, relOldPos.z), 
+                                                     make_float3(relNewPos.y, relNewPos.x, relNewPos.z))) {
+                                return direction;
+                            }
+                        }
+                    }
+                    else if (direction.z != 0) {
+                        if (direction.z * relOldPos.z > objParams._voxelSize / 2.0) {
+                            if (pointsIntersectFace(direction.z * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.z, relOldPos.x, relOldPos.y), 
+                                                     make_float3(relNewPos.z, relNewPos.x, relNewPos.y))) {
+                                return direction;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return make_float3(0,0,0);
+}
+
+__device__
+float3 findNearestFace(int3 voxelGridPos, float3 particlePos, 
+                       float3 particleVel, float3 voxelPos, 
+                       int *voxelStrength) 
+{
     float halfSide = objParams._voxelSize / 2.0;
     float penaltyDistance = objParams._voxelSize / 4.0; 
     float3 relativePos = particlePos - voxelPos; 
@@ -257,6 +325,11 @@ void integrateSystemD(float4 *pos,
     threadVel += threadForce * deltaTime / 2;
     threadVel += params.gravity * deltaTime;
     threadVel *= params.globalDamping;
+    
+    // new position = old position + velocity * deltaTime
+    // Second part of verlet integration
+    threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
+    threadVel += (threadForce * deltaTime / 2);
 
 #if USE_HARD_CUBE
     if (params.usingObject) {
@@ -266,16 +339,18 @@ void integrateSystemD(float4 *pos,
             // Do the collision
             uint voxelIndex = getVoxelIndex(voxelGridPos);
             const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-            const float3 direction = findNearestFace(voxelGridPos, threadPos, 
-                                                     threadVel, currentVoxelPos,
-                                                     voxelStrength);
+            const float3 direction = findNearestFaceNew(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
+            //if (index %100 == 0) printf("Vel: %f, %f, %f Dir:%f, %f, %f\n", threadVel.x, threadVel.y, threadVel.z, direction.x, direction.y, direction.z);
+            //printf("%f, %f, %f\n", direction.x, direction.y, direction.z);
             // Update strength of voxel post-collision
+#if 1
             int strength = voxelStrength[voxelIndex];
             if (strength > 0) {
-                int newStrength = max(strength - 1, 0);
-                int oldStrength = atomicMin(&voxelStrength[voxelIndex], 
-                                            newStrength);
+                // Faster particles do more damage
+                int newStrength = max(strength - (int) (10 * (length(threadVel)/0.5)), 0);
+                atomicMin(&voxelStrength[voxelIndex], newStrength);
             }
+#endif
             
             // If it's trying to move into an active particle, remove it
             int3 neighborVoxelGridPos = voxelGridPos + make_int3(direction);
@@ -308,11 +383,7 @@ void integrateSystemD(float4 *pos,
         }
     }
 #endif
-    
-    // new position = old position + velocity * deltaTime
-    // Second part of verlet integration
-    threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
-    threadVel += (threadForce * deltaTime / 2);
+
     // set this to zero to disable collisions with cube sides
 #if 0
     if (threadPos.x > 4.0f - params.particleRadius)
