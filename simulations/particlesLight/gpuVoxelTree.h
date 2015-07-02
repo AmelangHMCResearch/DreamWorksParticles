@@ -1,4 +1,4 @@
-/* gpuVoxelTree.cpp
+/* gpuVoxelTree.h
  *
  * Author: Zakkai Davidson - zdavidson@hmc.edu
  * Date: 30 Jun 2015
@@ -13,7 +13,14 @@
  *
  */
 
+#ifndef GPUVOXELTREE_HAS_BEEN_INCLUDED
+#define GPUVOXELTREE_HAS_BEEN_INCLUDED
+
+
+// cuda
 #include <cuda_runtime.h>
+
+// c++
 #include <stdlib.h>
 #include <vector>
 #include <array>
@@ -41,35 +48,40 @@ struct Voxel {
 
 // to allow for modular tree types
 template<typename ChildNodeType, unsigned int numberOfChildrenPerSide>
-class InternalNode
+class InternalLevel
 {
     public:
-        InternalNode();
-        ~InternalNode();
+        InternalLevel();
+        ~InternalLevel();
 
-        Status getStatus();
     protected:
         static const unsigned int numberOfChildren = numberOfChildrenPerSide * numberOfChildrenPerSide;
 
-        // to be changed to gpu data
-        BoundingBox boundary;
-        std::array<ChildNodeType, numberOfChildren> children;
-        Status status;
+        // single values
+        ChildNodeType* _dev_nextLevelStart; // where to find the next level of tree
+
+        // arrays
+        Status* _dev_childStatuses;
+        unsigned int* _dev_childDelimeters;
 };
 
 // main tree class
-template<typename ChildNodeType>
-class RootNode
+template<typename ChildNodeType, unsigned int numberOfLevels>
+class RootLevel
 {
     public:
-        RootNode();
-        ~RootNode();
+        RootLevel();
+        ~RootLevel();
 
     protected:
-        BoundingBox boundary;
-        std::vector<ChildNodeType> children;
-        Status status;
+        // single values
+        BoundingBox* _dev_boundary; // boundary of complete geometry
+        ChildNodeType* _dev_nextLevelStart; // where to find the next level of tree
 
+
+        // arrays
+        Status* _dev_childStatuses;
+        unsigned int* _dev_childDelimeters;
 };
 
 
@@ -77,9 +89,14 @@ class RootNode
 // helpful trees
 template<typename T, unsigned int N1, unsigned int N2>
 struct Tree3 {
-    typedef RootNode< InternalNode< Voxel<float> , 4 > > Type;
+    typedef RootLevel< InternalLevel< Voxel<float> , 4 > , 3 > Type;
 };
 
+// TODO
+// Now that we know the number of levels at the root node, the GPU kernel can iterate through all the
+// levels by following the pointers. This way we only need to pass the top level object to the GPU (?)
 
+
+#endif // GPUVOXELTREE_HAS_BEEN_INCLUDED
 
 
