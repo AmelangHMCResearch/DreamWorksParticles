@@ -59,6 +59,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <string>
+#include <sys/time.h>
 
 #include "particleSystem.h"
 #include "voxelObject.h"
@@ -67,9 +68,9 @@
 #include "event_timer.h"
 
 // Parameters you might be interested in changing (also command line)
-uint numParticles = 999424;
+uint numParticles = 180424;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 150000; // run until exit
+int numIterations = 1000; // run until exit
 
 bool usingObject = false;
 bool usingSpout = false;
@@ -77,7 +78,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 10;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -115,6 +116,10 @@ bool demoMode = false;
 int idleCounter = 0;
 int demoCounter = 0;
 const int idleDelay = 2000;
+
+// For keeping frame rate consistent
+struct timeval timeOfLastPhysics;
+struct timeval timeOfLastRender; 
 
 enum { M_VIEW = 0, M_MOVE };
 
@@ -201,8 +206,8 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/8.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint cubeSize = 64;    // Dimension of each side of the cube
+        float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 32;    // Dimension of each side of the cube
         float3 origin = make_float3(0.0, 0, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }
@@ -220,6 +225,9 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         renderer = new ParticleRenderer;
         renderer->setParticleRadius(psystem->getParticleRadius());
     }
+
+    gettimeofday(&timeOfLastPhysics, 0);
+    gettimeofday(&timeOfLastRender, 0);
 
 }
 
@@ -258,16 +266,16 @@ void initGL(int *argc, char **argv)
     glutReportErrors();
 }
 
-void computeFPS()
-{
-    frameCount++;
-}
-
 void display()
 {
     // update the simulation
-    if (!bPause)
+    struct timeval currentTime;
+    gettimeofday(&currentTime, 0);
+    double timeDiff = (double)(1000.0 * (currentTime.tv_sec - timeOfLastPhysics.tv_sec)
+                   + (0.001 * (currentTime.tv_usec - timeOfLastPhysics.tv_usec)));
+    if (timeDiff >= timestep)
     {
+        timeOfLastPhysics = currentTime;
         psystem->setDamping(damping);
         psystem->setGravity(-gravity);
         psystem->setCollideSpring(collideSpring);
@@ -284,106 +292,114 @@ void display()
             renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumActiveParticles());
         }
     }
-    // render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // view transform
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
     
-    
-    for (int c = 0; c < 3; ++c)
-    {
-        camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
-        camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
-    }
-    
-#if 0
-    glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
-    glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
-    glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
-#else
-    glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
-    glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
-    glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
-#endif
+    // Do the rendering
+    gettimeofday(&currentTime, 0);
+    timeDiff = (double)(1000.0 * (currentTime.tv_sec - timeOfLastRender.tv_sec)
+                   + (0.001 * (currentTime.tv_usec - timeOfLastRender.tv_usec)));
+    if (timeDiff >= (1.0/60.0) * 1000.0) {
+        timeOfLastRender = currentTime;
+        // render
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
-
-    // cube
-    glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(8.0);
-
-    // now, to draw the voxels.
-    // for each voxel
-    if (voxelObject) {
-      const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
-      const float * voxelPositionArray = voxelObject->getCpuPosArray();
-      const int * activeVoxel = voxelObject->getVoxelStrengthFromGPU();
-      const float voxelSize = voxelObject->getVoxelSize();
-      for (unsigned int voxelIndex = 0;
-           voxelIndex < numberOfVoxels; ++voxelIndex) {
-        if (activeVoxel[voxelIndex]) {
-            // save the matrix state
-            glPushMatrix();
-            // translate for this voxel
-            glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
-                         voxelPositionArray[voxelIndex * 4 + 1],
-                         voxelPositionArray[voxelIndex * 4 + 2]);
-            glColor3f(0.0, 0.0, 0.0);
-            glutWireCube(voxelSize);
-            // reset the matrix state
-            glPopMatrix();
+        // view transform
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        
+        
+        for (int c = 0; c < 3; ++c)
+        {
+            camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
+            camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
         }
-      }
-    }
-
-    // collider
-    /*
-    glPushMatrix();
-    float3 p = psystem->getColliderPos();
-    glTranslatef(p.x, p.y, p.z);
-    glColor3f(1.0, 0.0, 0.0);
-    glutSolidSphere(psystem->getColliderRadius(), 20, 10);
-    glPopMatrix();
-    */
-    if (renderer && displayEnabled)
-    {
-        renderer->setColorBuffer(psystem->getColorBuffer());
-        renderer->setParticleRadius(psystem->getParticleRadius());
-        renderer->setPointSize(psystem->getParticleRadius());
-        renderer->display(displayMode);
-    }
-
+    
 #if 0
-    if (renderer)
-      {
-        renderer->setColorBuffer(voxelObject->getColorBuffer());
-        renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
-        renderer->setParticleRadius(voxelObject->getVoxelSize());
-        renderer->setPointSize(50 * voxelObject->getVoxelSize());
-        renderer->display(displayMode);
-      }
+        glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
+        glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
+        glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+#else
+        glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
+        glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
+        glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
 #endif
 
-    /*
-    if (displaySliders)
-    {
-        glDisable(GL_DEPTH_TEST);
-        glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO); // invert color
-        glEnable(GL_BLEND);
-        params->Render(0, 0);
-        glDisable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
+        glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+
+        // cube
+        glColor3f(1.0, 1.0, 1.0);
+        glutWireCube(8.0);
+
+        // now, to draw the voxels.
+        // for each voxel
+        if (voxelObject) {
+          const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
+          const float * voxelPositionArray = voxelObject->getCpuPosArray();
+          const int * activeVoxel = voxelObject->getVoxelStrengthFromGPU();
+          const float voxelSize = voxelObject->getVoxelSize();
+          for (unsigned int voxelIndex = 0;
+               voxelIndex < numberOfVoxels; ++voxelIndex) {
+            if (activeVoxel[voxelIndex]) {
+                // save the matrix state
+                glPushMatrix();
+                // translate for this voxel
+                glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+                             voxelPositionArray[voxelIndex * 4 + 1],
+                             voxelPositionArray[voxelIndex * 4 + 2]);
+                glColor3f(0.0, 0.0, 0.0);
+                glutWireCube(voxelSize);
+                // reset the matrix state
+                glPopMatrix();
+            }
+          }
+        }
+
+        // collider
+        /*
+        glPushMatrix();
+        float3 p = psystem->getColliderPos();
+        glTranslatef(p.x, p.y, p.z);
+        glColor3f(1.0, 0.0, 0.0);
+        glutSolidSphere(psystem->getColliderRadius(), 20, 10);
+        glPopMatrix();
+        */
+        if (renderer && displayEnabled)
+        {
+            renderer->setColorBuffer(psystem->getColorBuffer());
+            renderer->setParticleRadius(psystem->getParticleRadius());
+            renderer->setPointSize(psystem->getParticleRadius());
+            renderer->display(displayMode);
+        }
+
+#if 0
+        if (renderer)
+          {
+            renderer->setColorBuffer(voxelObject->getColorBuffer());
+            renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
+            renderer->setParticleRadius(voxelObject->getVoxelSize());
+            renderer->setPointSize(50 * voxelObject->getVoxelSize());
+            renderer->display(displayMode);
+          }
+#endif
+
+        /*
+        if (displaySliders)
+        {
+            glDisable(GL_DEPTH_TEST);
+            glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO); // invert color
+            glEnable(GL_BLEND);
+            params->Render(0, 0);
+            glDisable(GL_BLEND);
+            glEnable(GL_DEPTH_TEST);
+        }
+        */
+        
+
+        glutSwapBuffers();
+        glutReportErrors();
+        ++frameCount;
     }
-    */
-    
 
-    glutSwapBuffers();
-    glutReportErrors();
-
-    // Keep track of frames to calculate FPS at end
-    ++frameCount; 
+    // Keep track of frames to calculate FPS at end 
 
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
@@ -808,12 +824,12 @@ main(int argc, char **argv)
     
     initMenus();
     
-    //glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
     glutMotionFunc(motion);
-    // glutKeyboardFunc(key);
+    //glutKeyboardFunc(key);
     // glutSpecialFunc(special);
     glutIdleFunc(idle);
 

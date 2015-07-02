@@ -113,19 +113,25 @@ __device__
 float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
                           float3 voxelPos, int *voxelStrength) 
 {
+    // Note: The current check on active voxels will break down when we have more complex geography
+    // Consider ways to fix it. Also this is a nightmare for warp divergence :(
     float3 relOldPos = particleOldPos - voxelPos;
     float3 relNewPos = particlePos - voxelPos; 
+    // For each of 6 faces: 
     for (int z = -1; z <= 1; ++z) {
         for (int y = -1; y <= 1; ++ y) {
             for (int x = -1; x <= 1; ++x) {
                 if ((x==0 && y==0) || (x==0 && z==0) || (y==0 && z==0)) {
                     float3 direction = make_float3(x, y, z); 
+                    // If we're checking an x face
                     if (direction.x != 0) {
+                        // If the old face is on the outside of this face
                         if (direction.x * relOldPos.x > objParams._voxelSize / 2.0) {
-                            //if (direction.x == 1) printf("Dir: %f, %f, %f RelOld: %f\n", direction.x, direction.y, direction.z, relOldPos.x);
+                            // And if the line between the old and the new intersects the face
                             if (pointsIntersectFace(direction.x * objParams._voxelSize / 2.0, 
                                                      make_float3(relOldPos.x, relOldPos.y, relOldPos.z), 
                                                      make_float3(relNewPos.x, relNewPos.y, relNewPos.z))) {
+                                // If this face is up against an active voxel, try again without that component of the vel. 
                                 if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
                                     float3 newOldPos = make_float3(particlePos.x, particleOldPos.y, particleOldPos.z);
                                     return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
@@ -397,7 +403,7 @@ void integrateSystemD(float4 *pos,
 #endif
 
     // set this to zero to disable collisions with cube sides
-#if 0
+#if 1
     if (threadPos.x > 4.0f - params.particleRadius)
     {
         threadPos.x = 4.0f - params.particleRadius;
