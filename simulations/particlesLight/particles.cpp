@@ -201,8 +201,8 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/1.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint cubeSize = 8;    // Dimension of each side of the cube
+        float voxelSize = 1.0f/8.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint cubeSize = 64;    // Dimension of each side of the cube
         float3 origin = make_float3(0.0, 0, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }

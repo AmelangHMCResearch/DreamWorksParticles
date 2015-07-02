@@ -126,6 +126,10 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                             if (pointsIntersectFace(direction.x * objParams._voxelSize / 2.0, 
                                                      make_float3(relOldPos.x, relOldPos.y, relOldPos.z), 
                                                      make_float3(relNewPos.x, relNewPos.y, relNewPos.z))) {
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particlePos.x, particleOldPos.y, particleOldPos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
                                 return direction;
                             }
                         }
@@ -135,6 +139,10 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                             if (pointsIntersectFace(direction.y * objParams._voxelSize / 2.0, 
                                                      make_float3(relOldPos.y, relOldPos.x, relOldPos.z), 
                                                      make_float3(relNewPos.y, relNewPos.x, relNewPos.z))) {
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particleOldPos.x, particlePos.y, particleOldPos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
                                 return direction;
                             }
                         }
@@ -144,6 +152,10 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                             if (pointsIntersectFace(direction.z * objParams._voxelSize / 2.0, 
                                                      make_float3(relOldPos.z, relOldPos.x, relOldPos.y), 
                                                      make_float3(relNewPos.z, relNewPos.x, relNewPos.y))) {
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particleOldPos.x, particleOldPos.y, particlePos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
                                 return direction;
                             }
                         }
