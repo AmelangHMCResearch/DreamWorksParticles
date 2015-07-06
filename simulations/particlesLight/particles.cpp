@@ -78,7 +78,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 10;
+float timestep = 0.5;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -273,7 +273,7 @@ void display()
     gettimeofday(&currentTime, 0);
     double timeDiff = (double)(1000.0 * (currentTime.tv_sec - timeOfLastPhysics.tv_sec)
                    + (0.001 * (currentTime.tv_usec - timeOfLastPhysics.tv_usec)));
-    if (timeDiff >= timestep)
+    if (timeDiff >= (timestep/0.5) * 10.0)
     {
         timeOfLastPhysics = currentTime;
         psystem->setDamping(damping);
@@ -785,6 +785,10 @@ main(int argc, char **argv)
         if (checkCmdLineFlag(argc, (const char **) argv, "grid"))
         {
             gridSize.x=gridSize.y = gridSize.z = getCmdLineArgumentInt(argc, (const char **) argv, "grid");
+        }
+        if (checkCmdLineFlag(argc, (const char **) argv, "time"))
+        {
+            timestep = getCmdLineArgumentFloat(argc, (const char **) argv, "time");
         }
 
         if (checkCmdLineFlag(argc, (const char **) argv, "i"))
