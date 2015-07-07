@@ -77,7 +77,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.1f;
+float timestep = 0.075f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -87,15 +87,15 @@ float collideDamping = 0.02f;;
 float collideShear = 0.1f;
 float collideAttraction = 0.0f;
 
-const uint width = 640, height = 480;
+const uint width = 640*2, height = 480*2;
 
 // view params
 int ox, oy;
 int buttonState = 0;
 #if 0
 // these are debugging values for the camera location
-float camera_trans[] = {0, 3, -15.0};
-float camera_rot[]   = {1, 56.6, 0};
+float camera_trans[] = {0, 0, -1.5};
+float camera_rot[]   = {-3.6, -73.4, 0};
 #else
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
@@ -277,7 +277,8 @@ void display()
         psystem->setRotation(camera_rot);
         psystem->setTranslation(camera_trans);
 
-        psystem->update(timestep, voxelObject);
+        const unsigned int timestepIndex = frameCount;
+        psystem->update(timestep, timestepIndex, voxelObject);
 
         if (renderer)
         {
@@ -306,6 +307,14 @@ void display()
     glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
     glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
     glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
+#endif
+#if 0
+    printf("camera = (%5.1f %5.1f %5.1f) (%5.1f %5.1f)\n",
+           camera_trans[0],
+           camera_trans[1],
+           camera_trans[2],
+           camera_rot[0],
+           camera_rot[1]);
 #endif
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
@@ -388,7 +397,9 @@ void display()
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
-        glutLeaveMainLoop();
+#ifndef __APPLE__
+      glutLeaveMainLoop();
+#endif
     }
 }
 
@@ -580,6 +591,7 @@ void motion(int x, int y)
 // commented out to remove unused parameter warnings in Linux
 void key(unsigned char key, int /*x*/, int /*y*/)
 {
+    const unsigned int timestepIndex = frameCount;
     switch (key)
     {
         case ' ':
@@ -587,7 +599,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
             break;
 
         case 13:
-            psystem->update(timestep, voxelObject);
+            psystem->update(timestep, timestepIndex, voxelObject);
 
             if (renderer)
             {

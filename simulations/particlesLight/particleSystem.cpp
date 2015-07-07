@@ -35,8 +35,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _numParticles(numParticles),
     _numActiveParticles(0),
     _posAfterLastSortIsValid(false),
-    _numTimesteps(0),
-    _initialVel(0.3f),
+    _spoutParticleInitialVelocity(0.3f),
     _pos(0),
     _vel(0),
     _cellStart(0),
@@ -69,6 +68,11 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.limitParticleLifeByTime = limitLifeByTime;
     _params.maxIterations = 1000;
     _params.maxDistance = -3.0f;
+    _spoutRadius                        = 0.15f;
+    _spoutParticleJitterPercentOfRadius = 0.5f;
+    _spoutOutOfPlaneOffset              = 0.60f;
+    _spoutInPlaneVerticalOffset         = 0.50f;
+    initializeSpout();
 
     _params.worldOrigin = make_float3(0.0f, 0.0f, 0.0f);
     float cellSize = 8.0f / (float) _gridSize.x;  // cell size equal to particle diameter
@@ -252,26 +256,17 @@ ParticleSystem::_finalize()
 
 // step the simulation
 void
-ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
+ParticleSystem::update(const float deltaTime,
+                       const unsigned int timestepIndex,
+                       VoxelObject * voxelObject)
 {
     assert(_systemInitialized);
 
     if (_params.usingSpout) {
-        if (_numTimesteps * deltaTime * _initialVel > 2 * _params.particleRadius ||
-            _numActiveParticles == 0) {
-            _numTimesteps = 0;
-            const float spoutRadius = 0.5f;
-            const float spoutOutOfPlaneOffset = 1.0f;
-            const float spoutInPlaneVerticalOffset = .5f;
-            // Room for jitter as a percentage of particle radius
-            const float particleJitterPercentOfRadius = 0.1f;
-            addParticles(spoutRadius,
-                         spoutOutOfPlaneOffset,
-                         spoutInPlaneVerticalOffset,
-                         particleJitterPercentOfRadius);
-        }
-
-        ++_numTimesteps;
+        // we always call addSpoutParticles, and it figures out if there
+        //  are particles to add.
+        addSpoutParticles(timestepIndex,
+                          deltaTime);
     }
 
     float *dPos;
@@ -554,20 +549,21 @@ float3 normalize(const float3 & a) {
 }
 
 // Generates grid with side length radius based on hexagonal dense packing pattern
-std::vector<float2> genParticlePos(float particleRadius, float radius)
-{
+std::vector<float2>
+generateHexagonalClosePackedPositions(const float particleRadius,
+                                      const float cutoffRadius) {
     std::vector<float2> grid;
     const float cellWidth  = 2 * particleRadius;
     const float cellLength = 2 * sqrt(3 * particleRadius * particleRadius);
-    const uint gridWidth   = ceil(2 * radius / cellWidth) + 2;
-    const uint gridLength  = ceil(2 * radius / cellLength) + 2;
+    const uint gridWidth   = ceil(2 * cutoffRadius / cellWidth) + 2;
+    const uint gridLength  = ceil(2 * cutoffRadius / cellLength) + 2;
     // avoid all the intermediate mallocs
     grid.reserve(gridWidth * gridLength * 2);
     for (int i = 0; i < gridLength; ++i) {
         for (int j = 0; j < gridWidth; ++j) {
             const float2 newIntersection =
-              make_float2(-1.0 * radius + j * cellWidth,
-                          -1.0 * radius + i * cellLength);
+              make_float2(-1.0 * cutoffRadius + j * cellWidth,
+                          -1.0 * cutoffRadius + i * cellLength);
             grid.push_back(newIntersection);
             if (i > 0 && j > 0) {
                 const float2 center =
@@ -579,7 +575,7 @@ std::vector<float2> genParticlePos(float particleRadius, float radius)
     }
     std::vector<float2>::iterator i = grid.begin();
     while (i != grid.end()) {
-        if (findRadius(*i) > radius) {
+        if (findRadius(*i) > cutoffRadius) {
             i = grid.erase(i);
         } else {
             ++i;
@@ -589,106 +585,156 @@ std::vector<float2> genParticlePos(float particleRadius, float radius)
 }
 
 void
-ParticleSystem::addParticles(const float spoutRadius,
-                             const float spoutOutOfPlaneOffset,
-                             const float spoutInPlaneVerticalOffset,
-                             const float particleJitterPercentOfRadius)
-{
+ParticleSystem::initializeSpout() {
+  const float jitterDistance =
+    _params.particleRadius * _spoutParticleJitterPercentOfRadius;
+  const std::vector<float2> positionsOfNewParticlesInThePlane =
+    generateHexagonalClosePackedPositions(_params.particleRadius + jitterDistance,
+                                          _spoutRadius);
+  const float timeForParticlesToClearSpout =
+    (2 * _params.particleRadius) / _spoutParticleInitialVelocity;
+  _spoutParticleData.resize(0);
+  for (unsigned int positionNumber = 0;
+       positionNumber < positionsOfNewParticlesInThePlane.size();
+       ++positionNumber) {
+    SpoutParticleData thisSpoutParticleData;
+    thisSpoutParticleData._position =
+      positionsOfNewParticlesInThePlane[positionNumber];
+    thisSpoutParticleData._insertionTimeOffset =
+      frand() * timeForParticlesToClearSpout;
+    _spoutParticleData.push_back(thisSpoutParticleData);
+  }
 
-    const float3 unrotatedCameraPosition = -1. * _translation;
-    float3 rotations = _rotation;
-    rotations.x = rotations.x * (3.141592/180.0);
-    rotations.y = rotations.y * (3.141592/180.0);
+}
 
-    // rotation matrices are the transpose (inverse) of what we apply to
-    //  drawing.
-    float3 xRotation[3] = {make_float3(1, 0, 0),
-                          make_float3(0, cos(rotations.x), sin(rotations.x)),
-                          make_float3(0, -1.0 * sin(rotations.x), cos(rotations.x))};
-    float3 yRotation[3] = {make_float3(cos(rotations.y), 0, -1.0 * sin(rotations.y)),
-                          make_float3(0, 1, 0),
-                          make_float3(sin(rotations.y), 0, cos(rotations.y))};
+void
+ParticleSystem::addSpoutParticles(const unsigned int timestepIndex,
+                                  const float deltaTime) {
 
-    // we apply x, then y because of the rules of transpose.
-    // when drawing, we do T*Rx*Ry.
-    // we now want to do the inverse, which is the transpose of the rotations.
-    // that means we need (Rx*Ry)^T, which is Ry^T*Rx^T.
-    // so, we first apply transposed x rotation, then transposed y.
-    const float3 cameraPosition =
-      rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
-
-    const float jitterDistance =
-      _params.particleRadius * particleJitterPercentOfRadius;
-
-    const std::vector<float2> positionsOfNewParticlesInThePlane =
-      genParticlePos(_params.particleRadius + jitterDistance, 0.15f);
-
-    uint newNumParticles;
-    uint amountToCopy;
-    _spoutSize = positionsOfNewParticlesInThePlane.size();
-    if (_numActiveParticles + _spoutSize < _numParticles) {
-        newNumParticles = _numActiveParticles + _spoutSize;
-        amountToCopy = _spoutSize;
+    // first, determine which particles we need to add this timestep
+    std::vector<float2> nominalPositionsOfSpoutParticlesToAdd;
+    nominalPositionsOfSpoutParticlesToAdd.reserve(_spoutParticleData.size());
+    const float timeForParticlesToClearSpout =
+      (2 * _params.particleRadius) / _spoutParticleInitialVelocity;
+    for (unsigned int spoutParticleDataIndex = 0;
+         spoutParticleDataIndex < _spoutParticleData.size();
+         ++spoutParticleDataIndex) {
+      const SpoutParticleData & spoutParticleData =
+        _spoutParticleData[spoutParticleDataIndex];
+      const unsigned int lastInsertionNumber =
+        ((timestepIndex - 1) * deltaTime - spoutParticleData._insertionTimeOffset) /
+        timeForParticlesToClearSpout;
+      const unsigned int thisInsertionNumber =
+        (timestepIndex * deltaTime - spoutParticleData._insertionTimeOffset) /
+        timeForParticlesToClearSpout;
+      if (thisInsertionNumber > lastInsertionNumber) {
+        nominalPositionsOfSpoutParticlesToAdd.push_back(spoutParticleData._position);
+      }
     }
-    else {
-        newNumParticles = _numParticles;
-        amountToCopy = _numParticles - _numActiveParticles;
+    const unsigned int numberOfSpoutParticles =
+      nominalPositionsOfSpoutParticlesToAdd.size();
+
+
+    // only do the rest if we actually have to add particles
+    if (numberOfSpoutParticles > 0) {
+      // now, determine where the camera is and where it's facing
+      const float3 unrotatedCameraPosition = -1. * _translation;
+      float3 rotations = _rotation;
+      rotations.x = rotations.x * (3.141592/180.0);
+      rotations.y = rotations.y * (3.141592/180.0);
+      // rotation matrices are the transpose (inverse) of what we apply to
+      //  drawing.
+      float3 xRotation[3] = {make_float3(1, 0, 0),
+                             make_float3(0, cos(rotations.x), sin(rotations.x)),
+                             make_float3(0, -1.0 * sin(rotations.x), cos(rotations.x))};
+      float3 yRotation[3] = {make_float3(cos(rotations.y), 0, -1.0 * sin(rotations.y)),
+                             make_float3(0, 1, 0),
+                             make_float3(sin(rotations.y), 0, cos(rotations.y))};
+      // we apply x, then y because of the rules of transpose.
+      // when drawing, we do T*Rx*Ry.
+      // we now want to do the inverse, which is the transpose of the rotations.
+      // that means we need (Rx*Ry)^T, which is Ry^T*Rx^T.
+      // so, we first apply transposed x rotation, then transposed y.
+      const float3 cameraPosition =
+        rotatePoint(yRotation, rotatePoint(xRotation, unrotatedCameraPosition));
+      // determine the camera rotation, which ignores the translations
+      const float3 cameraDirection =
+        rotatePoint(yRotation, rotatePoint(xRotation,
+                                           make_float3(0.f, 0.f, -1.f)));
+
+
+
+      // now, determine where the spout should be and where it's pointing.
+      // first, form the 3d direction which represents straight down on the screen
+      float3 spoutScreenVerticalDirection = make_float3(0.f, -1.f, 0.f);
+      spoutScreenVerticalDirection =
+        spoutScreenVerticalDirection -
+        dotProduct(spoutScreenVerticalDirection,
+                   cameraDirection) * cameraDirection;
+      spoutScreenVerticalDirection =
+        normalize(spoutScreenVerticalDirection);
+      // now, the spout is the camera position plus some offset down the screen
+      const float3 spoutPosition =
+        cameraPosition +
+        _spoutInPlaneVerticalOffset * spoutScreenVerticalDirection +
+        _spoutOutOfPlaneOffset * cameraDirection;
+      const float3 spoutDirection = cameraDirection;
+
+
+
+      // goal: make two axes within the plane of the spout's exit
+      // strategy: use gram-schmidt orthogonalization
+      //float3 axis1 = make_float3(frand(), frand(), frand());
+      float3 axis1 = make_float3(1.0f, 0.0f, 0.0f);
+      //float3 axis1 = make_float3(1.f, 0.f, 0.f);
+      // subtract off component in same direction as camera
+      const float originalAxis1DotSpoutDirection =
+        dotProduct(axis1, spoutDirection);
+      axis1 = axis1 - originalAxis1DotSpoutDirection * spoutDirection;
+      // axis1 is now orthogonal to spoutDirection
+      axis1 = normalize(axis1);
+      // axis1 is now normal and ready to use
+      // now, form a second axis by taking the cross product of the two we have
+      const float3 axis2 = crossProduct(spoutDirection, axis1);
+
+      // determine the new number of particles and how many particles we
+      //  have to copy
+      uint newNumberOfParticles;
+      uint numberOfParticlesToCopy;
+      if (_numActiveParticles + numberOfSpoutParticles < _numParticles) {
+        newNumberOfParticles = _numActiveParticles + numberOfSpoutParticles;
+        numberOfParticlesToCopy = numberOfSpoutParticles;
+      } else {
+        newNumberOfParticles = _numParticles;
+        numberOfParticlesToCopy = _numParticles - _numActiveParticles;
+      }
+
+      // finally, add the particles
+      // use the camera direction as the initial velocity direction
+      const float3 spoutVelocity =
+        _spoutParticleInitialVelocity * spoutDirection;
+      const float jitterDistance =
+        _params.particleRadius * _spoutParticleJitterPercentOfRadius;
+      for (unsigned int i = 0;
+           i < newNumberOfParticles - _numActiveParticles; ++i) {
+          const float3 newParticlesPosition =
+            spoutPosition +
+            nominalPositionsOfSpoutParticlesToAdd[i].x * axis1 +
+            nominalPositionsOfSpoutParticlesToAdd[i].y * axis2;
+          _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
+          _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
+          _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
+          _pos[i*4+3] = 1.0f;
+          _vel[i*4+0] = spoutVelocity.x;
+          _vel[i*4+1] = spoutVelocity.y;
+          _vel[i*4+2] = spoutVelocity.z;
+          _vel[i*4+3] = 0.0f;
+        }
+
+      setArray(POSITION, _pos, _numActiveParticles, numberOfParticlesToCopy);
+      setArray(VELOCITY, _vel, _numActiveParticles, numberOfParticlesToCopy);
+      _numActiveParticles = newNumberOfParticles;
     }
-
-    const float3 cameraDirection =
-      rotatePoint(yRotation, rotatePoint(xRotation,
-                                         make_float3(0.f, 0.f, -1.f)));
-
-    // form the 3d direction which represents straight down on the screen
-    float3 spoutScreenVerticalDirection = make_float3(0.f, -1.f, 0.f);
-    spoutScreenVerticalDirection =
-      spoutScreenVerticalDirection -
-      dotProduct(spoutScreenVerticalDirection,
-                 cameraDirection) * cameraDirection;
-    spoutScreenVerticalDirection =
-      normalize(spoutScreenVerticalDirection);
-    // now, the spout is the camera position plus some offset down the screen
-    const float3 spoutPosition =
-      cameraPosition +
-      spoutInPlaneVerticalOffset * spoutScreenVerticalDirection +
-      spoutOutOfPlaneOffset * cameraDirection;
-    const float3 spoutDirection = cameraDirection;
-
-    // goal: make two axes within the plane of the spout's exit
-    // strategy: use gram-schmidt orthogonalization
-    float3 axis1 = make_float3(frand(), frand(), frand());
-    //float3 axis1 = make_float3(1.f, 0.f, 0.f);
-    // subtract off component in same direction as camera
-    const float originalAxis1DotSpoutDirection =
-      dotProduct(axis1, spoutDirection);
-    axis1 = axis1 - originalAxis1DotSpoutDirection * spoutDirection;
-    // axis1 is now orthogonal to spoutDirection
-    axis1 = normalize(axis1);
-    // axis1 is now normal and ready to use
-    // now, form a second axis by taking the cross product of the two we have
-    const float3 axis2 = crossProduct(spoutDirection, axis1);
-
-    // use the camera direction as the initial velocity direction
-    const float3 newVel = scalarMult(_initialVel, spoutDirection);
-    for (int i = 0; i < newNumParticles - _numActiveParticles; ++i)
-    {
-        const float3 newParticlesPosition =
-          spoutPosition +
-          positionsOfNewParticlesInThePlane[i].x * axis1 +
-          positionsOfNewParticlesInThePlane[i].y * axis2;
-        _pos[i*4+0] = newParticlesPosition.x + (-1.f + 2.f * frand()) * jitterDistance;
-        _pos[i*4+1] = newParticlesPosition.y + (-1.f + 2.f * frand()) * jitterDistance;
-        _pos[i*4+2] = newParticlesPosition.z + (-1.f + 2.f * frand()) * jitterDistance;
-        _pos[i*4+3] = 1.0f;
-        _vel[i*4+0] = 1.0 * newVel.x;
-        _vel[i*4+1] = 1.0 * newVel.y;
-        _vel[i*4+2] = 1.0 * newVel.z;
-        _vel[i*4+3] = 0.0f;
-    }
-
-    setArray(POSITION, _pos, _numActiveParticles, amountToCopy);
-    setArray(VELOCITY, _vel, _numActiveParticles, amountToCopy);
-    _numActiveParticles = newNumParticles;
 }
 
 void

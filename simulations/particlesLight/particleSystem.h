@@ -39,7 +39,9 @@ class ParticleSystem
             VELOCITY,
         };
 
-        void update(float deltaTime, VoxelObject *voxelObject);
+        void update(const float deltaTime,
+                    const unsigned int timestepIndex,
+                    VoxelObject *voxelObject);
         void reset(ParticleConfig config);
 
         void   setArray(ParticleArray array, const float *data, int start, int count);
@@ -165,11 +167,9 @@ class ParticleSystem
         void _finalize();
 
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
-        void initSpout(float spoutRadius, float jitter, uint numParticles);
-        void addParticles(const float spoutRadius,
-                          const float spoutInPlaneOffset,
-                          const float spoutVerticalOffset,
-                          const float particleJitterPercentOfRadius);
+        void initializeSpout();
+        void addSpoutParticles(const unsigned int timestepIndex,
+                               const float deltaTime);
 
     protected: // data
         bool _systemInitialized; 
@@ -189,9 +189,17 @@ class ParticleSystem
         // Spout Movement Information
         float3 _rotation;
         float3 _translation;
-        uint _spoutSize;
         uint _numTimesteps;
-        float _initialVel;
+        float _spoutParticleInitialVelocity;
+        float _spoutRadius;;
+        float _spoutParticleJitterPercentOfRadius;
+        float _spoutOutOfPlaneOffset;
+        float _spoutInPlaneVerticalOffset;
+        struct SpoutParticleData {
+          float2 _position;
+          float _insertionTimeOffset;
+        };
+        std::vector<SpoutParticleData> _spoutParticleData;
 
 
 
