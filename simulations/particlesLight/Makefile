@@ -134,9 +134,13 @@ HOST_COMPILER ?= g++
 ifeq ($(HOST_NAME),treebeard)
 	NVCC          := /usr/local/cuda/bin/nvcc
 	NVCCFLAGS   := -O2 --compiler-bindir="/usr/bin" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
+else ifeq ($(HOST_NAME),shadowfax)
+	NVCC := /opt/cuda/bin/nvcc
+	NVCCFLAGS   := -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
 else
-	NVCC ?= /opt/cuda/bin/nvcc
-	NVCCFLAGS   ?= -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
+	NVCC := /usr/local/cuda/bin/nvcc
+	#NVCCFLAGS   := -O2 --compiler-bindir="g++" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
+	NVCCFLAGS   := -O2 --compiler-bindir="g++" --compiler-options="-O2 -pipe -march=native" -m${TARGET_SIZE}
 endif
 
 
@@ -216,8 +220,12 @@ endif
 # Gencode arguments
 ifeq ($(TARGET_ARCH),armv7l)
 SMS ?= 20 30 32 35 37 50 52
-else
+else ifeq ($(HOST_NAME),treebeard)
 SMS ?= 20 30 35 37 50 52
+else ifeq ($(HOST_NAME),shadowfax)
+SMS ?= 20 30 35 37 50 52
+else
+SMS ?= 20 30 35
 endif
 
 ifeq ($(SMS),)
