@@ -403,7 +403,7 @@ void integrateSystemD(float4 *pos,
 #endif
 
     // set this to zero to disable collisions with cube sides
-#if 1
+#if 0
     if (threadPos.x > 4.0f - params.particleRadius)
     {
         threadPos.x = 4.0f - params.particleRadius;

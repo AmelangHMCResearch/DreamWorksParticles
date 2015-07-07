@@ -109,7 +109,8 @@ ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
 
 int mode = 0;
 bool displayEnabled = true;
-bool bPause = false;
+bool pauseSpout = false;
+bool moveSpout = true;
 bool displaySliders = false;
 bool wireframe = false;
 bool demoMode = false;
@@ -285,7 +286,7 @@ void display()
         psystem->setRotation(camera_rot);
         psystem->setTranslation(camera_trans);
 
-        psystem->update(timestep, voxelObject);
+        psystem->update(timestep, voxelObject, pauseSpout, moveSpout);
 
         if (renderer)
         {
@@ -598,11 +599,11 @@ void key(unsigned char key, int /*x*/, int /*y*/)
 {
     switch (key)
     {
-        case ' ':
+        /*case ' ':
             bPause = !bPause;
-            break;
+            break; */
 
-        case 13:
+        /*case 13:
             psystem->update(timestep, voxelObject);
 
             if (renderer)
@@ -610,7 +611,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
                 renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
             }
 
-            break;
+            break;*/
 
         case '\033':
         case 'q':
@@ -620,20 +621,20 @@ void key(unsigned char key, int /*x*/, int /*y*/)
                 glutDestroyWindow(glutGetWindow());
                 return;
             #endif
-        case 'v':
-            mode = M_VIEW;
-            break;
-
         case 'm':
-            mode = M_MOVE;
+            moveSpout = !moveSpout;
             break;
 
         case 'p':
+            pauseSpout = !pauseSpout;
+            break;
+
+        case 'd':
             displayMode = (ParticleRenderer::DisplayMode)
                           ((displayMode + 1) % ParticleRenderer::PARTICLE_NUM_MODES);
             break;
 
-        case 'd':
+        /*case 'd':
             psystem->dumpGrid();
             break;
 
@@ -685,7 +686,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
 
         case 'h':
             displaySliders = !displaySliders;
-            break;
+            break; */
     }
 
     demoMode = false;
@@ -817,6 +818,8 @@ main(int argc, char **argv)
 
     printf("grid: %d x %d x %d = %d cells\n", gridSize.x, gridSize.y, gridSize.z, gridSize.x*gridSize.y*gridSize.z);
     printf("particles: %d\n", numParticles);
+    printf("Usage: Press m to move or stop moving the spout with the camera.\n");
+    printf("Press p to pause or unpause particles coming out of the spout.\n");
 
 
     initGL(&argc, argv);
@@ -833,7 +836,7 @@ main(int argc, char **argv)
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
     glutMotionFunc(motion);
-    //glutKeyboardFunc(key);
+    glutKeyboardFunc(key);
     // glutSpecialFunc(special);
     glutIdleFunc(idle);
 

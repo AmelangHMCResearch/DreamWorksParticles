@@ -39,7 +39,7 @@ class ParticleSystem
             VELOCITY,
         };
 
-        void update(float deltaTime, VoxelObject *voxelObject);
+        void update(float deltaTime, VoxelObject *voxelObject, bool pauseSpout, bool moveSpout);
         void reset(ParticleConfig config);
 
         void   setArray(ParticleArray array, const float *data, int start, int count);
@@ -169,7 +169,8 @@ class ParticleSystem
         void addParticles(const float spoutRadius,
                           const float spoutInPlaneOffset,
                           const float spoutVerticalOffset,
-                          const float particleJitterPercentOfRadius);
+                          const float particleJitterPercentOfRadius,
+                          const bool  moveSpout);
 
     protected: // data
         bool _systemInitialized; 
