@@ -261,13 +261,13 @@ ParticleSystem::update(float deltaTime, VoxelObject *voxelObject)
             _numActiveParticles == 0) {
             _numTimesteps = 0;
             const float spoutRadius = 0.5f;
-            const float spoutInPlaneOffset = 0.0f;
-            const float spoutVerticalOffset = .5f;
+            const float spoutOutOfPlaneOffset = 1.0f;
+            const float spoutInPlaneVerticalOffset = .5f;
             // Room for jitter as a percentage of particle radius
             const float particleJitterPercentOfRadius = 0.1f;
             addParticles(spoutRadius,
-                         spoutInPlaneOffset,
-                         spoutVerticalOffset,
+                         spoutOutOfPlaneOffset,
+                         spoutInPlaneVerticalOffset,
                          particleJitterPercentOfRadius);
         }
 
@@ -590,8 +590,8 @@ std::vector<float2> genParticlePos(float particleRadius, float radius)
 
 void
 ParticleSystem::addParticles(const float spoutRadius,
-                             const float spoutInPlaneOffset,
-                             const float spoutVerticalOffset,
+                             const float spoutOutOfPlaneOffset,
+                             const float spoutInPlaneVerticalOffset,
                              const float particleJitterPercentOfRadius)
 {
 
@@ -635,7 +635,9 @@ ParticleSystem::addParticles(const float spoutRadius,
         amountToCopy = _numParticles - _numActiveParticles;
     }
 
-    const float3 cameraDirection = -1 * normalize(cameraPosition);
+    const float3 cameraDirection =
+      rotatePoint(yRotation, rotatePoint(xRotation,
+                                         make_float3(0.f, 0.f, -1.f)));
 
     // form the 3d direction which represents straight down on the screen
     float3 spoutScreenVerticalDirection = make_float3(0.f, -1.f, 0.f);
@@ -648,9 +650,9 @@ ParticleSystem::addParticles(const float spoutRadius,
     // now, the spout is the camera position plus some offset down the screen
     const float3 spoutPosition =
       cameraPosition +
-      spoutVerticalOffset * spoutScreenVerticalDirection +
-      spoutInPlaneOffset * cameraDirection;
-    const float3 spoutDirection = -1 * normalize(spoutPosition);
+      spoutInPlaneVerticalOffset * spoutScreenVerticalDirection +
+      spoutOutOfPlaneOffset * cameraDirection;
+    const float3 spoutDirection = cameraDirection;
 
     // goal: make two axes within the plane of the spout's exit
     // strategy: use gram-schmidt orthogonalization
