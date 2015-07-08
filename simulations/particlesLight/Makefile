@@ -100,7 +100,7 @@ ifeq ($(TARGET_OS),darwin)
     ifeq ($(shell expr `xcodebuild -version | grep -i xcode | awk '{print $$2}' | cut -d'.' -f1` \>= 5),1)
         HOST_COMPILER ?= clang++
         NVCC ?= /Developer/NVIDIA/CUDA-7.0/bin/nvcc -ccbin $(HOST_COMPILER)
-        NVCCFLAGS ?= -m${TARGET_SIZE} --compiler-options "-framework OpenGL"
+        NVCCFLAGS ?= -m${TARGET_SIZE} --compiler-options ""
     endif
 else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)

@@ -65,7 +65,7 @@ class InternalLevel
         unsigned int* _dev_childDelimeters;
 };
 
-// main tree class
+// root of tree
 template<typename ChildNodeType, unsigned int numberOfLevels>
 class RootLevel
 {
@@ -85,7 +85,6 @@ class RootLevel
 };
 
 
-
 // helpful trees
 template<typename T, unsigned int N1, unsigned int N2>
 struct Tree3 {
@@ -95,6 +94,49 @@ struct Tree3 {
 // TODO
 // Now that we know the number of levels at the root node, the GPU kernel can iterate through all the
 // levels by following the pointers. This way we only need to pass the top level object to the GPU (?)
+
+
+
+// Note: I think that we should actually go with the class below instead of the templated version.
+//       the only major difference from a usage perspective is a slightly less stdlib-y
+//       constructor, but everything looks much better from both an implementation an performance
+//       prospective. For example, we don't have to chase nearly as many pointers to get to the
+//       voxel level as we would have while using the templated version.
+
+class VoxelTree
+{
+    public: 
+        VoxelTree();
+        VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel);
+
+        ~VoxelTree();
+
+        void initialize(); // TODO: Needs arguments (input VDB?)
+        unsigned int getNumberOfLevels();
+        std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
+
+    private:
+        // status checking functions
+        bool isInitialized();
+        bool hasVoxelData();
+        
+
+    protected:
+        // scalar values
+        unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
+
+        // 
+        unsigned int*  _dev_numberOfCellsPerSideForLevel; // TODO: constant memory
+
+        // data
+        unsigned int** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
+        unsigned int** _dev_pointersToLevelDelimeters; // TODO: store pointers to global (texture?) memory in constant memory
+        float*  _dev_voxels; // TODO: global or texture memory      
+};
+
+
+
+
 
 
 #endif // GPUVOXELTREE_HAS_BEEN_INCLUDED
