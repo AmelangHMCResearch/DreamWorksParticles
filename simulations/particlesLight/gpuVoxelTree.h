@@ -106,14 +106,14 @@ struct Tree3 {
 class VoxelTree
 {
     public: 
-        VoxelTree();
         VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel);
 
         ~VoxelTree();
 
-        void initialize(); // TODO: Needs arguments (input VDB?)
+        void initializeTree(); // TODO: Needs arguments (input VDB?)
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
+
 
     private:
         // status checking functions
@@ -122,15 +122,21 @@ class VoxelTree
         
 
     protected:
+        // CPU values
+        bool _isInitialized;
+        bool _numberOfLevels;
+        vector<unsigned int> _numberOfCellsPerSideForLevel;
+
         // scalar values
         unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
+        BoundingBox*  _dev_boundary; // TODO: allocate in constant memory
 
-        // 
+        // configuration data
         unsigned int*  _dev_numberOfCellsPerSideForLevel; // TODO: constant memory
 
         // data
         unsigned int** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
-        unsigned int** _dev_pointersToLevelDelimeters; // TODO: store pointers to global (texture?) memory in constant memory
+        unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
         float*  _dev_voxels; // TODO: global or texture memory      
 };
 
