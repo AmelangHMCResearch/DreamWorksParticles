@@ -51,7 +51,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _dev_numParticlesToRemove(0),
     dummy_iterationsSinceLastResort(0)
 {
-    _timer = new EventTimer(6); 
+    _timer = new EventTimer(7); 
     _numGridCells = _gridSize.x * _gridSize.y * _gridSize.z;
 
     // set simulation parameters
@@ -364,6 +364,15 @@ ParticleSystem::update(const float deltaTime,
     } else {
         _numActiveParticles = 0;
     }
+
+    calcDensities(dPos,
+                  _dev_force,
+                  _dev_cellIndex,
+                  _dev_cellStart,
+                  _dev_cellEnd,
+                  _numActiveParticles,
+                  _numGridCells,
+                  _timer);
 
     // process collisions
     collide(dPos,

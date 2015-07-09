@@ -72,6 +72,14 @@ extern "C"
                                      uint   numParticles,
                                      uint   numCells,
                                      EventTimer* timer);
+    void calcDensities(float  *pos,
+                       float  *force,
+                       uint   *cellIndex,
+                       uint   *cellStart,
+                       uint   *cellEnd,
+                       uint    numParticles,
+                       uint    numCells,
+                       EventTimer *timer);
 
     void collide(float *pos,
                  float *vel,

@@ -68,8 +68,8 @@
 
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 999424;
-uint3 gridSize = {256, 256, 256};
-int numIterations = 150000; // run until exit
+uint3 gridSize = {128, 128, 128};
+int numIterations = 1500000; // run until exit
 
 bool usingObject = false;
 bool usingSpout = false;
@@ -77,12 +77,12 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.075f;
+float timestep = 0.01f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
 
-float collideSpring = 0.5f;;
+float collideSpring = 0.1f;
 float collideDamping = 0.02f;;
 float collideShear = 0.1f;
 float collideAttraction = 0.0f;
@@ -213,7 +213,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         config = ParticleSystem::CONFIG_SPOUT;
     }
     psystem->reset(config);
-    psystem->startTimer(5);
+    psystem->startTimer(6);
 
     if (bUseOpenGL)
     {
@@ -832,7 +832,7 @@ main(int argc, char **argv)
     //glutCloseFunc(cleanup);
     glutMainLoop();
 
-    psystem->stopTimer(5);
+    psystem->stopTimer(6);
     float* times = psystem->getTime();
     writeTimes(times, "broadcastTimings", numParticles, gridSize.x);
 
