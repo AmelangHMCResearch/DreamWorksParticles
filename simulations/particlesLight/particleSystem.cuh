@@ -81,11 +81,23 @@ extern "C"
                        uint    numCells,
                        EventTimer *timer);
 
+    void calcNormals(float *pos,
+                float *force,
+                float *normals,
+                uint  *cellIndex,
+                uint  *cellStart,
+                uint  *cellEnd,
+                uint   numParticles,
+                uint   numCells,
+                EventTimer *timer);
+
+
     void collide(float *pos,
                  float *vel,
                  float *force,
                  bool  *activeVoxel,
                  float *voxelPos,
+                 float *normals,
                  uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,

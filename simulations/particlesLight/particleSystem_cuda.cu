@@ -331,11 +331,56 @@ extern "C"
 
     }
 
+    void calcNormals(float *pos,
+                float *force,
+                float *normals,
+                uint  *cellIndex,
+                uint  *cellStart,
+                uint  *cellEnd,
+                uint   numParticles,
+                uint   numCells,
+                EventTimer *timer)
+    {
+        if (numParticles == 0) {
+            return;
+        }
+#if USE_TEX
+        checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
+        checkCudaErrors(cudaBindTexture(0, cellStartTex, cellStart, numCells*sizeof(uint)));
+        checkCudaErrors(cudaBindTexture(0, cellEndTex, cellEnd, numCells*sizeof(uint)));
+#endif
+        // thread per particle
+        uint numThreads, numBlocks;
+        computeGridSize(numParticles, 256, numBlocks, numThreads);
+
+        // execute the kernel
+        timer->startTimer(4, true);
+        calcNormalsD<<< numBlocks, numThreads >>>((float4 *)pos,
+                                                  (float4 *)force,
+                                                   normals,
+                                                   cellIndex,
+                                                   cellStart,
+                                                   cellEnd,
+                                                   numParticles);
+        timer->stopTimer(4, true);
+    
+        // check if kernel invocation generated an error
+        getLastCudaError("Kernel execution failed");
+
+#if USE_TEX
+        checkCudaErrors(cudaUnbindTexture(posTex));
+        checkCudaErrors(cudaUnbindTexture(cellStartTex));
+        checkCudaErrors(cudaUnbindTexture(cellEndTex));
+#endif
+
+    }
+
     void collide(float *pos,
                  float *vel,
                  float *force,
                  bool  *activeVoxel,
                  float *voxelPos,
+                 float *normals,
                  uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,
@@ -365,6 +410,7 @@ extern "C"
                                               (float4 *)force,
                                               activeVoxel,
                                               (float4 *) voxelPos,
+                                              normals,
                                               cellIndex,
                                               cellStart,
                                               cellEnd,

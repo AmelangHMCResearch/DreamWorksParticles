@@ -209,7 +209,6 @@ void integrateSystemD(float4 *pos,
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
 
     threadVel += threadForce / density * deltaTime / 2;
-    threadVel *= params.globalDamping;
     threadVel += params.gravity * deltaTime;
 
     // new position = old position + velocity * deltaTime
@@ -238,19 +237,19 @@ void integrateSystemD(float4 *pos,
                 }
                 if (direction.x != 0.0) {
                     if (threadVel.x * direction.x < 0) {
-                        threadVel.x *= -1.0;
+                        threadVel.x *= -1.0 * params.globalDamping;
                     }
                     threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 + 0.0001);
                 }
                 else if (direction.y != 0.0) {
                     if (threadVel.y * direction.y < 0) {
-                        threadVel.y *= -1.0;
+                        threadVel.y *= -1.0 * params.globalDamping;
                     }
                     threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 + 0.0001);
                 }
                 else {
                     if (threadVel.z * direction.z < 0) {
-                        threadVel.z *= -1.0;
+                        threadVel.z *= -1.0 * params.globalDamping;
                     }
                     threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 + 0.0001);
                 }
@@ -627,6 +626,83 @@ void calcDensitiesD(float4 *pos,
 }
 
 __device__
+float addOneCellToNormal(int3    gridPos,
+                         uint    index,
+                         float3  particlePos,
+                         float4 *pos,
+                         float  particleDensity,
+                         float4 *force,
+                         uint   *cellStart,
+                         uint   *cellEnd)
+{
+    uint cellIndex = calcCellIndex(gridPos);
+
+    // get start of bucket for this cell
+    uint startIndex = FETCH(cellStart, cellIndex);
+
+    float density = 0;
+    float mass = 1;
+    float h = 1;
+
+    if (startIndex != 0xffffffff)          // cell is not empty
+    {
+        // iterate over particles in this cell
+        uint endIndex = FETCH(cellEnd, cellIndex);
+
+        for (uint j=startIndex; j<endIndex; j++)
+        {
+            float3 pos2 = make_float3(FETCH(pos, j));
+            float density2 = force[j].w;
+            density += h * (mass / density2) * gradW(length(particlePos - pos2));
+        }
+    }
+    return density;
+}
+
+__global__
+void calcNormalsD(float4 *pos,
+                  float4 *force,
+                  float  *normals,
+                  uint   *cellIndex,
+                  uint   *cellStart,
+                  uint   *cellEnd,
+                  uint    numParticles)
+{
+    uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
+
+    if (index >= numParticles) return;
+
+    // read particle data from sorted arrays
+    float3 particlePos = make_float3(FETCH(pos, index));
+    float particleDensity = force[index].w;
+
+    // get address in grid
+    int3 gridPos = calcGridPos(particlePos);
+
+    // examine neighbouring cells
+    float normal = 0; 
+
+    // Collide with other Particles
+    for (int z=-1; z<=1; z++)
+    {
+        for (int y=-1; y<=1; y++)
+        {
+            for (int x=-1; x<=1; x++)
+            {
+                int3 neighborPos = gridPos + make_int3(x, y, z);
+                normal += addOneCellToNormal(neighborPos, index, particlePos, pos, particleDensity, force,
+                                               cellStart, cellEnd);
+            }
+        }
+    }
+
+    // Note: Is 1.0 reasonable???
+    normals[index] = normal;
+
+
+}
+
+__device__
 float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, float dens1, float dens2)
 {
     float mu = 0.0001;
@@ -647,13 +723,22 @@ float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
 }
 
 __device__
-float3 calcSurfaceTensionForce(float3 pos1, float3 pos2)
+float3 calcSurfaceTensionForce(float3 pos1,
+                               float3 pos2, 
+                               float  norm1, 
+                               float  norm2, 
+                               float  density1, 
+                               float  density2)
 {
     float mass1 = 1;
     float mass2 = 1;
-    float k = 10;
+    float gamma = 1;
+    float ro_naught = 20.5;
     float3 dir = (pos1 - pos2) / length(pos1 - pos2);
-    return -1.0 * k * mass1 * mass2 * C(length(pos1 - pos2)) * dir;  
+    float3 force1 = -1.0 * gamma * mass1 * mass2 * C(length(pos1 - pos2)) * dir;
+    float3 force2 = -1.0 * gamma * mass1 * (norm1 - norm2) * dir;
+    float k = (2 * ro_naught) / (density1 + density2);
+    return k * (force1 + force2);
 }
 
 
@@ -667,6 +752,7 @@ float3 collideCell(int3    gridPos,
                    float4 *pos,
                    float4 *vel,
                    float4 *force,
+                   float  *normals,
                    uint   *cellStart,
                    uint   *cellEnd,
                    uint*   numNeighbors)
@@ -674,6 +760,7 @@ float3 collideCell(int3    gridPos,
     uint cellIndex = calcCellIndex(gridPos);
     uint neighbors = 0; 
     float particleDensity = force[index].w;
+    float particleNormal = normals[index];
 
     // get start of bucket for this cell
     uint startIndex = FETCH(cellStart, cellIndex);
@@ -690,12 +777,13 @@ float3 collideCell(int3    gridPos,
             if (j != index) {
                 float3 pos2 = make_float3(FETCH(pos, j));
                 float3 vel2 = make_float3(FETCH(vel, j));
+                float normal2 = normals[j];
                 float density2 = force[j].w;
 
                 // collide two spheres
                 particleForce += calcPressureForce(particlePos, pos2, particleDensity, density2);
                 particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                particleForce += calcSurfaceTensionForce(particlePos, pos2);
+                particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
 
                 ++neighbors; 
             }
@@ -712,6 +800,7 @@ void collideD(float4 *pos,               // input: position
               float4 *force,             // output: forces
               bool   *activeVoxel,
               float4 *voxelPos,
+              float  *normals,
               uint   *cellIndex,    
               uint   *cellStart,
               uint   *cellEnd,
@@ -746,7 +835,7 @@ void collideD(float4 *pos,               // input: position
             for (int x=-1; x<=1; x++)
             {
                 int3 neighborPos = gridPos + make_int3(x, y, z);
-                float3 tempForce = collideCell(neighborPos, index, particlePos, particleVel, pos, vel, force,
+                float3 tempForce = collideCell(neighborPos, index, particlePos, particleVel, pos, vel, force, normals,
                                              cellStart, cellEnd, numNeighbors);
                 particleForce += tempForce;
             }

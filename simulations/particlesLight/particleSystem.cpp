@@ -84,7 +84,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.attraction = 0.0f;
     _params.boundaryDamping = -0.5f;
     _params.gravity = make_float3(0.0f, -0.0003f, 0.0f);
-    _params.globalDamping = 1.0f;
+    _params.globalDamping = 0.8f;
     // fixed initial value for cell padding / movement threshold
     _params.movementThreshold = 0.2*_params.particleRadius;
 
@@ -374,12 +374,27 @@ ParticleSystem::update(const float deltaTime,
                   _numGridCells,
                   _timer);
 
+
+    float* normals;
+    allocateArray((void **)&normals, _numActiveParticles*sizeof(float));
+
+    calcNormals(dPos,
+                _dev_force,
+                normals,
+                _dev_cellIndex,
+                _dev_cellStart,
+                _dev_cellEnd,
+                _numActiveParticles,
+                _numGridCells,
+                _timer);
+
     // process collisions
     collide(dPos,
             _dev_vel,
             _dev_force,
             voxelIsActive,
             voxelPos,
+            normals,
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -387,6 +402,8 @@ ParticleSystem::update(const float deltaTime,
             _numActiveParticles,
             _numGridCells,
             _timer);
+
+    freeArray(normals);
     
 
     checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
