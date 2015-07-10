@@ -267,6 +267,7 @@ void integrateSystemD(float4 *pos,
         threadVel.y *= params.boundaryDamping;
     }
 #endif
+#if 0
     if (threadPos.x > 4.0f - params.particleRadius)
     {
         threadPos.x = 4.0f - params.particleRadius;
@@ -287,6 +288,7 @@ void integrateSystemD(float4 *pos,
         threadPos.z = -4.0f + params.particleRadius;
         threadVel.z *= params.boundaryDamping;
     }
+#endif
 
     if (threadPos.y < -4.0f + params.particleRadius)
     {
@@ -504,7 +506,7 @@ float laplacianW(float r) {
 __device__
 float C(float r)
 {
-    float h = 1.0 / 1.0;
+    float h = 2.0 / 1.0;
     if ((2 > h) || (r <= h)) {
         return 32.0 / (M_PI * h * h * h * h * h * h * h * h * h) * (h - r) * (h - r) * (h - r) * r * r * r;
     }
@@ -713,13 +715,22 @@ float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, floa
 __device__
 float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
 {
-    float k = 0.005;
+    /*float k = 0.005;
     float ro_naught = 20.5;
     float mass = 1;
     float pressure1 = k * (dens1 - ro_naught);
     float pressure2 = k * (dens2 - ro_naught);
-    float3 dir = (pos1 - pos2) / length(pos1 - pos2);
-    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(length(pos1 - pos2)));
+    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(length(pos1 - pos2)));*/
+    float radius = length(pos1 - pos2);
+    float3 dir = (pos1 - pos2) / radius;
+    float factor=0; 
+    if (radius > 2 * params.particleRadius && radius < 4 * params.particleRadius) {
+        factor = 200 * (radius - 2 * params.particleRadius) * (radius - 4 * params.particleRadius);
+    }
+    if (radius > 0 && radius <= 2 * params.particleRadius) {
+        factor = 1.0 / radius - 1.0 / (2 * params.particleRadius);
+    }
+    return dir * factor * 0.01;
 }
 
 __device__
@@ -732,7 +743,7 @@ float3 calcSurfaceTensionForce(float3 pos1,
 {
     float mass1 = 1;
     float mass2 = 1;
-    float gamma = 1;
+    float gamma = 0.1;
     float ro_naught = 20.5;
     float3 dir = (pos1 - pos2) / length(pos1 - pos2);
     float3 force1 = -1.0 * gamma * mass1 * mass2 * C(length(pos1 - pos2)) * dir;
