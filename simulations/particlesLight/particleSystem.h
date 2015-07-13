@@ -41,7 +41,10 @@ class ParticleSystem
 
         void update(const float deltaTime,
                     const unsigned int timestepIndex,
-                    VoxelObject *voxelObject);
+                    VoxelObject *voxelObject, 
+                    bool pauseSpout,
+                    bool moveSpout);
+
         void reset(ParticleConfig config);
 
         void   setArray(ParticleArray array, const float *data, int start, int count);
@@ -169,7 +172,8 @@ class ParticleSystem
         void initGrid(uint *size, float spacing, float jitter, uint numParticles);
         void initializeSpout();
         void addSpoutParticles(const unsigned int timestepIndex,
-                               const float deltaTime);
+                               const float deltaTime, 
+                               const bool moveSpout);
 
     protected: // data
         bool _systemInitialized; 
