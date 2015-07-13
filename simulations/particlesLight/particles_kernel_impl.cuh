@@ -475,22 +475,22 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 __device__
 float W(float r) {
     // Note: r should always be > 0
-    float d = 1/1.0; 
+    float d = 16/64.0; 
     if (r > d) {
         return 0;
     } 
     float secondTerm = d * d - r * r; 
-    return (315 / (64 * M_PI * (d * d * d * d * d * d * d * d * d))) * secondTerm * secondTerm * secondTerm; 
+    return 0.01 * (315 / (64 * M_PI * (d * d * d * d * d * d * d * d * d))) * secondTerm * secondTerm * secondTerm; 
 }
 
 __device__
 float gradW(float r) {
-    float d = 1 / 1.0; 
+    float d = 16 / 64.0; 
     if (r > d) {
         return 0;
     }
     float secondTerm = d * d - r * r;
-    return (315 / (64 * M_PI * (d * d * d * d * d * d * d * d * d))) * -6 * r * secondTerm * secondTerm; 
+    return 0.003 * (315 / (64 * M_PI * (d * d * d * d * d * d * d * d * d))) * -6 * r * secondTerm * secondTerm; 
 }
 
 __device__
@@ -506,12 +506,12 @@ float laplacianW(float r) {
 __device__
 float C(float r)
 {
-    float h = 2.0 / 1.0;
-    if ((2 > h) || (r <= h)) {
-        return 32.0 / (M_PI * h * h * h * h * h * h * h * h * h) * (h - r) * (h - r) * (h - r) * r * r * r;
+    float h = 16.0 / 64.0;
+    if ((2 * r > h) && (r <= h)) {
+        return 0.002 * 32.0 / (M_PI * h * h * h * h * h * h * h * h * h) * (h - r) * (h - r) * (h - r) * r * r * r;
     }
-    else if ((r > 0) || (2 * r <= h)) {
-        return 32.0 / (M_PI * h * h * h * h * h * h * h * h * h) * (h - r) * (h - r) * (h - r) * r * r * r - (h * h * h * h * h * h) / 64.0;
+    else if ((r > 0) && (2 * r <= h)) {
+        return 0.002 * 32.0 / (M_PI * h * h * h * h * h * h * h * h * h) * (h - r) * (h - r) * (h - r) * r * r * r - (h * h * h * h * h * h) / 64.0;
     } else {
         return 0;
     }
@@ -719,14 +719,15 @@ float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, floa
 __device__
 float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
 {
-    /*float k = 0.005;
+    float k = 0.005;
     float ro_naught = 20.5;
     float mass = 1;
     float pressure1 = k * (dens1 - ro_naught);
     float pressure2 = k * (dens2 - ro_naught);
-    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(length(pos1 - pos2)));*/
     float radius = length(pos1 - pos2);
     float3 dir = (pos1 - pos2) / radius;
+    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(radius));
+    /*
     float factor=0; 
     if (radius > 2 * params.particleRadius && radius < 4 * params.particleRadius) {
         factor = 200 * (radius - 2 * params.particleRadius) * (radius - 4 * params.particleRadius);
@@ -734,7 +735,7 @@ float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
     if (radius > 0 && radius <= 2 * params.particleRadius) {
         factor = 1.0 / radius - 1.0 / (2 * params.particleRadius);
     }
-    return dir * factor * 0.01;
+    return dir * factor * 0.01;*/
 }
 
 __device__
@@ -747,7 +748,7 @@ float3 calcSurfaceTensionForce(float3 pos1,
 {
     float mass1 = 1;
     float mass2 = 1;
-    float gamma = 0.1;
+    float gamma = 0.09;
     float ro_naught = 20.5;
     float3 dir = (pos1 - pos2) / length(pos1 - pos2);
     float3 force1 = -1.0 * gamma * mass1 * mass2 * C(length(pos1 - pos2)) * dir;

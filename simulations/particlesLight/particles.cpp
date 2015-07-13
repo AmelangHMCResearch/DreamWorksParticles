@@ -202,10 +202,10 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/16.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        float voxelSize = 1.0f/32.0f; // Voxel size arbitrarily chose to be multiple of particle radius
         uint cubeSize = 16;    // Dimension of each side of the cube
-        float3 origin = make_float3(0.0, -3.5, 0.0);
-        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+        float3 origin = make_float3(0.0, -0.25, 0.0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_SPHERE, voxelSize, cubeSize, origin);
     }
 
     psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, usingRiver, limitLifeByTime, limitLifeByHeight, usingObject);

@@ -70,7 +70,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.maxIterations = 1000;
     _params.maxDistance = -3.0f;
     if (usingRiver) {
-        _params.limitParticleLifeByHeight = true;
+        //_params.limitParticleLifeByHeight = true;
         _params.maxDistance = 3.95f;
     }
     _spoutRadius                        = 0.15f;
@@ -87,7 +87,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.damping = 0.02f;
     _params.shear = 0.1f;
     _params.attraction = 0.0f;
-    _params.boundaryDamping = -0.5f;
+    _params.boundaryDamping = -1.0f;
     _params.gravity = make_float3(0.0f, -0.0003f, 0.0f);
     _params.globalDamping = 0.8f;
     // fixed initial value for cell padding / movement threshold
@@ -791,7 +791,7 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
     }
 
     const float3 spoutVelocity = 0.1f * make_float3(1, 0, 0);
-    const float jitterDistance = _params.particleRadius * 0.1;
+    const float jitterDistance = _params.particleRadius * 1.0;
     for (unsigned int i = 0;
         i < newNumberOfParticles - _numActiveParticles; ++i) {
         _pos[i*4+0] = -3.9;
