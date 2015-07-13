@@ -582,7 +582,9 @@ float addOneCellToDensity(int3    gridPos,
         for (uint j=startIndex; j<endIndex; j++)
         {
             float3 pos2 = make_float3(FETCH(pos, j));
-            density += mass * W(length(particlePos - pos2)); 
+            if (length(particlePos - pos2) < 10 * params.cellSize.x) {
+                density += mass * W(length(particlePos - pos2)); 
+            }
         }
     }
     return density;
@@ -642,7 +644,7 @@ float addOneCellToNormal(int3    gridPos,
     // get start of bucket for this cell
     uint startIndex = FETCH(cellStart, cellIndex);
 
-    float density = 0;
+    float normal = 0;
     float mass = 1;
     float h = 1;
 
@@ -655,10 +657,12 @@ float addOneCellToNormal(int3    gridPos,
         {
             float3 pos2 = make_float3(FETCH(pos, j));
             float density2 = force[j].w;
-            density += h * (mass / density2) * gradW(length(particlePos - pos2));
+            if (length(particlePos - pos2) < 10 * params.cellSize.x) {
+                normal += h * (mass / density2) * gradW(length(particlePos - pos2));
+            }
         }
     }
-    return density;
+    return normal;
 }
 
 __global__
@@ -792,9 +796,11 @@ float3 collideCell(int3    gridPos,
                 float density2 = force[j].w;
 
                 // collide two spheres
-                particleForce += calcPressureForce(particlePos, pos2, particleDensity, density2);
-                particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                if (length(particlePos - pos2) < 10 * params.cellSize.x) {
+                    particleForce += calcPressureForce(particlePos, pos2, particleDensity, density2);
+                    particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
+                    particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                }
 
                 ++neighbors; 
             }
