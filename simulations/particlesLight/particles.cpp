@@ -73,6 +73,7 @@ int numIterations = 1500000; // run until exit
 
 bool usingObject = false;
 bool usingSpout = false;
+bool usingRiver = false;
 bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
@@ -207,9 +208,9 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }
 
-    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight, usingObject);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, usingRiver, limitLifeByTime, limitLifeByHeight, usingObject);
     ParticleSystem::ParticleConfig config = ParticleSystem::CONFIG_GRID;
-    if (usingSpout) {
+    if (usingSpout || usingRiver) {
         config = ParticleSystem::CONFIG_SPOUT;
     }
     psystem->reset(config);
@@ -321,7 +322,10 @@ void display()
 
     // cube
     glColor3f(1.0, 1.0, 1.0);
-    glutWireCube(8.0);
+    glPushMatrix();
+    glScaled(8.0, 1.0, 1.0);
+    glutWireCube(1.0);
+    glPopMatrix();
 
     // now, to draw the voxels.
     // for each voxel
@@ -803,6 +807,10 @@ main(int argc, char **argv)
         if (checkCmdLineFlag(argc, (const char **) argv, "-t"))
         {
             limitLifeByTime = true;
+        }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-r"))
+        {
+            usingRiver = true;
         }
 
     }

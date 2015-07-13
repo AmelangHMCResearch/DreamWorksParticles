@@ -53,6 +53,7 @@ struct SimParams
 
     bool usingObject;
     bool usingSpout;
+    bool usingRiver;
     bool limitParticleLifeByTime;
     bool limitParticleLifeByHeight;
 

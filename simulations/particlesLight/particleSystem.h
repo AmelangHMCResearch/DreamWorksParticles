@@ -22,7 +22,7 @@
 class ParticleSystem
 {
     public:
-        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight, bool useObject);
+        ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool usingRiver, bool limitLifeByTime, bool limitLifeByHeight, bool useObject);
         ~ParticleSystem();
 
         enum ParticleConfig
@@ -170,6 +170,8 @@ class ParticleSystem
         void initializeSpout();
         void addSpoutParticles(const unsigned int timestepIndex,
                                const float deltaTime);
+        void addRiverParticles(const unsigned int timestepIndex,
+                                  const float deltaTime);
 
     protected: // data
         bool _systemInitialized; 

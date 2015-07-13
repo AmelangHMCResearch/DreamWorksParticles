@@ -29,7 +29,7 @@
 #include <GL/glew.h>
 #include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool limitLifeByTime, bool limitLifeByHeight, bool useObject) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool usingRiver, bool limitLifeByTime, bool limitLifeByHeight, bool useObject) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -64,10 +64,15 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.colliderRadius = 0.2f;
 
     _params.usingSpout = usingSpout;
+    _params.usingRiver = usingRiver;
     _params.limitParticleLifeByHeight = limitLifeByHeight;
     _params.limitParticleLifeByTime = limitLifeByTime;
     _params.maxIterations = 1000;
     _params.maxDistance = -3.0f;
+    if (usingRiver) {
+        _params.limitParticleLifeByHeight = true;
+        _params.maxDistance = 3.95f;
+    }
     _spoutRadius                        = 0.15f;
     _spoutParticleJitterPercentOfRadius = 0.5f;
     _spoutOutOfPlaneOffset              = 0.60f;
@@ -267,6 +272,9 @@ ParticleSystem::update(const float deltaTime,
         //  are particles to add.
         addSpoutParticles(timestepIndex,
                           deltaTime);
+    }
+    if (_params.usingRiver) {
+        addRiverParticles(timestepIndex, deltaTime);
     }
 
     float *dPos;
@@ -761,6 +769,44 @@ ParticleSystem::addSpoutParticles(const unsigned int timestepIndex,
       setArray(VELOCITY, _vel, _numActiveParticles, numberOfParticlesToCopy);
       _numActiveParticles = newNumberOfParticles;
     }
+}
+
+void
+ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
+                                  const float deltaTime) {
+    unsigned int newNumberOfParticles;
+
+    std::vector<float2> gridOfPositions; 
+    for (float z = -0.3; z <= 0.3; z += 2 * _params.particleRadius) {
+        for (float y = -0.5; y <= -0.1; y += 2 * _params.particleRadius) {
+            gridOfPositions.push_back(make_float2(y, z));
+        }
+    }
+    unsigned int numParticlesToAdd = gridOfPositions.size();
+    if (_numActiveParticles + numParticlesToAdd <= _numParticles) {
+        newNumberOfParticles = _numActiveParticles + numParticlesToAdd;
+    } else {
+        numParticlesToAdd = _numParticles - _numActiveParticles;
+        newNumberOfParticles = _numParticles;
+    }
+
+    const float3 spoutVelocity = 0.1f * make_float3(1, 0, 0);
+    const float jitterDistance = _params.particleRadius * 0.1;
+    for (unsigned int i = 0;
+        i < newNumberOfParticles - _numActiveParticles; ++i) {
+        _pos[i*4+0] = -3.9;
+        _pos[i*4+1] = gridOfPositions[i].x + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+2] = gridOfPositions[i].y + (-1.f + 2.f * frand()) * jitterDistance;
+        _pos[i*4+3] = 1.0f;
+        _vel[i*4+0] = spoutVelocity.x;
+        _vel[i*4+1] = spoutVelocity.y;
+        _vel[i*4+2] = spoutVelocity.z;
+        _vel[i*4+3] = 0.0f;
+    }
+
+    setArray(POSITION, _pos, _numActiveParticles, numParticlesToAdd);
+    setArray(VELOCITY, _vel, _numActiveParticles, numParticlesToAdd);
+    _numActiveParticles = newNumberOfParticles;
 }
 
 void

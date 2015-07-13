@@ -261,13 +261,13 @@ void integrateSystemD(float4 *pos,
     
     // set this to zero to disable collisions with cube sides
 #if 0
-    if (threadPos.y > 4.0f - params.particleRadius)
+    if (threadPos.y > 0.5.0f - params.particleRadius)
     {
-        threadPos.y = 4.0f - params.particleRadius;
+        threadPos.y = 0.5f - params.particleRadius;
         threadVel.y *= params.boundaryDamping;
     }
 #endif
-#if 0
+#if 1
     if (threadPos.x > 4.0f - params.particleRadius)
     {
         threadPos.x = 4.0f - params.particleRadius;
@@ -278,27 +278,27 @@ void integrateSystemD(float4 *pos,
         threadPos.x = -4.0f + params.particleRadius;
         threadVel.x *= params.boundaryDamping;
     }
-    if (threadPos.z > 4.0f - params.particleRadius)
+    if (threadPos.z > 0.5f - params.particleRadius)
     {
-        threadPos.z = 4.0f - params.particleRadius;
+        threadPos.z = 0.5f - params.particleRadius;
         threadVel.z *= params.boundaryDamping;
     }
-    if (threadPos.z < -4.0f + params.particleRadius)
+    if (threadPos.z < -0.5f + params.particleRadius)
     {
-        threadPos.z = -4.0f + params.particleRadius;
+        threadPos.z = -0.5f + params.particleRadius;
         threadVel.z *= params.boundaryDamping;
     }
 #endif
 
-    if (threadPos.y < -4.0f + params.particleRadius)
+    if (threadPos.y < -0.5f + params.particleRadius)
     {
-        threadPos.y = -4.0f + params.particleRadius;
+        threadPos.y = -0.5f + params.particleRadius;
         threadVel.y *= params.boundaryDamping;
     }
 
     // Check for particles to be removed by height or time
     if ((iters < 2 * params.maxIterations) && ((params.limitParticleLifeByTime && (iters >= params.maxIterations)) ||
-        (params.limitParticleLifeByHeight && (threadPos.x < params.maxDistance))))
+        (params.limitParticleLifeByHeight && (threadPos.x > params.maxDistance))))
     {
         iters = params.maxIterations + 1; 
         atomicAdd(numParticlesToRemove, 1);
