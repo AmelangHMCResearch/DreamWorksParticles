@@ -44,7 +44,7 @@ int3 getVoxelGridPos(const float3 pos)
 {
     // Find pos of particle with respect to origin of object
     const float3 lowerCorner = objParams._origin -
-        make_float3(objParams._cubeSize / 2.0 * objParams._voxelSize);
+        (make_float3(objParams._cubeSize) / (float) 2.0 * objParams._voxelSize);
 
     // Divide by voxel size to get which voxel the particle is in
     // Voxel are numbered 0->cubeSize - 1, in the positive direction
@@ -59,21 +59,21 @@ int3 getVoxelGridPos(const float3 pos)
 __device__
 uint getVoxelIndex(int3 voxelGridPos)
 {
-    return (voxelGridPos.z * objParams._cubeSize * objParams._cubeSize) + 
-           (voxelGridPos.y * objParams._cubeSize) + voxelGridPos.x;
+    return (voxelGridPos.z * objParams._cubeSize.x * objParams._cubeSize.y) + 
+           (voxelGridPos.y * objParams._cubeSize.x) + voxelGridPos.x;
 }
 
 __device__
 bool posIsOutOfBounds(int3 voxelGridPos)
 {
     // Check if particle is in the bounding box of the object
-    if (voxelGridPos.x < 0 || voxelGridPos.x >= objParams._cubeSize) {
+    if (voxelGridPos.x < 0 || voxelGridPos.x >= objParams._cubeSize.x) {
         return true;
     }
-    if (voxelGridPos.y < 0 || voxelGridPos.y >= objParams._cubeSize) {
+    if (voxelGridPos.y < 0 || voxelGridPos.y >= objParams._cubeSize.y) {
         return true;
     }
-    if (voxelGridPos.z < 0 || voxelGridPos.z >= objParams._cubeSize) {
+    if (voxelGridPos.z < 0 || voxelGridPos.z >= objParams._cubeSize.z) {
         return true;
     }
     return false;
@@ -173,107 +173,6 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
     return make_float3(0,0,0);
 }
 
-__device__
-float3 findNearestFace(int3 voxelGridPos, float3 particlePos, 
-                       float3 particleVel, float3 voxelPos, 
-                       int *voxelStrength) 
-{
-    float halfSide = objParams._voxelSize / 2.0;
-    float penaltyDistance = objParams._voxelSize / 4.0; 
-    float3 relativePos = particlePos - voxelPos; 
-
-    // Calculate horizontal distance from each face
-    // Penalize the distance if it's a face pointing to an active voxel
-    // Or if the velocity indicates it probably didn't come from that direction.
-    float distFromPosX = halfSide + voxelPos.x - particlePos.x; 
-    if (isActiveVoxel(voxelGridPos + make_int3(1,0,0), voxelStrength)) {
-        distFromPosX += penaltyDistance;
-    }
-    if (particleVel.x > 0) {
-        distFromPosX += penaltyDistance;
-    }
-    float distFromNegX = objParams._voxelSize - distFromPosX; 
-    if (isActiveVoxel(voxelGridPos + make_int3(-1,0,0), voxelStrength)) {
-        distFromNegX += penaltyDistance;
-    }
-    if (particleVel.x < 0) {
-        distFromNegX += penaltyDistance;
-    }
-    float distFromPosY = halfSide + voxelPos.y - particlePos.y;
-    if (isActiveVoxel(voxelGridPos + make_int3(0,1,0), voxelStrength)) {
-        distFromPosY += penaltyDistance;
-    }
-    if (particleVel.y > 0) {
-        distFromPosY += penaltyDistance;
-    }
-    float distFromNegY = objParams._voxelSize - distFromPosY;
-    if (isActiveVoxel(voxelGridPos + make_int3(0,-1,0), voxelStrength)) {
-        distFromNegY += penaltyDistance;
-    }
-    if (particleVel.y < 0) {
-        distFromNegY += penaltyDistance;
-    }
-
-    float distFromPosZ = halfSide + voxelPos.z - particlePos.z;
-    if (isActiveVoxel(voxelGridPos + make_int3(0,0,1), voxelStrength)) {
-        distFromPosZ += penaltyDistance;
-    }
-    if (particleVel.z > 0) {
-        distFromPosZ += penaltyDistance;
-    }
-    float distFromNegZ = objParams._voxelSize - distFromPosZ;
-    if (isActiveVoxel(voxelGridPos + make_int3(0,0,-1), voxelStrength)) {
-        distFromNegZ += penaltyDistance;
-    }
-    if (particleVel.z < 0) {
-        distFromNegZ += penaltyDistance;
-    }
-
-    float3 direction = make_float3(0.0f);
-
-    // Find which x,y, and z face is closest
-    // Set corresponding component of directional vector
-    // to 1 or -1 based on which is closer
-    float minXDist, minYDist, minZDist;
-    if (distFromPosX < distFromNegX) {
-        direction.x = 1.0;
-        minXDist = distFromPosX;
-    } else {
-        direction.x = -1.0;
-        minXDist = distFromNegX;
-    }
-    if (distFromPosY < distFromNegY) {
-        direction.y = 1.0;
-        minYDist = distFromPosY;
-    } else {
-        direction.y = -1.0;
-        minYDist = distFromNegY;
-    }
-    if (distFromPosZ < distFromNegZ) {
-        direction.z = 1.0;
-        minZDist = distFromPosZ;
-    } else {
-        direction.z = -1.0;
-        minZDist = distFromNegZ;
-    }
-
-    // Based on min x, y, z, find closest face, and return unit vector to it
-
-    // X is shortest
-    if (minXDist < minYDist && minXDist < minZDist) {
-        direction = make_float3(direction.x, 0.0, 0.0);
-    }
-    // Check for if Y is shortest - only need to compare against Z because of previous X check
-    else if (minYDist < minZDist) {
-        direction = make_float3(0.0, direction.y, 0.0);
-    }
-    // Otherwise, Z must be shortest
-    else {
-        direction = make_float3(0.0, 0.0, direction.z);
-    }
-    return direction;
-}
-
 // Used for soft cube collision - not currently working as well as hard cube
 __device__
 float3 calcForceFromVoxel(int3 voxelGridPos, 
@@ -292,7 +191,7 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
     // Find the direction the force should act in
     // Which is a unit vector pointing to the nearest face
     float3 voxelCenter = make_float3(voxelPos[getVoxelIndex(voxelGridPos)]);
-    float3 direction = findNearestFace(voxelGridPos, particlePos, 
+    float3 direction = findNearestFaceNew(voxelGridPos, particlePos, 
                                        particleVel, voxelCenter, voxelStrength);
 
     // Take component of velocity in same direction as nearest face

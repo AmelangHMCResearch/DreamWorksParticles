@@ -207,10 +207,10 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/4.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint cubeSize = 32;    // Dimension of each side of the cube
-        float3 origin = make_float3(0.0, 0, 0.0);
-        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+        float voxelSize = 1.0f/8.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint3 cubeSize = make_uint3(64, 16, 64);    // Dimension of each side of the cube
+        float3 origin = make_float3(0.0, -3.0, 0.0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_GEOLOGY, voxelSize, cubeSize, origin);
     }
 
     psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight, usingObject);
@@ -265,6 +265,32 @@ void initGL(int *argc, char **argv)
     glClearColor(0.25, 0.25, 0.25, 1.0);
 
     glutReportErrors();
+}
+
+inline float lerp(float a, float b, float t)
+{
+    return a + t*(b-a);
+}
+
+void getColor(float t, float *r)
+{
+    const int ncolors = 7;
+    float c[ncolors][3] =
+    {
+        { 1.0, 0.0, 0.0, },
+        { 1.0, 0.5, 0.0, },
+        { 1.0, 1.0, 0.0, },
+        { 0.0, 1.0, 0.0, },
+        { 0.0, 1.0, 1.0, },
+        { 0.0, 0.0, 1.0, },
+        { 1.0, 0.0, 1.0, },
+    };
+    t = t * (ncolors-1);
+    int i = (int) t;
+    float u = t - floor(t);
+    r[0] = lerp(c[i][0], c[i+1][0], u);
+    r[1] = lerp(c[i][1], c[i+1][1], u);
+    r[2] = lerp(c[i][2], c[i+1][2], u);
 }
 
 void display()
@@ -355,8 +381,11 @@ void display()
                 glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
                              voxelPositionArray[voxelIndex * 4 + 1],
                              voxelPositionArray[voxelIndex * 4 + 2]);
-                glColor3f(0.0, 0.0, 0.0);
-                glutWireCube(voxelSize);
+                float* color = new float[3];
+                getColor(activeVoxel[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+                glColor3f(color[0], color[1], color[2]);
+                delete [] color;
+                glutSolidCube(voxelSize);
                 // reset the matrix state
                 glPopMatrix();
             }

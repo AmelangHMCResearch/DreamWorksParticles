@@ -1,15 +1,15 @@
 #include "voxelObject.h"
 #include "particleSystem.cuh"
 
-VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSize, float3 origin)
+VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin)
   :  _pos(0),
     _voxelStrength(0),
     _numActiveVoxels(0),
-    _maxVoxelStrength(500)
+    _maxVoxelStrength(MAX_ROCK_STRENGTH)
 {
     _objectParams._voxelSize = voxelSize; // Length of a side of a voxel
     _objectParams._cubeSize = cubeSize;   // Number of voxels per side
-    _objectParams._numVoxels = cubeSize * cubeSize * cubeSize;
+    _objectParams._numVoxels = cubeSize.x * cubeSize.y * cubeSize.z;
     _objectParams._origin = origin;       // Position object is centered at
     initObject(shape);
 }
@@ -71,6 +71,26 @@ void VoxelObject::initObject(ObjectShape shape)
 
 }
 
+void VoxelObject::generateLandscapeStrength()
+{
+    for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
+    {
+        for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
+        {
+            for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
+            {
+                unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
+                int isRock = (rand() % _objectParams._cubeSize.y) < y;
+                if (isRock) {
+                    _voxelStrength[i] = _maxVoxelStrength;
+                } else {
+                    _voxelStrength[i] = _maxVoxelStrength * 0.5; 
+                }
+            }
+        }
+    }
+}
+
 void VoxelObject::initShape(ObjectShape shape)
 {
 	srand(1973);
@@ -79,22 +99,22 @@ void VoxelObject::initShape(ObjectShape shape)
         default:
         case VOXEL_CUBE:
         {
-            for (unsigned int z = 0; z < _objectParams._cubeSize; z++)
+            for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
             {
-                for (unsigned int y = 0; y < _objectParams._cubeSize; y++)
+                for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
                 {
-                    for (unsigned int x = 0; x < _objectParams._cubeSize; x++)
+                    for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize * _objectParams._cubeSize) + (y * _objectParams._cubeSize) + x;
+                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
 
                         if (i < _objectParams._numVoxels)
                         {
                             _voxelStrength[i] = _maxVoxelStrength;
                             ++_numActiveVoxels; 
                             // Calculate center of voxels for use in VBO rendering
-                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
-                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
+                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
                             _pos[i*4+3] = 1.0f;
                         }
                     }
@@ -103,25 +123,50 @@ void VoxelObject::initShape(ObjectShape shape)
         }
         break;
 
+        case VOXEL_GEOLOGY:
+        {
+            for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
+            {
+                for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
+                {
+                    for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
+                    {
+                        unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
+
+                        if (i < _objectParams._numVoxels)
+                        {
+                            ++_numActiveVoxels; 
+                            // Calculate center of voxels for use in VBO rendering
+                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
+                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
+                            _pos[i*4+3] = 1.0f;
+                        }
+                    }
+                }
+            }
+            generateLandscapeStrength();
+        }
+        break;
+
         case VOXEL_PLANE:
         {
-            for (unsigned int z = 0; z < _objectParams._cubeSize; z++)
+            for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
             {
-                for (unsigned int y = 0; y < _objectParams._cubeSize; y++)
+                for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
                 {
-                    for (unsigned int x = 0; x < _objectParams._cubeSize; x++)
+                    for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize * _objectParams._cubeSize) + (y * _objectParams._cubeSize) + x;
-
+                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
                         if (i < _objectParams._numVoxels)
                         {
                             if (y == 0) {
                                 _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering
-                                _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
-                                _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
-                                _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                                _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
+                                _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
+                                _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
                                 _pos[i*4+3] = 1.0f;
                             }
                         }
@@ -132,23 +177,23 @@ void VoxelObject::initShape(ObjectShape shape)
         break;
         case VOXEL_SPHERE:
         {
-            for (unsigned int z = 0; z < _objectParams._cubeSize; z++)
+            for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
             {
-                for (unsigned int y = 0; y < _objectParams._cubeSize; y++)
+                for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
                 {
-                    for (unsigned int x = 0; x < _objectParams._cubeSize; x++)
+                    for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize * _objectParams._cubeSize) + (y * _objectParams._cubeSize) + x;
+                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
 
                         if (i < _objectParams._numVoxels)
                         {
-                            float xPos = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
-                            float yPos = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize / 2.0) *_objectParams. _voxelSize;
-                            float zPos = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize / 2.0) * _objectParams._voxelSize;
+                            float xPos = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
+                            float yPos = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
+                            float zPos = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
                             float radius = sqrt((xPos - _objectParams._origin.x) * (xPos - _objectParams._origin.x) + 
                                                 (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
                                                 (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
-                            if (radius <= (_objectParams._cubeSize * _objectParams._voxelSize) / 2.0) {
+                            if (radius <= (_objectParams._cubeSize.x * _objectParams._voxelSize) / 2.0) {
                                 _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
                                 // Calculate center of voxels for use in VBO rendering

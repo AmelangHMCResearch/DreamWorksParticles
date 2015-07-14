@@ -20,6 +20,8 @@
 #include <cstdio>
 #include <string>
 
+#define MAX_ROCK_STRENGTH 500
+
 class VoxelObject {
 public:
 	enum ObjectShape
@@ -27,19 +29,22 @@ public:
         VOXEL_CUBE,
         VOXEL_PLANE,
         VOXEL_SPHERE,
+        VOXEL_GEOLOGY
     };
 
-    VoxelObject(ObjectShape shape, float voxelSize, unsigned int cubeSize, float3 origin);
+    VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin);
     ~VoxelObject();
 
     void initObject(ObjectShape shape);
+
+    void generateLandscapeStrength();
     void initShape(ObjectShape shape);
 
     float getVoxelSize() {
     	return _objectParams._voxelSize;
     }
 
-    unsigned int getCubeSize() {
+    uint3 getCubeSize() {
         return _objectParams._cubeSize;
     }
 
