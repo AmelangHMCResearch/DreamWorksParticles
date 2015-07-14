@@ -64,8 +64,8 @@ struct SimParams
 struct ObjectParams
 {
     float _voxelSize; 
-    unsigned int _cubeSize;
-    unsigned int _numVoxels;
+    uint3 _cubeSize;
+    uint _numVoxels;
     float3 _origin;       
 };
 

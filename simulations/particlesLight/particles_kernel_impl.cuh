@@ -44,9 +44,9 @@ int3 getVoxelGridPos(const float3 pos)
 {
     // Find pos of particle with respect to origin of object
     const float3 lowerCorner = objParams._origin -
-      make_float3(objParams._cubeSize / 2.0 * objParams._voxelSize);
+        (make_float3(objParams._cubeSize) / (float) 2.0 * objParams._voxelSize);
 
-    // Divide by voxel size to get which voxel in each direction the particle is in
+    // Divide by voxel size to get which voxel the particle is in
     // Voxel are numbered 0->cubeSize - 1, in the positive direction
     int3 voxelGridPos;
     voxelGridPos.x = floor((pos.x - lowerCorner.x) / objParams._voxelSize);
@@ -59,109 +59,140 @@ int3 getVoxelGridPos(const float3 pos)
 __device__
 uint getVoxelIndex(int3 voxelGridPos)
 {
-    return (voxelGridPos.z * objParams._cubeSize * objParams._cubeSize) + (voxelGridPos.y * objParams._cubeSize) + voxelGridPos.x;
+    return (voxelGridPos.z * objParams._cubeSize.x * objParams._cubeSize.y) + 
+           (voxelGridPos.y * objParams._cubeSize.x) + voxelGridPos.x;
 }
 
 __device__
 bool posIsOutOfBounds(int3 voxelGridPos)
 {
-    if (voxelGridPos.x < 0 || voxelGridPos.x >= objParams._cubeSize) {
+    // Check if particle is in the bounding box of the object
+    if (voxelGridPos.x < 0 || voxelGridPos.x >= objParams._cubeSize.x) {
         return true;
     }
-    if (voxelGridPos.y < 0 || voxelGridPos.y >= objParams._cubeSize) {
+    if (voxelGridPos.y < 0 || voxelGridPos.y >= objParams._cubeSize.y) {
         return true;
     }
-    if (voxelGridPos.z < 0 || voxelGridPos.z >= objParams._cubeSize) {
+    if (voxelGridPos.z < 0 || voxelGridPos.z >= objParams._cubeSize.z) {
         return true;
     }
     return false;
 }
 
 __device__
-float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 voxelPos) {
-    float halfSide = objParams._voxelSize / 2.0;
-    float3 relativePos = particlePos - voxelPos; 
-
-    // Calculate horizontal distance from each face
-    float distFromPosX = halfSide + voxelPos.x - particlePos.x; 
-    float distFromNegX = objParams._voxelSize - distFromPosX; 
-
-    float distFromPosY = halfSide + voxelPos.y - particlePos.y;
-    float distFromNegY = objParams._voxelSize - distFromPosY;
-
-    float distFromPosZ = halfSide + voxelPos.z - particlePos.z;
-    float distFromNegZ = objParams._voxelSize - distFromPosZ;
-
-    float3 direction = make_float3(0.0f);
-
-    // Find which x,y, and z face is closest
-    // Set corresponding component of directional vector
-    // to 1 or -1 based on which is closer
-    float minXDist, minYDist, minZDist;
-    if (distFromPosX < distFromNegX) {
-        direction.x = 1.0;
-        minXDist = distFromPosX;
-    } else {
-        direction.x = -1.0;
-        minXDist = distFromNegX;
+bool isActiveVoxel(int3 voxelGridPos, float* voxelStrength) 
+{
+    if (posIsOutOfBounds(voxelGridPos)) {
+        return false;
     }
-    if (distFromPosY < distFromNegY) {
-        direction.y = 1.0;
-        minYDist = distFromPosY;
-    } else {
-        direction.y = -1.0;
-        minYDist = distFromNegY;
+    else if (voxelStrength[getVoxelIndex(voxelGridPos)] <= 0.0f) {
+        return false;
     }
-    if (distFromPosZ < distFromNegZ) {
-        direction.z = 1.0;
-        minZDist = distFromPosZ;
-    } else {
-        direction.z = -1.0;
-        minZDist = distFromNegZ;
-    }
-
-    // Based on min x, y, z, find closest face, and return unit vector to it
-    //printf("X: %f Y: %f Z: %f\n", minXDist, minYDist, minZDist);
-
-    // X is shortest
-    if (minXDist < minYDist && minXDist < minZDist) {
-        direction = make_float3(direction.x, 0.0, 0.0);
-    }
-    // Check for if Y is shortest - only need to compare against Z because of previous X check
-    else if (minYDist < minZDist) {
-        direction = make_float3(0.0, direction.y, 0.0);
-    }
-    // Otherwise, Z must be shortest
-    else {
-        direction = make_float3(0.0, 0.0, direction.z);
-    }
-    return direction;
+    return true;
 }
 
-// Can't write to velocity during collide - fix soft cube collision later
+__device__
+bool pointsIntersectFace(float knownCoord, float3 oldPos, float3 newPos) {
+    // Must pass arguments such that oldPos.x and newPos.x are the same
+    // Component as knownCoord. X, Y, and Z here don't correspond to the
+    // real coordinates
+    float y, z; 
+    float t = (knownCoord - oldPos.x) / (newPos.x - oldPos.x); 
+    y = oldPos.y + (newPos.y - oldPos.y) * t; 
+    z = oldPos.z + (newPos.z - oldPos.z) * t;
+    if (abs(y) < objParams._voxelSize && abs(z) < objParams._voxelSize) {
+        return true;
+    } else {
+        return false;
+    }
+
+
+}
+
+__device__
+float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
+                          float3 voxelPos, float *voxelStrength) 
+{
+    // Note: The current check on active voxels will break down when we have more complex geography
+    // Consider ways to fix it. Also this is a nightmare for warp divergence :(
+    float3 relOldPos = particleOldPos - voxelPos;
+    float3 relNewPos = particlePos - voxelPos; 
+    // For each of 6 faces: 
+    for (int z = -1; z <= 1; ++z) {
+        for (int y = -1; y <= 1; ++ y) {
+            for (int x = -1; x <= 1; ++x) {
+                if ((x==0 && y==0) || (x==0 && z==0) || (y==0 && z==0)) {
+                    float3 direction = make_float3(x, y, z); 
+                    // If we're checking an x face
+                    if (direction.x != 0) {
+                        // If the old face is on the outside of this face
+                        if (direction.x * relOldPos.x > objParams._voxelSize / 2.0) {
+                            // And if the line between the old and the new intersects the face
+                            if (pointsIntersectFace(direction.x * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.x, relOldPos.y, relOldPos.z), 
+                                                     make_float3(relNewPos.x, relNewPos.y, relNewPos.z))) {
+                                // If this face is up against an active voxel, try again without that component of the vel. 
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particlePos.x, particleOldPos.y, particleOldPos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
+                                return direction;
+                            }
+                        }
+                    }
+                    else if (direction.y != 0) {
+                        if (direction.y * relOldPos.y > objParams._voxelSize / 2.0) {
+                            if (pointsIntersectFace(direction.y * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.y, relOldPos.x, relOldPos.z), 
+                                                     make_float3(relNewPos.y, relNewPos.x, relNewPos.z))) {
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particleOldPos.x, particlePos.y, particleOldPos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
+                                return direction;
+                            }
+                        }
+                    }
+                    else if (direction.z != 0) {
+                        if (direction.z * relOldPos.z > objParams._voxelSize / 2.0) {
+                            if (pointsIntersectFace(direction.z * objParams._voxelSize / 2.0, 
+                                                     make_float3(relOldPos.z, relOldPos.x, relOldPos.y), 
+                                                     make_float3(relNewPos.z, relNewPos.x, relNewPos.y))) {
+                                if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
+                                    float3 newOldPos = make_float3(particleOldPos.x, particleOldPos.y, particlePos.z);
+                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                }
+                                return direction;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return make_float3(0,0,0);
+}
+
+// Used for soft cube collision - not currently working as well as hard cube
 __device__
 float3 calcForceFromVoxel(int3 voxelGridPos, 
                           float4 *voxelPos,
-                          bool  *activeVoxel,  
+                          float  *voxelStrength,  
                           float3 particlePos,
                           float3 particleVel,
                           float3 force)
 {
 
-    // Check that the particle is in the bounding box of the object
-    if (posIsOutOfBounds(voxelGridPos)) {
-        return make_float3(0.0f);
-    }
-    // Check that the particle is in an active voxel
-    uint voxelIndex = getVoxelIndex(voxelGridPos);
-    if (!activeVoxel[voxelIndex]) {
+    // Check that the particle is active/ in the object
+    if (!isActiveVoxel(voxelGridPos, voxelStrength)) {
         return make_float3(0.0f);
     }
 
     // Find the direction the force should act in
     // Which is a unit vector pointing to the nearest face
-    float3 voxelCenter = make_float3(voxelPos[voxelIndex]);
-    float3 direction = findNearestFace(voxelGridPos, particlePos, voxelCenter);
+    float3 voxelCenter = make_float3(voxelPos[getVoxelIndex(voxelGridPos)]);
+    float3 direction = findNearestFaceNew(voxelGridPos, particlePos, 
+                                       particleVel, voxelCenter, voxelStrength);
 
     // Take component of velocity in same direction as nearest face
     particleVel.x = particleVel.x * (1 && direction.x);
@@ -169,10 +200,12 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
     particleVel.z = particleVel.z * (1 && direction.z);
 
     // Magnitude is based on distance from the center of the voxel
-    float magnitude = objParams._voxelSize - dot(particlePos - voxelCenter, direction);
+    float magnitude = objParams._voxelSize - 
+                      dot(particlePos - voxelCenter, direction);
 
     // Force is magic number plus adjusted velocity times the mag times the dir
-    float3 forceFromVoxel = (10 + 10 * length(particleVel)) * magnitude * direction; 
+    float3 forceFromVoxel = (10 + 10 * length(particleVel)) * 
+                             magnitude * direction; 
 
     return forceFromVoxel;
 }
@@ -189,7 +222,7 @@ void integrateSystemD(float4 *pos,
                  float deltaTime,
                  uint numParticles, 
                  float4 * voxelPos, 
-                 bool *activeVoxel,  
+                 float *voxelStrength,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold,
                  uint *numParticlesToRemove)
@@ -198,6 +231,7 @@ void integrateSystemD(float4 *pos,
 
     if (index >= numParticles) return;
 
+    // Grab the numbers that we need to from memory
     float3 threadPos          = make_float3(pos[index]);
     float3 threadVel          = make_float3(vel[index]);
     float iters = vel[index].w;
@@ -208,58 +242,72 @@ void integrateSystemD(float4 *pos,
     }
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
 
+    // Do first half of verlet integration
     threadVel += threadForce / density * deltaTime / 2;
     threadVel += params.gravity * deltaTime;
+    threadVel *= params.globalDamping;
 
     // new position = old position + velocity * deltaTime
+    // Second part of verlet integration
     threadPos += threadVel * deltaTime + 0.5 * threadForce / density * deltaTime * deltaTime;
     threadVel += (threadForce / density * deltaTime / 2);
 
 #if USE_HARD_CUBE
     if (params.usingObject) {
-        // Check that the particle is in the bounding box of the object
+        // Check that containing voxel is active
         const int3 voxelGridPos = getVoxelGridPos(threadPos);
-        if (!posIsOutOfBounds(voxelGridPos)) {
-            // Check that the voxel the particle is in is active
-            const uint voxelIndex = getVoxelIndex(voxelGridPos);
-            if (activeVoxel[voxelIndex]) {
-                // Do the collision
-                const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-                const float3 direction = findNearestFace(voxelGridPos, threadPos, currentVoxelPos);
-
-                int3 neighborVoxelGridPos = make_int3(voxelGridPos.x + (int) direction.x, voxelGridPos.y + (int) direction.y, voxelGridPos.z + (int) direction.z);
-                if (!posIsOutOfBounds(neighborVoxelGridPos)) {
-                    if (activeVoxel[getVoxelIndex(neighborVoxelGridPos)]) {
-                        iters = params.maxIterations * 2; 
-                        atomicAdd(numParticlesToRemove, 1);
-                        *pointHasMovedMoreThanThreshold = true;
-                    }
+        if (isActiveVoxel(voxelGridPos, voxelStrength)) {
+            // Do the collision
+            uint voxelIndex = getVoxelIndex(voxelGridPos);
+            const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
+            const float3 direction = findNearestFaceNew(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
+            //if (index %100 == 0) printf("Vel: %f, %f, %f Dir:%f, %f, %f\n", threadVel.x, threadVel.y, threadVel.z, direction.x, direction.y, direction.z);
+            //printf("%f, %f, %f\n", direction.x, direction.y, direction.z);
+            // Update strength of voxel post-collision
+#if 1
+            float strength = voxelStrength[voxelIndex];
+            if (strength > 0) {
+                // Faster particles do more damage
+                float amountToReduceStrength = abs(0.5 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
+                atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
+                /*float newStrength = max((float)(strength - (10 * (length(threadVel)/0.5))), 0.0f);
+                atomicMin(&voxelStrength[voxelIndex], newStrength);*/
+            }
+#endif
+            
+            // If it's trying to move into an active particle, remove it
+            int3 neighborVoxelGridPos = voxelGridPos + make_int3(direction);
+            if (isActiveVoxel(neighborVoxelGridPos, voxelStrength)) {
+                iters = params.maxIterations * 2; 
+                atomicAdd(numParticlesToRemove, 1);
+                *pointHasMovedMoreThanThreshold = true;
+            }
+            // Calculate new position and velocity
+            float distanceToMove = objParams._voxelSize / 2.0 + 0.0001;
+            if (direction.x != 0.0) {
+                if (threadVel.x * direction.x < 0) {
+                    threadVel.x *= -1.0;
                 }
-                if (direction.x != 0.0) {
-                    if (threadVel.x * direction.x < 0) {
-                        threadVel.x *= -1.0 * params.globalDamping;
-                    }
-                    threadPos.x = currentVoxelPos.x + direction.x * (objParams._voxelSize / 2.0 + 0.0001);
+                threadPos.x = currentVoxelPos.x + direction.x * distanceToMove;
+            }
+            else if (direction.y != 0.0) {
+                if (threadVel.y * direction.y < 0) {
+                    threadVel.y *= -1.0;
                 }
-                else if (direction.y != 0.0) {
-                    if (threadVel.y * direction.y < 0) {
-                        threadVel.y *= -1.0 * params.globalDamping;
-                    }
-                    threadPos.y = currentVoxelPos.y + direction.y * (objParams._voxelSize / 2.0 + 0.0001);
+                threadPos.y = currentVoxelPos.y + direction.y * distanceToMove;
+            }
+            else {
+                if (threadVel.z * direction.z < 0) {
+                    threadVel.z *= -1.0;
                 }
-                else {
-                    if (threadVel.z * direction.z < 0) {
-                        threadVel.z *= -1.0 * params.globalDamping;
-                    }
-                    threadPos.z = currentVoxelPos.z + direction.z * (objParams._voxelSize / 2.0 + 0.0001);
-                }
+                threadPos.z = currentVoxelPos.z + direction.z * distanceToMove;
+            }
               
-            } 
         }
     }
 #endif
     
-    // set this to zero to disable collisions with cube sides
+    // set this to zero to disable collisions with cube top
 #if 0
     if (threadPos.y > 0.5.0f - params.particleRadius)
     {
@@ -267,6 +315,8 @@ void integrateSystemD(float4 *pos,
         threadVel.y *= params.boundaryDamping;
     }
 #endif
+
+// set this to zero to disable collisions with cube sides
 #if 1
     if (threadPos.x > 4.0f - params.particleRadius)
     {
@@ -296,8 +346,10 @@ void integrateSystemD(float4 *pos,
         threadVel.y *= params.boundaryDamping;
     }
 
-    // Check for particles to be removed by height or time
-    if ((iters < 2 * params.maxIterations) && ((params.limitParticleLifeByTime && (iters >= params.maxIterations)) ||
+    // Check for particles to be removed by height or time - filter out those 
+    // That were already removed by collision with cube
+    if ((iters < 2 * params.maxIterations) && 
+        ((params.limitParticleLifeByTime && (iters >= params.maxIterations)) ||
         (params.limitParticleLifeByHeight && (threadPos.x > params.maxDistance))))
     {
         iters = params.maxIterations + 1; 
@@ -322,7 +374,8 @@ void integrateSystemD(float4 *pos,
 }
 
 // calculate position in uniform grid
-__device__ int3 calcGridPos(float3 p)
+__device__ 
+int3 calcGridPos(float3 p)
 {
     int3 gridPos;
     gridPos.x = floor((p.x - params.worldOrigin.x) / (params.cellSize.x + 2*params.movementThreshold));
@@ -332,16 +385,19 @@ __device__ int3 calcGridPos(float3 p)
 }
 
 // calculate address in grid from position (clamping to edges)
-__device__ uint calcCellIndex(int3 gridPos)
+__device__ 
+uint calcCellIndex(int3 gridPos)
 {
     gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     gridPos.y = gridPos.y & (params.gridSize.y-1);
     gridPos.z = gridPos.z & (params.gridSize.z-1);
-    return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
+    return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) +
+           __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
 }
 
 // calculate address in grid from position (clamping to edges)
-__device__ uint calcPreRemovalCellIndex(int3 gridPos, float numIters, float height)
+__device__ 
+uint calcPreRemovalCellIndex(int3 gridPos, float numIters, float height)
 {
     if (numIters > params.maxIterations) {
         return params.numCells;
@@ -349,7 +405,8 @@ __device__ uint calcPreRemovalCellIndex(int3 gridPos, float numIters, float heig
     gridPos.x = gridPos.x & (params.gridSize.x-1);  // wrap grid, assumes size is power of 2
     gridPos.y = gridPos.y & (params.gridSize.y-1);
     gridPos.z = gridPos.z & (params.gridSize.z-1);
-    return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
+    return __umul24(__umul24(gridPos.z, params.gridSize.y), params.gridSize.x) + 
+           __umul24(gridPos.y, params.gridSize.x) + gridPos.x;
 }
 
 // calculate cell index for each particle
@@ -528,7 +585,7 @@ float3 collideSpheres(float3 posA, float3 posB,
     float3 relPos = posB - posA;
 
     float dist = length(relPos);
-    float collideDist = radiusA + radiusB;
+    float collideDist = 2 * radiusA + radiusB;
 
     float3 force = make_float3(0.0f);
 
@@ -711,7 +768,7 @@ void calcNormalsD(float4 *pos,
 __device__
 float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, float dens1, float dens2)
 {
-    float mu = 0.0001;
+    float mu = 0.001;
     float mass = 1;
     return mu * mass * (vel2 - vel1) / dens2 * laplacianW(length(pos1 - pos2));
 }
@@ -719,15 +776,16 @@ float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, floa
 __device__
 float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
 {
-    float k = 0.005;
+    /*float k = 0.0005;
     float ro_naught = 20.5;
     float mass = 1;
     float pressure1 = k * (dens1 - ro_naught);
     float pressure2 = k * (dens2 - ro_naught);
     float radius = length(pos1 - pos2);
     float3 dir = (pos1 - pos2) / radius;
-    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(radius));
-    /*
+    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(radius));*/
+    /*float radius = length(pos1 - pos2);
+    float3 dir = (pos1 - pos2) / radius;
     float factor=0; 
     if (radius > 2 * params.particleRadius && radius < 4 * params.particleRadius) {
         factor = 200 * (radius - 2 * params.particleRadius) * (radius - 4 * params.particleRadius);
@@ -736,6 +794,7 @@ float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
         factor = 1.0 / radius - 1.0 / (2 * params.particleRadius);
     }
     return dir * factor * 0.01;*/
+    return make_float3(0);
 }
 
 __device__
@@ -748,7 +807,7 @@ float3 calcSurfaceTensionForce(float3 pos1,
 {
     float mass1 = 1;
     float mass2 = 1;
-    float gamma = 0.09;
+    float gamma = 0.0001;
     float ro_naught = 20.5;
     float3 dir = (pos1 - pos2) / length(pos1 - pos2);
     float3 force1 = -1.0 * gamma * mass1 * mass2 * C(length(pos1 - pos2)) * dir;
@@ -798,9 +857,16 @@ float3 collideCell(int3    gridPos,
 
                 // collide two spheres
                 if (length(particlePos - pos2) < 10 * params.cellSize.x) {
-                    particleForce += calcPressureForce(particlePos, pos2, particleDensity, density2);
-                    particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                    particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                    //float3 tempForce = calcPressureForce(particlePos, pos2, particleDensity, density2);
+                    float3 tempForce = collideSpheres(particlePos, pos2, particleVel, vel2, params.particleRadius, params.particleRadius, params.attraction);
+                    particleForce += tempForce;
+                    //if (index == 100) printf("pressure: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
+                    tempForce = calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
+                    particleForce += tempForce;
+                    //if (index == 100) printf("viscous: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
+                    tempForce = calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                    particleForce += tempForce;
+                    //if (index == 100) printf("surface: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
                 }
 
                 ++neighbors; 
@@ -816,7 +882,7 @@ __global__
 void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
-              bool   *activeVoxel,
+              float   *voxelStrength,
               float4 *voxelPos,
               float  *normals,
               uint   *cellIndex,    
@@ -865,7 +931,7 @@ void collideD(float4 *pos,               // input: position
         // Check for collisions with voxel object
         int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, activeVoxel, particlePos, particleVel, particleForce);
+        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, voxelStrength, particlePos, particleVel, particleForce);
         particleForce += forceFromObject;
     }
 #endif
@@ -875,7 +941,7 @@ void collideD(float4 *pos,               // input: position
                                     make_float3(0.0f, 0.0f, 0.0f), 
                                     params.particleRadius, params.colliderRadius, 0.0f);
 
-    // Note: Is 1.0 reasonable???
+    // Use 4th element of force to hold the density
     force[index] = make_float4(particleForce, force[index].w);
 }
 
