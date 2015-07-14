@@ -34,13 +34,13 @@ void VoxelObject::initObject(ObjectShape shape)
 	unsigned int memSize = _objectParams._numVoxels * sizeof(float);
 
     _pos = new float[4 * _objectParams._numVoxels];
-    _voxelStrength = new int[_objectParams._numVoxels];
+    _voxelStrength = new float[_objectParams._numVoxels];
     for (int i = 0; i < _objectParams._numVoxels; ++i) {
         _voxelStrength[i] = 0;
     }
 
     // Allocate active voxel array on GPU
-    allocateArray((void **) &_dev_voxelStrength, sizeof(int) * _objectParams._numVoxels);
+    allocateArray((void **) &_dev_voxelStrength, sizeof(float) * _objectParams._numVoxels);
 
     // Create the VBO
     glGenBuffers(1, &_posVBO);
@@ -230,8 +230,8 @@ float* VoxelObject::getCpuPosArray() {
     return _pos;
 }
 
-int* VoxelObject::getVoxelStrengthFromGPU() {
-    cudaMemcpy(_voxelStrength, _dev_voxelStrength, sizeof(unsigned int) * _objectParams._numVoxels, cudaMemcpyDeviceToHost);
+float* VoxelObject::getVoxelStrengthFromGPU() {
+    cudaMemcpy(_voxelStrength, _dev_voxelStrength, sizeof(float) * _objectParams._numVoxels, cudaMemcpyDeviceToHost);
     return _voxelStrength;
 }
 

@@ -370,11 +370,11 @@ void display()
         if (voxelObject) {
           const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
           const float * voxelPositionArray = voxelObject->getCpuPosArray();
-          const int * activeVoxel = voxelObject->getVoxelStrengthFromGPU();
+          const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
           const float voxelSize = voxelObject->getVoxelSize();
           for (unsigned int voxelIndex = 0;
                voxelIndex < numberOfVoxels; ++voxelIndex) {
-            if (activeVoxel[voxelIndex]) {
+            if (voxelStrength[voxelIndex] > 0.0f) {
                 // save the matrix state
                 glPushMatrix();
                 // translate for this voxel
@@ -382,7 +382,7 @@ void display()
                              voxelPositionArray[voxelIndex * 4 + 1],
                              voxelPositionArray[voxelIndex * 4 + 2]);
                 float* color = new float[3];
-                getColor(activeVoxel[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+                getColor(voxelStrength[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
                 glColor3f(color[0], color[1], color[2]);
                 delete [] color;
                 glutSolidCube(voxelSize);

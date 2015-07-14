@@ -280,7 +280,7 @@ ParticleSystem::update(const float deltaTime,
     }
 
     float *voxelPos = NULL;
-    int *voxelStrength = NULL;
+    float *voxelStrength = NULL;
     if (_params.usingObject) {
         voxelPos = voxelObject->getPosArray();
         voxelStrength = voxelObject->getVoxelStrength();

@@ -20,7 +20,7 @@
 #include <cstdio>
 #include <string>
 
-#define MAX_ROCK_STRENGTH 500
+#define MAX_ROCK_STRENGTH 1
 
 class VoxelObject {
 public:
@@ -70,14 +70,14 @@ public:
         return _colorVBO;
     }
 
-    int* getVoxelStrength()
+    float* getVoxelStrength()
     {
         return _dev_voxelStrength;
     }
 
     float* getPosArray();
     float* getCpuPosArray();
-    int* getVoxelStrengthFromGPU();
+    float* getVoxelStrengthFromGPU();
 
     void unbindPosArray();
 
@@ -89,13 +89,13 @@ public:
 private:
 
 	// CPU Data
-    int _maxVoxelStrength; 
-	int *_voxelStrength;
+    float _maxVoxelStrength; 
+	float *_voxelStrength;
     float *_pos; 
     unsigned int _numActiveVoxels;
 
     // GPU Data
-    int *_dev_voxelStrength;
+    float *_dev_voxelStrength;
     unsigned int   _posVBO;            // vertex buffer object for particle positions
     unsigned int   _colorVBO;          // vertex buffer object for col
     struct cudaGraphicsResource *_cuda_posvbo_resource; // handles OpenGL-CUDA exchange

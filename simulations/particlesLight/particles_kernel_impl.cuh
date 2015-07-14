@@ -80,12 +80,12 @@ bool posIsOutOfBounds(int3 voxelGridPos)
 }
 
 __device__
-bool isActiveVoxel(int3 voxelGridPos, int* voxelStrength) 
+bool isActiveVoxel(int3 voxelGridPos, float* voxelStrength) 
 {
     if (posIsOutOfBounds(voxelGridPos)) {
         return false;
     }
-    else if (!voxelStrength[getVoxelIndex(voxelGridPos)]) {
+    else if (voxelStrength[getVoxelIndex(voxelGridPos)] <= 0.0f) {
         return false;
     }
     return true;
@@ -111,7 +111,7 @@ bool pointsIntersectFace(float knownCoord, float3 oldPos, float3 newPos) {
 
 __device__
 float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
-                          float3 voxelPos, int *voxelStrength) 
+                          float3 voxelPos, float *voxelStrength) 
 {
     // Note: The current check on active voxels will break down when we have more complex geography
     // Consider ways to fix it. Also this is a nightmare for warp divergence :(
@@ -177,7 +177,7 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
 __device__
 float3 calcForceFromVoxel(int3 voxelGridPos, 
                           float4 *voxelPos,
-                          int  *voxelStrength,  
+                          float  *voxelStrength,  
                           float3 particlePos,
                           float3 particleVel,
                           float3 force)
@@ -222,7 +222,7 @@ void integrateSystemD(float4 *pos,
                  float deltaTime,
                  uint numParticles, 
                  float4 * voxelPos, 
-                 int *voxelStrength,  
+                 float *voxelStrength,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold,
                  uint *numParticlesToRemove)
@@ -261,11 +261,15 @@ void integrateSystemD(float4 *pos,
             //printf("%f, %f, %f\n", direction.x, direction.y, direction.z);
             // Update strength of voxel post-collision
 #if 1
-            int strength = voxelStrength[voxelIndex];
+            float strength = voxelStrength[voxelIndex];
             if (strength > 0) {
                 // Faster particles do more damage
-                int newStrength = max(strength - (int) (10 * (length(threadVel)/0.5)), 0);
-                atomicMin(&voxelStrength[voxelIndex], newStrength);
+                float amountToReduceStrength = abs(0.5 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
+                atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
+                /*float newStrength = max((float)(strength - (10 * (length(threadVel)/0.5))), 0.0f);
+                atomicMin(&voxelStrength[voxelIndex], newStrength);*/
+            } else {
+                printf("Problem?\n");
             }
 #endif
             
@@ -608,7 +612,7 @@ __global__
 void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
-              int   *voxelStrength,
+              float   *voxelStrength,
               float4 *voxelPos,
               uint   *cellIndex,    
               uint   *cellStart,
