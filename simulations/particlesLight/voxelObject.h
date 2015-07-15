@@ -75,6 +75,9 @@ public:
         return _dev_voxelStrength;
     }
 
+    uint getVoxelIndex(uint3 gridPos);
+    bool voxelIsInBounds(uint3 gridPos);
+
     float* getPosArray();
     float* getCpuPosArray();
     float* getVoxelStrengthFromGPU();

@@ -109,8 +109,10 @@ bool pointsIntersectFace(float knownCoord, float3 oldPos, float3 newPos) {
 
 }
 
+
+// This function is officially defunct given the erosion sim :()
 __device__
-float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
+float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 particleOldPos,
                           float3 voxelPos, float *voxelStrength) 
 {
     // Note: The current check on active voxels will break down when we have more complex geography
@@ -134,7 +136,7 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                                 // If this face is up against an active voxel, try again without that component of the vel. 
                                 if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
                                     float3 newOldPos = make_float3(particlePos.x, particleOldPos.y, particleOldPos.z);
-                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                    return findNearestFace(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
                                 }
                                 return direction;
                             }
@@ -147,7 +149,7 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                                                      make_float3(relNewPos.y, relNewPos.x, relNewPos.z))) {
                                 if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
                                     float3 newOldPos = make_float3(particleOldPos.x, particlePos.y, particleOldPos.z);
-                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                    return findNearestFace(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
                                 }
                                 return direction;
                             }
@@ -160,7 +162,7 @@ float3 findNearestFaceNew(int3 voxelGridPos, float3 particlePos, float3 particle
                                                      make_float3(relNewPos.z, relNewPos.x, relNewPos.y))) {
                                 if (isActiveVoxel(voxelGridPos + make_int3(direction), voxelStrength)) {
                                     float3 newOldPos = make_float3(particleOldPos.x, particleOldPos.y, particlePos.z);
-                                    return findNearestFaceNew(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
+                                    return findNearestFace(voxelGridPos, particlePos, newOldPos, voxelPos, voxelStrength);
                                 }
                                 return direction;
                             }
@@ -191,7 +193,7 @@ float3 calcForceFromVoxel(int3 voxelGridPos,
     // Find the direction the force should act in
     // Which is a unit vector pointing to the nearest face
     float3 voxelCenter = make_float3(voxelPos[getVoxelIndex(voxelGridPos)]);
-    float3 direction = findNearestFaceNew(voxelGridPos, particlePos, 
+    float3 direction = findNearestFace(voxelGridPos, particlePos, 
                                        particleVel, voxelCenter, voxelStrength);
 
     // Take component of velocity in same direction as nearest face
@@ -260,15 +262,15 @@ void integrateSystemD(float4 *pos,
             // Do the collision
             uint voxelIndex = getVoxelIndex(voxelGridPos);
             const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-            const float3 direction = findNearestFaceNew(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
-            //if (index %100 == 0) printf("Vel: %f, %f, %f Dir:%f, %f, %f\n", threadVel.x, threadVel.y, threadVel.z, direction.x, direction.y, direction.z);
-            //printf("%f, %f, %f\n", direction.x, direction.y, direction.z);
+            const float3 direction = findNearestFace(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
+
             // Update strength of voxel post-collision
 #if 1
             float strength = voxelStrength[voxelIndex];
             if (strength > 0) {
                 // Faster particles do more damage
-                float amountToReduceStrength = abs(0.5 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
+                float amountToReduceStrength = abs(5.0 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
+                //float amountToReduceStrength = 5.0 * threadVel.x * threadVel.x;
                 atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
                 /*float newStrength = max((float)(strength - (10 * (length(threadVel)/0.5))), 0.0f);
                 atomicMin(&voxelStrength[voxelIndex], newStrength);*/
@@ -529,6 +531,7 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
 }
 
 // ____________Collision Functions_____________
+// A couple smoothing kernels and their derivatives, used for the fluid simulation
 __device__
 float W(float r) {
     // Note: r should always be > 0
@@ -574,6 +577,7 @@ float C(float r)
     }
 }
 
+// This function is currently not used, but saving it just in case
 __device__
 float3 collideSpheres(float3 posA, float3 posB,
                       float3 velA, float3 velB,
@@ -614,7 +618,7 @@ float3 collideSpheres(float3 posA, float3 posB,
 
 
 
-// collide a particle against all other particles in a given cell
+// Calculate the contribution of one cell to a particle's density
 __device__
 float addOneCellToDensity(int3    gridPos,
                            uint    index,
@@ -647,6 +651,7 @@ float addOneCellToDensity(int3    gridPos,
     return density;
 }
 
+// Calculate densities for all particles
 __global__
 void calcDensitiesD(float4 *pos,
                     float4 *force,
@@ -665,10 +670,9 @@ void calcDensitiesD(float4 *pos,
     // get address in grid
     int3 gridPos = calcGridPos(particlePos);
 
-    // examine neighbouring cells
     float density = 0; 
 
-    // Collide with other Particles
+    // Loop over other particles
     for (int z=-1; z<=1; z++)
     {
         for (int y=-1; y<=1; y++)
@@ -686,6 +690,7 @@ void calcDensitiesD(float4 *pos,
     force[index].w = density;
 }
 
+// Calculate from one cell's particles
 __device__
 float addOneCellToNormal(int3    gridPos,
                          uint    index,
@@ -714,6 +719,7 @@ float addOneCellToNormal(int3    gridPos,
         {
             float3 pos2 = make_float3(FETCH(pos, j));
             float density2 = force[j].w;
+
             if (length(particlePos - pos2) < 10 * params.cellSize.x) {
                 normal += h * (mass / density2) * gradW(length(particlePos - pos2));
             }
@@ -745,7 +751,7 @@ void calcNormalsD(float4 *pos,
     // examine neighbouring cells
     float normal = 0; 
 
-    // Collide with other Particles
+    // Loop over neighboring cells
     for (int z=-1; z<=1; z++)
     {
         for (int y=-1; y<=1; y++)
@@ -773,17 +779,21 @@ float3 calcViscousForce(float3 pos1, float3 pos2, float3 vel1, float3 vel2, floa
     return mu * mass * (vel2 - vel1) / dens2 * laplacianW(length(pos1 - pos2));
 }
 
+// This function is not currently in use, saved here in case needed in the future
 __device__
 float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
 {
-    /*float k = 0.0005;
+    // First method: Based on muller tutorial
+    float k = 0.0005;
     float ro_naught = 20.5;
     float mass = 1;
     float pressure1 = k * (dens1 - ro_naught);
     float pressure2 = k * (dens2 - ro_naught);
     float radius = length(pos1 - pos2);
     float3 dir = (pos1 - pos2) / radius;
-    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(radius));*/
+    return -1.0 * dir * (mass * (pressure1 + pressure2) / (2 * dens2) * gradW(radius));
+
+    // Second method based on Savannah making things up
     /*float radius = length(pos1 - pos2);
     float3 dir = (pos1 - pos2) / radius;
     float factor=0; 
@@ -794,7 +804,6 @@ float3 calcPressureForce(float3 pos1, float3 pos2, float dens1, float dens2)
         factor = 1.0 / radius - 1.0 / (2 * params.particleRadius);
     }
     return dir * factor * 0.01;*/
-    return make_float3(0);
 }
 
 __device__
@@ -805,10 +814,14 @@ float3 calcSurfaceTensionForce(float3 pos1,
                                float  density1, 
                                float  density2)
 {
+    // Constants for equations, which were chosen
+    // based on what looked good
     float mass1 = 1;
     float mass2 = 1;
-    float gamma = 0.0001;
+    float gamma = 0.001;
     float ro_naught = 20.5;
+
+    // See Akinci et al, 2013 for explanation of equations
     float3 dir = (pos1 - pos2) / length(pos1 - pos2);
     float3 force1 = -1.0 * gamma * mass1 * mass2 * C(length(pos1 - pos2)) * dir;
     float3 force2 = -1.0 * gamma * mass1 * (norm1 - norm2) * dir;
@@ -854,19 +867,12 @@ float3 collideCell(int3    gridPos,
                 float3 vel2 = make_float3(FETCH(vel, j));
                 float normal2 = normals[j];
                 float density2 = force[j].w;
+                particleForce += collideSpheres(particlePos, pos2, particleVel, vel2, params.particleRadius, params.particleRadius, params.attraction);
 
-                // collide two spheres
+                // Check that we aren't looking at a far away particle, then find viscous + tension forces
                 if (length(particlePos - pos2) < 10 * params.cellSize.x) {
-                    //float3 tempForce = calcPressureForce(particlePos, pos2, particleDensity, density2);
-                    float3 tempForce = collideSpheres(particlePos, pos2, particleVel, vel2, params.particleRadius, params.particleRadius, params.attraction);
-                    particleForce += tempForce;
-                    //if (index == 100) printf("pressure: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
-                    tempForce = calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                    particleForce += tempForce;
-                    //if (index == 100) printf("viscous: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
-                    tempForce = calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
-                    particleForce += tempForce;
-                    //if (index == 100) printf("surface: %f, %f, %f\n", tempForce.x, tempForce.y, tempForce.z);
+                    particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
+                    particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
                 }
 
                 ++neighbors; 

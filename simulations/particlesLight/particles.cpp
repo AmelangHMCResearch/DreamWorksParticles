@@ -79,7 +79,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.01f;
+float timestep = 0.5f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -112,6 +112,7 @@ int mode = 0;
 bool displayEnabled = true;
 bool pauseSpout = false;
 bool moveSpout = true;
+bool renderVoxels = true;
 bool displaySliders = false;
 bool wireframe = false;
 bool demoMode = false;
@@ -208,8 +209,8 @@ writeNeighbors(const uint* neighbors,
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
-        float voxelSize = 1.0f/8.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint3 cubeSize = make_uint3(64, 4, 8);    // Dimension of each side of the cube
+        float voxelSize = 1.0f/64.0f; // Voxel size arbitrarily chose to be multiple of particle radius
+        uint3 cubeSize = make_uint3(512, 32, 64);    // Dimension of each side of the cube
         float3 origin = make_float3(0.0, -0.25, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_GEOLOGY, voxelSize, cubeSize, origin);
     }
@@ -372,20 +373,21 @@ void display()
 
     // now, to draw the voxels.
     // for each voxel
-    if (voxelObject) {
+    if (voxelObject && renderVoxels) {
         const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
         const float * voxelPositionArray = voxelObject->getCpuPosArray();
         const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
         const float voxelSize = voxelObject->getVoxelSize();
         for (unsigned int voxelIndex = 0;
                voxelIndex < numberOfVoxels; ++voxelIndex) {
-            if (voxelStrength[voxelIndex] > 0.0f) {
+            if (voxelStrength[voxelIndex] > 0) {
                 // save the matrix state
                 glPushMatrix();
                 // translate for this voxel
                 glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
                              voxelPositionArray[voxelIndex * 4 + 1],
                              voxelPositionArray[voxelIndex * 4 + 2]);
+                // Color based on strength = nice gradient
                 float* color = new float[3];
                 getColor(voxelStrength[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
                 glColor3f(color[0], color[1], color[2]);
@@ -671,6 +673,9 @@ void key(unsigned char key, int /*x*/, int /*y*/)
 
         case 'p':
             pauseSpout = !pauseSpout;
+            break;
+        case 'v':
+            renderVoxels = !renderVoxels;
             break;
 
         case 'd':

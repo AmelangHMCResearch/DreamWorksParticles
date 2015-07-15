@@ -29,7 +29,11 @@
 #include <GL/glew.h>
 #include <vector>
 
-ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, float* trans, bool useOpenGL, bool usingSpout, bool usingRiver, bool limitLifeByTime, bool limitLifeByHeight, bool useObject) :
+ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, 
+                               float* rot, float* trans, bool useOpenGL, 
+                               bool usingSpout, bool usingRiver, 
+                               bool limitLifeByTime, bool limitLifeByHeight, 
+                               bool useObject) :
     _systemInitialized(false),
     _usingOpenGL(useOpenGL),
     _numParticles(numParticles),
@@ -68,7 +72,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.limitParticleLifeByHeight = limitLifeByHeight;
     _params.limitParticleLifeByTime = limitLifeByTime;
     _params.maxIterations = 1000;
-    _params.maxDistance = 3.95f;
+    _params.maxDistance = -3.0f;
     if (usingRiver) {
         //_params.limitParticleLifeByHeight = true;
         _params.maxDistance = 3.95f;
@@ -87,11 +91,11 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize, float* rot, fl
     _params.damping = 0.02f;
     _params.shear = 0.1f;
     _params.attraction = 0.0f;
-    _params.boundaryDamping = -1.0f;
+    _params.boundaryDamping = -0.5f;
     _params.gravity = make_float3(0.0f, -0.0003f, 0.0f);
     _params.globalDamping = 1.0f;
     // fixed initial value for cell padding / movement threshold
-    _params.movementThreshold = 0.2*_params.particleRadius;
+    _params.movementThreshold = 0.0;
 
     _params.usingObject = useObject;
     setRotation(rot);
@@ -277,6 +281,7 @@ ParticleSystem::update(const float deltaTime,
                           moveSpout);
     }
     if (_params.usingRiver) {
+        // addRiverParticles also checks if it should add particles now
         addRiverParticles(timestepIndex, deltaTime);
     }
 
@@ -310,12 +315,16 @@ ParticleSystem::update(const float deltaTime,
                     _dev_pointHasMovedMoreThanThreshold,
                     _dev_numParticlesToRemove,
                     _timer);
+
     bool needToResort = checkForResort(_dev_pointHasMovedMoreThanThreshold);
 
     // Pull over the number of particles that need to be removed from the GPU, and reset count to 0
     uint numParticlesToRemove; 
     checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
+    /*if (numParticlesToRemove > 10) {
+        printf("Timestep: %d To Remove: %d\n", timestepIndex, numParticlesToRemove);
+    }*/
 
     if (needToResort) {
 
@@ -376,6 +385,7 @@ ParticleSystem::update(const float deltaTime,
         _numActiveParticles = 0;
     }
 
+    // Calculate the "density" of each particle based on its neighbors
     calcDensities(dPos,
                   _dev_force,
                   _dev_cellIndex,
@@ -387,6 +397,7 @@ ParticleSystem::update(const float deltaTime,
 
 
     float* normals;
+    // array of "normals" necessary for calculation of surface tension
     allocateArray((void **)&normals, _numActiveParticles*sizeof(float));
 
     calcNormals(dPos,
@@ -674,6 +685,8 @@ ParticleSystem::addSpoutParticles(const unsigned int timestepIndex,
 
     // only do the rest if we actually have to add particles
     if (numberOfSpoutParticles > 0) {
+        // Make some data static so that we know where to add particles
+        // If the camera moves but we aren't moving the spout
         static float3 axis1; 
         static float3 axis2;
         static float3 spoutPosition;
@@ -785,8 +798,9 @@ void
 ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
                                   const float deltaTime) {
 
-    // first, determine which particles we need to add this timestep
-    const float timeForParticlesToClearSpout = (2 * _params.particleRadius) / (0.005 * 2);
+    float startingVel = 0.01;
+    // first, whether to add particles this timestep, 
+    const float timeForParticlesToClearSpout = (2 * _params.particleRadius) / (startingVel * 2);
     uint numTimestepsToClearSpout = timeForParticlesToClearSpout / deltaTime;
 
     // only do the rest if we actually have to add particles
@@ -794,8 +808,8 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
         unsigned int newNumberOfParticles;
 
         std::vector<float2> gridOfPositions; 
-        for (float z = -0.49; z <= 0.49; z += 2 * _params.particleRadius) {
-            for (float y = 0.0; y <= 0.2; y += 2 * _params.particleRadius) {
+        for (float z = -0.3; z <= 0.3; z += 2 * _params.particleRadius) {
+            for (float y = 0.0; y <= 0.1; y += 2 * _params.particleRadius) {
                 gridOfPositions.push_back(make_float2(y, z));
             }
         }
@@ -807,13 +821,16 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
             newNumberOfParticles = _numParticles;
         }
 
-        const float3 spoutVelocity = make_float3(0.01, 0, 0);
+        const float3 spoutVelocity = make_float3(startingVel, 0, 0);
         const float jitterDistance = _params.particleRadius * 0.1;
         for (unsigned int i = 0;
             i < newNumberOfParticles - _numActiveParticles; ++i) {
             _pos[i*4+0] = -3.95;
-            _pos[i*4+1] = gridOfPositions[i].x + (-1.f + 2.f * frand()) * jitterDistance;
-            _pos[i*4+2] = gridOfPositions[i].y + (-1.f + 2.f * frand()) * jitterDistance;
+            // Use mod of timestep to alternate alignment, allowing closer packing
+            _pos[i*4+1] = gridOfPositions[i].x + (-1.f + 2.f * frand()) * jitterDistance + 
+                          _params.particleRadius * (timestepIndex % 2);
+            _pos[i*4+2] = gridOfPositions[i].y + (-1.f + 2.f * frand()) * jitterDistance + 
+                          _params.particleRadius * (timestepIndex % 2);
             _pos[i*4+3] = 1.0f;
             _vel[i*4+0] = spoutVelocity.x;
             _vel[i*4+1] = spoutVelocity.y;

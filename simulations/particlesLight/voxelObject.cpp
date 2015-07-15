@@ -1,5 +1,6 @@
 #include "voxelObject.h"
 #include "particleSystem.cuh"
+#include <stack>
 
 VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin)
   :  _pos(0),
@@ -73,6 +74,7 @@ void VoxelObject::initObject(ObjectShape shape)
 
 void VoxelObject::generateLandscapeStrength()
 {
+    // Generate rocks randomly, where lower levels = more likely to be rocks
     for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
     {
         for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
@@ -80,7 +82,7 @@ void VoxelObject::generateLandscapeStrength()
             for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
             {
                 unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
-                int isRock = (rand() % _objectParams._cubeSize.y) < y;
+                int isRock = (rand() % _objectParams._cubeSize.y) > y;
                 if (isRock) {
                     _voxelStrength[i] = _maxVoxelStrength;
                 } else {
@@ -89,6 +91,43 @@ void VoxelObject::generateLandscapeStrength()
             }
         }
     }
+    // Generate softer areas using depth-first search
+    std::stack<uint3> voxelsToVisit;
+    uint3 startingVoxel = make_uint3(_objectParams._cubeSize.x * 0.5,
+                                      _objectParams._cubeSize.y - 1,
+                                      _objectParams._cubeSize.z * 0.5); 
+    voxelsToVisit.push(startingVoxel);
+
+    while (!voxelsToVisit.empty()) {
+        uint3 currentVoxel = voxelsToVisit.top();
+        voxelsToVisit.pop();
+        uint currentIndex = getVoxelIndex(currentVoxel);
+        if (_voxelStrength[currentIndex] != _maxVoxelStrength / 4.0) {
+            _voxelStrength[currentIndex] = _maxVoxelStrength / 4.0;
+            // Add all surrounding voxels to queue
+            // Unless they are a rock 
+            for (int z = -1; z <= 1; ++z) {
+                for (int x = -1; x <= 1; ++x) {
+                    for (int y = -1; y <= 1; ++y) {
+                        if (((y == 0 && z == 0) || (x == 0 && z == 0) || (x == 0 && y == 0)) && !(x == 0 && y == 0 && z == 0)) {
+                            uint3 neighborVoxel = make_uint3(currentVoxel.x + x, currentVoxel.y + y, currentVoxel.z + z);
+                            uint neighborIndex = getVoxelIndex(neighborVoxel);
+                            if (voxelIsInBounds(neighborVoxel)) {
+                                if (_voxelStrength[neighborIndex] != _maxVoxelStrength && rand() % 3 != 0) {
+                                    voxelsToVisit.push(neighborVoxel);
+                                } 
+                            } 
+                            else if (neighborVoxel.x > _objectParams._cubeSize.x || neighborVoxel.x < 0) {
+                                // End the search if we hit either end of the area
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 void VoxelObject::initShape(ObjectShape shape)
@@ -219,6 +258,26 @@ void VoxelObject::initShape(ObjectShape shape)
 
     registerGLBufferObject(_posVBO, &_cuda_posvbo_resource);
 
+}
+
+bool VoxelObject::voxelIsInBounds(uint3 gridPos)
+{
+    if (gridPos.x >= 0 && gridPos.x < _objectParams._cubeSize.x) {
+        if (gridPos.y >= 0 && gridPos.y < _objectParams._cubeSize.y) {
+            if (gridPos.z >= 0 && gridPos.z < _objectParams._cubeSize.z) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// Warning: Should only be called on an in-bounds voxel
+uint VoxelObject::getVoxelIndex(uint3 gridPos)
+{
+    return gridPos.z * _objectParams._cubeSize.x * _objectParams._cubeSize.y +
+           gridPos.y * _objectParams._cubeSize.x + gridPos.x; 
 }
 
 float* VoxelObject::getPosArray() {
