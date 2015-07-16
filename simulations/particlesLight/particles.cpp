@@ -79,7 +79,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.05f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -210,8 +210,8 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
         float voxelSize = 1.0f/128.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint3 cubeSize = make_uint3(512, 16, 128);    // Dimension of each side of the cube
-        float3 origin = make_float3(-2.0, -1 / 8.0, 0.0);
+        uint3 cubeSize = make_uint3(128, 64, 128);    // Dimension of each side of the cube
+        float3 origin = make_float3(-3.5, -0.25, 0.0);
         voxelObject = new VoxelObject(VoxelObject::VOXEL_GEOLOGY, voxelSize, cubeSize, origin);
     }
 

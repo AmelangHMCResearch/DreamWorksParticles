@@ -191,8 +191,8 @@ __device__
 float3 calcForceFromVoxel(float3 particlePos,
                           float3 voxelPos, 
                           float3 particleVel,
-                          float particleMass,
-                          float voxelMass)
+                          uint voxelIndex,
+                          float* voxelStrength)
 {
     // calculate relative position
     float3 relPos = particlePos - voxelPos;
@@ -206,14 +206,11 @@ float3 calcForceFromVoxel(float3 particlePos,
 
     if (dist < collideDist)
     {
-        /*float3 relVel = particleVel - 0.0;
-        //float massTerm = (2 * voxelMass) / (particleMass + voxelMass);
-        float massTerm = 2.0;
-        float dotProduct = dot(relVel, relPos);
-        float bottomTerm = dist * dist;
-        //forceOnParticle =  particleVel - massTerm * (dotProduct / bottomTerm) * relPos;
-        forceOnParticle += -1.0 * massTerm * (dotProduct / bottomTerm) * relPos;*/ 
-        forceOnParticle = params.damping * relPos / dist;
+        // Faster particles do more damage
+        float amountToReduceStrength = length(cross(particleVel, relPos));
+        atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
+
+        forceOnParticle = params.damping * (relPos) / dist;
     }
 
     return forceOnParticle;
@@ -953,9 +950,7 @@ void collideD(float4 *pos,               // input: position
                     int3 neighborGridPos = voxelGridPos + make_int3(x, y, z);
                     if (isActiveVoxel(neighborGridPos, voxelStrength)) {
                         float3 voxelPosition = calculateVoxelCenter(neighborGridPos);
-                        float particleMass = 1.0;
-                        float voxelMass = (objParams._voxelSize * objParams._voxelSize * objParams._voxelSize) / (params.particleRadius * params.particleRadius * params.particleRadius);
-                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, particleMass, voxelMass);
+                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, getVoxelIndex(neighborGridPos), voxelStrength);
                         particleForce += forceFromObject;
                     }
                 }

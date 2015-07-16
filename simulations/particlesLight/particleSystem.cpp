@@ -809,7 +809,7 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
 
         std::vector<float2> gridOfPositions; 
         for (float z = -0.3; z <= 0.3; z += 2 * _params.particleRadius) {
-            for (float y = 0.0; y <= 0.1; y += 2 * _params.particleRadius) {
+            for (float y = 0.05; y <= 0.15; y += 2 * _params.particleRadius) {
                 gridOfPositions.push_back(make_float2(y, z));
             }
         }
