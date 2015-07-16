@@ -57,6 +57,17 @@ int3 getVoxelGridPos(const float3 pos)
 }
 
 __device__
+float3 calculateVoxelCenter(int3 gridPos)
+{
+    float3 center;
+    center.x = objParams._origin.x + (objParams._voxelSize / 2.0) + (gridPos.x - objParams._cubeSize.x / 2.0) * objParams._voxelSize;
+    center.y = objParams._origin.y + (objParams._voxelSize / 2.0) + (gridPos.y - objParams._cubeSize.y / 2.0) * objParams. _voxelSize;
+    center.z = objParams._origin.z + (objParams._voxelSize / 2.0) + (gridPos.z - objParams._cubeSize.z / 2.0) * objParams._voxelSize;
+    return center;
+}
+
+
+__device__
 uint getVoxelIndex(int3 voxelGridPos)
 {
     return (voxelGridPos.z * objParams._cubeSize.x * objParams._cubeSize.y) + 
@@ -177,39 +188,35 @@ float3 findNearestFace(int3 voxelGridPos, float3 particlePos, float3 particleOld
 
 // Used for soft cube collision - not currently working as well as hard cube
 __device__
-float3 calcForceFromVoxel(int3 voxelGridPos, 
-                          float4 *voxelPos,
-                          float  *voxelStrength,  
-                          float3 particlePos,
+float3 calcForceFromVoxel(float3 particlePos,
+                          float3 voxelPos, 
                           float3 particleVel,
-                          float3 force)
+                          float particleMass,
+                          float voxelMass)
 {
+    // calculate relative position
+    float3 relPos = particlePos - voxelPos;
 
-    // Check that the particle is active/ in the object
-    if (!isActiveVoxel(voxelGridPos, voxelStrength)) {
-        return make_float3(0.0f);
+    //float relativeMass = voxelMass / particleMass;
+
+    float dist = length(relPos);
+    float collideDist = params.particleRadius + 2 * objParams._voxelSize;
+
+    float3 forceOnParticle = make_float3(0.0f);
+
+    if (dist < collideDist)
+    {
+        /*float3 relVel = particleVel - 0.0;
+        //float massTerm = (2 * voxelMass) / (particleMass + voxelMass);
+        float massTerm = 2.0;
+        float dotProduct = dot(relVel, relPos);
+        float bottomTerm = dist * dist;
+        //forceOnParticle =  particleVel - massTerm * (dotProduct / bottomTerm) * relPos;
+        forceOnParticle += -1.0 * massTerm * (dotProduct / bottomTerm) * relPos;*/ 
+        forceOnParticle = params.damping * relPos / dist;
     }
 
-    // Find the direction the force should act in
-    // Which is a unit vector pointing to the nearest face
-    float3 voxelCenter = make_float3(voxelPos[getVoxelIndex(voxelGridPos)]);
-    float3 direction = findNearestFace(voxelGridPos, particlePos, 
-                                       particleVel, voxelCenter, voxelStrength);
-
-    // Take component of velocity in same direction as nearest face
-    particleVel.x = particleVel.x * (1 && direction.x);
-    particleVel.y = particleVel.y * (1 && direction.y);
-    particleVel.z = particleVel.z * (1 && direction.z);
-
-    // Magnitude is based on distance from the center of the voxel
-    float magnitude = objParams._voxelSize - 
-                      dot(particlePos - voxelCenter, direction);
-
-    // Force is magic number plus adjusted velocity times the mag times the dir
-    float3 forceFromVoxel = (10 + 10 * length(particleVel)) * 
-                             magnitude * direction; 
-
-    return forceFromVoxel;
+    return forceOnParticle;
 }
 
 
@@ -937,8 +944,23 @@ void collideD(float4 *pos,               // input: position
         // Check for collisions with voxel object
         int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, voxelStrength, particlePos, particleVel, particleForce);
-        particleForce += forceFromObject;
+        // Check all voxels which might intersecting the cube
+        int loopStart = -floor(params.particleRadius / objParams._voxelSize);
+        int loopEnd = ceil(params.particleRadius / objParams._voxelSize);
+        for (int z = loopStart; z <= loopEnd; ++z) {
+            for (int y = loopStart; y <= loopEnd; ++y) {
+                for (int x = loopStart; x <= loopEnd; ++x) {
+                    int3 neighborGridPos = voxelGridPos + make_int3(x, y, z);
+                    if (isActiveVoxel(neighborGridPos, voxelStrength)) {
+                        float3 voxelPosition = calculateVoxelCenter(neighborGridPos);
+                        float particleMass = 1.0;
+                        float voxelMass = (objParams._voxelSize * objParams._voxelSize * objParams._voxelSize) / (params.particleRadius * params.particleRadius * params.particleRadius);
+                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, particleMass, voxelMass);
+                        particleForce += forceFromObject;
+                    }
+                }
+            }
+        }
     }
 #endif
 
