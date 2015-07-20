@@ -79,7 +79,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.05f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -210,9 +210,10 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
     if (usingObject) {
         float voxelSize = 1.0f/128.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint3 cubeSize = make_uint3(128, 64, 128);    // Dimension of each side of the cube
-        float3 origin = make_float3(-3.5, -0.25, 0.0);
-        voxelObject = new VoxelObject(VoxelObject::VOXEL_GEOLOGY, voxelSize, cubeSize, origin);
+        //uint3 cubeSize = make_uint3(1 / voxelSize, 1 / (2 * voxelSize), 1 / voxelSize);    // Dimension of each side of the cube
+        uint3 cubeSize = make_uint3(64, 64, 64);    // Dimension of each side of the cube
+        float3 origin = make_float3(0.0, 0.0, 0.0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
     }
 
     psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, usingRiver, limitLifeByTime, limitLifeByHeight, usingObject);
@@ -374,29 +375,62 @@ void display()
     // now, to draw the voxels.
     // for each voxel
     if (voxelObject && renderVoxels) {
-        const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
+        /*const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
         const float * voxelPositionArray = voxelObject->getCpuPosArray();
         const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
         const float voxelSize = voxelObject->getVoxelSize();
-        for (unsigned int voxelIndex = 0;
-               voxelIndex < numberOfVoxels; ++voxelIndex) {
-            if (voxelStrength[voxelIndex] > 0) {
-                // save the matrix state
-                glPushMatrix();
-                // translate for this voxel
-                glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
-                             voxelPositionArray[voxelIndex * 4 + 1],
-                             voxelPositionArray[voxelIndex * 4 + 2]);
-                // Color based on strength = nice gradient
-                float* color = new float[3];
-                getColor(voxelStrength[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-                glColor3f(color[0], color[1], color[2]);
-                delete [] color;
-                glutSolidCube(voxelSize);
-                // reset the matrix state
-                glPopMatrix();
+        const uint3 cubeSize = voxelObject->getCubeSize();
+        for (unsigned int z = 0; z < cubeSize.z; z++) {
+            for (unsigned int y = 0; y < cubeSize.y; y++) {
+                for (unsigned int x = 0; x < cubeSize.x; x++) {
+                    uint3 voxelGridPos = make_uint3(x, y, z);
+                    uint voxelIndex = voxelObject->getVoxelIndex(voxelGridPos);
+                    if (voxelStrength[voxelIndex] > 0) {
+                        // save the matrix state
+                        glPushMatrix();
+                        // translate for this voxel
+                        glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+                                     voxelPositionArray[voxelIndex * 4 + 1],
+                                     voxelPositionArray[voxelIndex * 4 + 2]);
+                        // Color based on strength = nice gradient
+                        float* color = new float[3];
+                        getColor(voxelStrength[voxelIndex] / MAX_ROCK_STRENGTH, color);
+                        glColor3f(color[0], color[1], color[2]);
+                        delete [] color;
+                        glutSolidCube(voxelSize);
+                        // reset the matrix state
+                        glPopMatrix();
+                    }
+                }
             }
-        }
+        }*/
+
+        glMatrixMode(GL_MODELVIEW);
+
+        glPolygonMode(GL_FRONT_AND_BACK, wireframe? GL_LINE : GL_FILL);
+
+        glEnable(GL_LIGHTING);
+            
+        glBindBuffer(GL_ARRAY_BUFFER, voxelObject->getCurrentReadBuffer());
+        glVertexPointer(4, GL_FLOAT, 0, 0);
+        glEnableClientState(GL_VERTEX_ARRAY);
+
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, voxelObject->getNormalBuffer());
+        glNormalPointer(GL_FLOAT, sizeof(float)*4, 0);
+        glEnableClientState(GL_NORMAL_ARRAY);
+
+        glColor3f(0.0, 0.0, 0.0);
+        uint num1 = voxelObject->getNumVoxelsToDraw() * 4 * 15;
+        uint num2 = voxelObject->getCPUNumVoxelsDrawn();
+        uint numToDraw = std::min(num1, num2);
+        glDrawArrays(GL_TRIANGLES, 0, numToDraw);
+        glDisableClientState(GL_VERTEX_ARRAY);
+        glDisableClientState(GL_NORMAL_ARRAY);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glDisable(GL_LIGHTING);
+
     }
 
         // collider
@@ -411,6 +445,7 @@ void display()
         if (renderer && displayEnabled)
         {
             renderer->setColorBuffer(psystem->getColorBuffer());
+            renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumParticles());
             renderer->setParticleRadius(psystem->getParticleRadius());
             renderer->setPointSize(psystem->getParticleRadius());
             renderer->display(displayMode);
@@ -419,7 +454,6 @@ void display()
 #if 0
         if (renderer)
           {
-            renderer->setColorBuffer(voxelObject->getColorBuffer());
             renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
             renderer->setParticleRadius(voxelObject->getVoxelSize());
             renderer->setPointSize(50 * voxelObject->getVoxelSize());

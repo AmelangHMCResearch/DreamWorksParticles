@@ -134,7 +134,6 @@ extern "C"
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
-                         float *voxelPos,
                          float *voxelStrength,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
@@ -155,7 +154,6 @@ extern "C"
                                                       (float4 *) posAfterLastSort, 
                                                       deltaTime,
                                                       numParticles,
-                                                      (float4 *) voxelPos,
                                                       voxelStrength,  
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold,
@@ -379,7 +377,6 @@ extern "C"
                  float *vel,
                  float *force,
                  float  *voxelStrength,
-                 float *voxelPos,
                  float *normals,
                  uint  *cellIndex,
                  uint  *cellStart,
@@ -410,7 +407,6 @@ extern "C"
                                               (float4 *)vel,
                                               (float4 *)force,
                                               voxelStrength,
-                                              (float4 *) voxelPos,
                                               normals,
                                               cellIndex,
                                               cellStart,
@@ -436,6 +432,48 @@ extern "C"
       bool needsResort;
       cudaMemcpy(&needsResort, pointHasMovedMoreThanThreshold, sizeof(bool), cudaMemcpyDeviceToHost);
       return needsResort;
+    }
+
+    void createMarchingCubesMesh(float *voxelPos,
+                                 float *norm,
+                                 float *voxelStrength,
+                                 uint  *tri,
+                                 uint  *numVerts,
+                                 uint  *numVerticesClaimed,
+                                 uint numVoxelsToDraw,
+                                 uint numVoxels,
+                                 EventTimer* timer)
+    {
+#if USE_TEX
+        checkCudaErrors(cudaBindTexture(0, voxelStrengthTex, voxelStrength, numVoxels * sizeof(float)));
+        checkCudaErrors(cudaBindTexture(0, triTex, tri, sizeof(uint) * 256 * 16));
+        checkCudaErrors(cudaBindTexture(0, numVertsTex, numVerts, sizeof(uint) * 256));
+#endif
+
+        // thread per particle
+        uint numThreads, numBlocks;
+        computeGridSize(numVoxelsToDraw, 256, numBlocks, numThreads);
+        cudaMemset(numVerticesClaimed, 0, sizeof(uint));
+
+        // execute the kernel
+        //timer->startTimer(5, true);
+        createMarchingCubesMeshD<<< numBlocks, numThreads >>>((float4 *) voxelPos,
+                                                              (float4 *) norm,
+                                                               voxelStrength,
+                                                               tri,
+                                                               numVerts,
+                                                               numVerticesClaimed,
+                                                               numVoxelsToDraw);
+        //timer->stopTimer(5, true);
+    
+        // check if kernel invocation generated an error
+        getLastCudaError("Kernel execution failed");
+
+#if USE_TEX
+        checkCudaErrors(cudaUnbindTexture(voxelStrengthTex));
+        checkCudaErrors(cudaUnbindTexture(triTex));
+        checkCudaErrors(cudaUnbindTexture(numVertsTex));
+#endif
     }
 
 }   // extern "C"

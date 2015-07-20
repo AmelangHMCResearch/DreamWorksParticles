@@ -66,6 +66,7 @@ struct ObjectParams
     float _voxelSize; 
     uint3 _cubeSize;
     uint _numVoxels;
+    uint _maxVoxelsToDraw;
     float3 _origin;       
 };
 

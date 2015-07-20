@@ -32,6 +32,10 @@ texture<float4, 1, cudaReadModeElementType> tempVelTex;
 
 texture<uint, 1, cudaReadModeElementType> cellStartTex;
 texture<uint, 1, cudaReadModeElementType> cellEndTex;
+
+texture<uint, 1, cudaReadModeElementType> voxelStrengthTex;
+texture<uint, 1, cudaReadModeElementType> triTex;
+texture<uint, 1, cudaReadModeElementType> numVertsTex;
 #endif
 
 // simulation parameters in constant memory
@@ -54,6 +58,26 @@ int3 getVoxelGridPos(const float3 pos)
     voxelGridPos.z = floor((pos.z - lowerCorner.z) / objParams._voxelSize);
 
     return voxelGridPos;
+}
+
+__device__
+uint3 calculateVoxelGridPosFromIndex(uint index)
+{
+    uint3 center;
+    center.z = index / (objParams._cubeSize.x * objParams._cubeSize.y);
+    center.y = (index - center.z * objParams._cubeSize.x * objParams._cubeSize.y) / objParams._cubeSize.x; 
+    center.x = index - objParams._cubeSize.x * (center.y + objParams._cubeSize.y * center.z);
+    return center;
+}
+
+__device__
+uint3 calculateCubePosFromIndex(uint index)
+{
+    uint3 center;
+    center.z = index / ((objParams._cubeSize.x +1) * (objParams._cubeSize.y + 1));
+    center.y = (index - center.z * (objParams._cubeSize.x + 1) * (objParams._cubeSize.y + 1)) / (objParams._cubeSize.x + 1); 
+    center.x = index - (objParams._cubeSize.x + 1) * (center.y + (objParams._cubeSize.y + 1) * center.z);
+    return center;
 }
 
 __device__
@@ -212,7 +236,7 @@ float3 calcForceFromVoxel(float3 particlePos,
         float amountToReduceStrength = min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
         atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
 
-        forceOnParticle =  params.damping * (relPos) / dist * (params.particleRadius - dist) / params.particleRadius;
+        forceOnParticle = (128 * objParams._voxelSize) * params.damping * (relPos) / dist * (params.particleRadius - dist) / params.particleRadius;
     }
 
     return forceOnParticle;
@@ -221,7 +245,6 @@ float3 calcForceFromVoxel(float3 particlePos,
 
 
 // Particle System Kernels/Functions
-
 __global__
 void integrateSystemD(float4 *pos,
                  float4 *vel,
@@ -229,7 +252,6 @@ void integrateSystemD(float4 *pos,
                  float4 *posAfterLastSort, 
                  float deltaTime,
                  uint numParticles, 
-                 float4 * voxelPos, 
                  float *voxelStrength,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold,
@@ -246,6 +268,9 @@ void integrateSystemD(float4 *pos,
     float3 threadForce        = make_float3(force[index]);
     float density             = force[index].w;
     if (density == 0) {
+        iters = params.maxIterations * 2; 
+        atomicAdd(numParticlesToRemove, 1);
+        *pointHasMovedMoreThanThreshold = true;
         density = 1;
     }
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
@@ -267,7 +292,7 @@ void integrateSystemD(float4 *pos,
         if (isActiveVoxel(voxelGridPos, voxelStrength)) {
             // Do the collision
             uint voxelIndex = getVoxelIndex(voxelGridPos);
-            const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
+            float3 currentVoxelPos = calculateVoxelCenter(voxelGridPos);
             const float3 direction = findNearestFace(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
 
             // Update strength of voxel post-collision
@@ -895,11 +920,10 @@ void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
               float   *voxelStrength,
-              float4 *voxelPos,
-              float  *normals,
-              uint   *cellIndex,    
-              uint   *cellStart,
-              uint   *cellEnd,
+              float   *normals,
+              uint    *cellIndex,    
+              uint    *cellStart,
+              uint    *cellEnd,
               uint    numParticles,
               float   deltaTime,
               uint*   numNeighbors)
@@ -917,6 +941,7 @@ void collideD(float4 *pos,               // input: position
     // read particle data from sorted arrays
     float3 particlePos = make_float3(FETCH(pos, index));
     float3 particleVel = make_float3(FETCH(vel, index));
+    float density = force[index].w;
 
     // get address in grid
     int3 gridPos = calcGridPos(particlePos);
@@ -944,6 +969,9 @@ void collideD(float4 *pos,               // input: position
         // Check for collisions with voxel object
         int3 voxelGridPos = getVoxelGridPos(particlePos);
 
+        float3 forceFromObject = make_float3(0);
+        uint numNeighboringVoxels = 0; 
+
         // Check all voxels which might intersecting the cube
         int loopStart = -floor(params.particleRadius / objParams._voxelSize);
         int loopEnd = ceil(params.particleRadius / objParams._voxelSize);
@@ -953,12 +981,16 @@ void collideD(float4 *pos,               // input: position
                     int3 neighborGridPos = voxelGridPos + make_int3(x, y, z);
                     if (isActiveVoxel(neighborGridPos, voxelStrength)) {
                         float3 voxelPosition = calculateVoxelCenter(neighborGridPos);
-                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, getVoxelIndex(neighborGridPos), deltaTime, voxelStrength);
-                        particleForce += forceFromObject;
+                        forceFromObject += calcForceFromVoxel(particlePos, voxelPosition, particleVel, getVoxelIndex(neighborGridPos), deltaTime, voxelStrength);
+                        ++numNeighboringVoxels;
                     }
                 }
             }
         }
+        if (numNeighboringVoxels >= (loopEnd - loopStart) * (loopEnd - loopStart)) {
+            density = 0; 
+        }
+        particleForce += forceFromObject;
     }
 #endif
 
@@ -968,7 +1000,164 @@ void collideD(float4 *pos,               // input: position
                                     params.particleRadius, params.colliderRadius, 0.0f);
 
     // Use 4th element of force to hold the density
-    force[index] = make_float4(particleForce, force[index].w);
+    force[index] = make_float4(particleForce, density);
 }
 
+__device__
+float tangle(float x, float y, float z)
+{
+    x *= 3.0f;
+    y *= 3.0f;
+    z *= 3.0f;
+    return (x*x*x*x - 5.0f*x*x +y*y*y*y - 5.0f*y*y +z*z*z*z - 5.0f*z*z + 11.8f) * 0.2f + 0.5f;
+}
+
+// evaluate field function at a point
+// returns value and gradient in float4
+__device__
+float4 fieldFunc4(float3 p)
+{
+    float v = tangle(p.x, p.y, p.z);
+    const float d = 0.001f;
+    float dx = tangle(p.x + d, p.y, p.z) - v;
+    float dy = tangle(p.x, p.y + d, p.z) - v;
+    float dz = tangle(p.x, p.y, p.z + d) - v;
+    return make_float4(dx, dy, dz, v);
+}
+
+__device__
+void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, float3 &p, float3 &n)
+{
+    float t = (isolevel - f0.w) / (f1.w - f0.w);
+    p = lerp(p0, p1, 0.5);
+    n.x = lerp(f0.x, f1.x, 0.5);
+    n.y = lerp(f0.y, f1.y, 0.5);
+    n.z = lerp(f0.z, f1.z, 0.5);
+    //    n = normalize(n);
+}
+
+__global__
+void createMarchingCubesMeshD(float4 *vertexPos,
+                              float4 *norm,
+                              float *voxelStrength,
+                              uint  *tri,
+                              uint  *numVerts,
+                              uint  *numVerticesClaimed,
+                              uint   numVoxelsToDraw)
+{
+    uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
+
+    // Get gridPos of our grid cube - starts as lower left corner as (0,0,0)
+    uint3 gridPos = calculateCubePosFromIndex(index);
+    
+    // Check if voxels on corner of gridcube are 
+    int lookupIndexForActiveVertices = 0;
+    float3 cubeVertexPos[8];
+    float4 field[8];
+
+    int3 i = make_int3(-1, -1, -1);
+    int3 toCheck = make_int3(gridPos) + i;
+    bool isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 0); 
+    cubeVertexPos[0] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[0]);
+
+    i = make_int3(0,-1,-1);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 1); 
+    cubeVertexPos[1] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[1]);
+
+    i = make_int3(0,0,-1);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 2); 
+    cubeVertexPos[2] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[2]);
+
+    i = make_int3(-1,0,-1);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 3); 
+    cubeVertexPos[3] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[3]);
+
+    i = make_int3(-1,-1,0);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 4); 
+    cubeVertexPos[4] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[4]);
+
+    i = make_int3(0,-1,0);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 5); 
+    cubeVertexPos[5] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[5]);
+
+    i = make_int3(0,0,0);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 6); 
+    cubeVertexPos[6] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[6]);
+
+    i = make_int3(-1,0,0);
+    toCheck = make_int3(gridPos) + i;
+    isActive = isActiveVoxel(toCheck, voxelStrength);
+    lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 7); 
+    cubeVertexPos[7] = calculateVoxelCenter(toCheck);
+    field[0] = fieldFunc4(cubeVertexPos[7]);
+
+
+
+
+    /*for (int z = -1; z < 1; ++z) {
+        for (int y = -1; y < 1; ++y) {
+            for (int x = -1; x < 1; ++x) {
+                int loopIndex = (x+1) + (y+1) * 2 + (z+1) * 4;
+                int3 voxelToCheck = make_int3(gridPos) + make_int3(x, y, z); 
+                bool voxelIsActive = isActiveVoxel(voxelToCheck, voxelStrength);
+                lookupIndexForActiveVertices = lookupIndexForActiveVertices | 
+                                               (voxelIsActive << loopIndex); 
+                cubeVertexPos[loopIndex] = calculateVoxelCenter(voxelToCheck);
+            }
+        }
+    }*/
+
+    float3 vertlist[12];
+    float3 normList[12];
+
+    vertexInterp2(0.5, cubeVertexPos[0], cubeVertexPos[1], field[0], field[1], vertlist[0], normList[0]);
+    vertexInterp2(0.5, cubeVertexPos[1], cubeVertexPos[2], field[1], field[2], vertlist[1], normList[1]);
+    vertexInterp2(0.5, cubeVertexPos[2], cubeVertexPos[3], field[2], field[3], vertlist[2], normList[2]);
+    vertexInterp2(0.5, cubeVertexPos[3], cubeVertexPos[0], field[3], field[0], vertlist[3], normList[3]);
+
+    vertexInterp2(0.5, cubeVertexPos[4], cubeVertexPos[5], field[4], field[5], vertlist[4], normList[4]);
+    vertexInterp2(0.5, cubeVertexPos[5], cubeVertexPos[6], field[5], field[6], vertlist[5], normList[5]);
+    vertexInterp2(0.5, cubeVertexPos[6], cubeVertexPos[7], field[6], field[7], vertlist[6], normList[6]);
+    vertexInterp2(0.5, cubeVertexPos[7], cubeVertexPos[4], field[7], field[4], vertlist[7], normList[7]);
+
+    vertexInterp2(0.5, cubeVertexPos[0], cubeVertexPos[4], field[0], field[0], vertlist[8], normList[8]);
+    vertexInterp2(0.5, cubeVertexPos[1], cubeVertexPos[5], field[1], field[1], vertlist[9], normList[9]);
+    vertexInterp2(0.5, cubeVertexPos[2], cubeVertexPos[6], field[2], field[2], vertlist[10], normList[10]);
+    vertexInterp2(0.5, cubeVertexPos[3], cubeVertexPos[7], field[3], field[3], vertlist[11], normList[11]);
+
+    uint numVerticesToAdd = FETCH(numVerts, lookupIndexForActiveVertices);
+    uint positionToAdd = atomicAdd(numVerticesClaimed, numVerticesToAdd); 
+    for (int i= 0; i < numVerticesToAdd; ++i) {
+
+        uint edge = FETCH(tri, lookupIndexForActiveVertices*16 + i);
+        uint indexToAdd = positionToAdd + i;
+
+        if (indexToAdd < numVoxelsToDraw * 15)
+        {
+            vertexPos[indexToAdd] = make_float4(vertlist[edge], 1.0f);
+            norm[indexToAdd] = make_float4(normList[edge], 0.0f);
+        }
+    }
+
+}
 #endif

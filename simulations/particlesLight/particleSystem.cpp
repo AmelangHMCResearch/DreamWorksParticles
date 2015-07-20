@@ -309,7 +309,6 @@ ParticleSystem::update(const float deltaTime,
                     _dev_posAfterLastSort,
                     deltaTime,
                     _numActiveParticles,
-                    voxelPos,
                     voxelStrength,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
@@ -415,7 +414,6 @@ ParticleSystem::update(const float deltaTime,
             _dev_vel,
             _dev_force,
             voxelStrength,
-            voxelPos,
             normals,
             _dev_cellIndex,
             _dev_cellStart,
@@ -426,6 +424,18 @@ ParticleSystem::update(const float deltaTime,
             _numGridCells,
             _timer);
 
+    if (_params.usingObject) {
+        createMarchingCubesMesh(voxelPos,
+                                voxelObject->getNormalArray(),
+                                voxelStrength,
+                                voxelObject->getTriTable(),
+                                voxelObject->getNumVertsTable(),
+                                voxelObject->getVerticesInPosArray(),
+                                voxelObject->getNumVoxelsToDraw(),
+                                voxelObject->getNumVoxels(),
+                                _timer);
+    }
+
     freeArray(normals);
     
 
@@ -435,6 +445,7 @@ ParticleSystem::update(const float deltaTime,
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
     if(_params.usingObject) {
         voxelObject->unbindPosArray();
+        voxelObject->unbindNormalArray();
     }
 
     if (_usingOpenGL)
@@ -810,7 +821,7 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
 
         std::vector<float2> gridOfPositions; 
         for (float z = -0.3; z <= 0.3; z += 2 * _params.particleRadius) {
-            for (float y = 0.05; y <= 0.15; y += 2 * _params.particleRadius) {
+            for (float y = _params.particleRadius; y <= 0.10; y += 2 * _params.particleRadius) {
                 gridOfPositions.push_back(make_float2(y, z));
             }
         }

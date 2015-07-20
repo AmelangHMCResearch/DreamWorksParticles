@@ -56,6 +56,16 @@ public:
         return _objectParams._numVoxels;
     }
 
+    unsigned int getNumVoxelsToDraw() {
+        return _objectParams._maxVoxelsToDraw;
+    }
+
+    unsigned int getCPUNumVoxelsDrawn() {
+        uint numDrawn;
+        cudaMemcpy(&numDrawn, _dev_verticesInPosArray, sizeof(uint), cudaMemcpyDeviceToHost);
+        return numDrawn;
+    }
+
     unsigned int getNumActive() {
         return _numActiveVoxels;
     }
@@ -65,9 +75,19 @@ public:
         return _posVBO;
     }
 
-    unsigned int getColorBuffer()       const
+    unsigned int getNormalBuffer() const
     {
-        return _colorVBO;
+        return _normVBO;
+    }
+
+    uint* getTriTable()
+    {
+        return _dev_triTable;
+    }
+
+    uint* getNumVertsTable()
+    {
+        return _dev_numVertsTable; 
     }
 
     float* getVoxelStrength()
@@ -75,14 +95,21 @@ public:
         return _dev_voxelStrength;
     }
 
+    uint* getVerticesInPosArray()
+    {
+        return _dev_verticesInPosArray;
+    }
+
     uint getVoxelIndex(uint3 gridPos);
     bool voxelIsInBounds(uint3 gridPos);
 
     float* getPosArray();
+    float* getNormalArray();
     float* getCpuPosArray();
     float* getVoxelStrengthFromGPU();
 
     void unbindPosArray();
+    void unbindNormalArray();
 
     unsigned int createVBO(unsigned int size);
 
@@ -99,10 +126,13 @@ private:
 
     // GPU Data
     float *_dev_voxelStrength;
+    uint *_dev_verticesInPosArray; 
+    uint *_dev_triTable;
+    uint *_dev_numVertsTable;
     unsigned int   _posVBO;            // vertex buffer object for particle positions
-    unsigned int   _colorVBO;          // vertex buffer object for col
+    unsigned int   _normVBO;
     struct cudaGraphicsResource *_cuda_posvbo_resource; // handles OpenGL-CUDA exchange
-    struct cudaGraphicsResource *_cuda_colorvbo_resource; // handles OpenGL-CUDA exchange
+    struct cudaGraphicsResource *_cuda_normvbo_resource;
 
 	// Parameters
 	ObjectParams _objectParams;

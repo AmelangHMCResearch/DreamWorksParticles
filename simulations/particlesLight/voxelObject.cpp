@@ -1,6 +1,8 @@
 #include "voxelObject.h"
 #include "particleSystem.cuh"
+#include "tables.h"
 #include <stack>
+#include <algorithm>
 
 VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin)
   :  _pos(0),
@@ -20,12 +22,14 @@ VoxelObject::~VoxelObject()
     delete [] _pos;
     delete [] _voxelStrength;
 
-    freeArray(_dev_voxelStrength);
-
-    unregisterGLBufferObject(_cuda_colorvbo_resource);
+    freeArray(_dev_triTable);
+    freeArray(_dev_numVertsTable);
+    
     unregisterGLBufferObject(_cuda_posvbo_resource);
     glDeleteBuffers(1, (const GLuint *)&_posVBO);
-    glDeleteBuffers(1, (const GLuint *)&_colorVBO);
+
+    unregisterGLBufferObject(_cuda_normvbo_resource);
+    glDeleteBuffers(1, (const GLuint *)&_normVBO);
 }
 
 void VoxelObject::initObject(ObjectShape shape) 
@@ -42,33 +46,35 @@ void VoxelObject::initObject(ObjectShape shape)
 
     // Allocate active voxel array on GPU
     allocateArray((void **) &_dev_voxelStrength, sizeof(float) * _objectParams._numVoxels);
+    allocateArray((void **) &_dev_verticesInPosArray, sizeof(uint));
+
+    // Allocate lookup tables for marching cubes on the GPU
+    allocateArray((void **) &_dev_triTable, sizeof(uint) * 256 * 16);
+    cudaMemcpy(_dev_triTable, triTable, sizeof(uint) * 256 * 16, cudaMemcpyHostToDevice);
+    allocateArray((void **) &_dev_numVertsTable, sizeof(uint) * 256);
+    cudaMemcpy(_dev_numVertsTable, numVertsTable, sizeof(uint) * 256, cudaMemcpyHostToDevice);
 
     // Create the VBO
+    uint numMarchingCubes = (_objectParams._cubeSize.x + 1) * (_objectParams._cubeSize.y + 1) * (_objectParams._cubeSize.z + 1);
+    _objectParams._maxVoxelsToDraw = std::min(numMarchingCubes, (uint) 128 * 128 * 128);
+    uint bufferSize = _objectParams._maxVoxelsToDraw * 4 * 15 * sizeof(float); 
     glGenBuffers(1, &_posVBO);
     glBindBuffer(GL_ARRAY_BUFFER, _posVBO);
-    glBufferData(GL_ARRAY_BUFFER, _objectParams._numVoxels * 4 * sizeof(float), 0, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, bufferSize, 0, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     registerGLBufferObject(_posVBO, &_cuda_posvbo_resource);
+
+    glGenBuffers(1, &_normVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, _normVBO);
+    glBufferData(GL_ARRAY_BUFFER, bufferSize, 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    registerGLBufferObject(_normVBO, &_cuda_normvbo_resource);
+ 
  
 
     initShape(shape);
-
-    // Create the color buff
-    _colorVBO = createVBO(_objectParams._numVoxels * 4 * sizeof(float));
-    registerGLBufferObject(_colorVBO, &_cuda_colorvbo_resource);
-    // fill color buffer
-    glBindBufferARB(GL_ARRAY_BUFFER, _colorVBO);
-    float *data = (float *) glMapBufferARB(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-    float *ptr = data;
-    for (unsigned int i = 0; i < _objectParams._numVoxels; i++)
-    {
-        *ptr++ = 0.0;
-        *ptr++ = 0.0;
-        *ptr++ = 0.0;
-        *ptr++ = 1.0;
-    }
-    glUnmapBufferARB(GL_ARRAY_BUFFER);
 
 }
 
@@ -150,11 +156,6 @@ void VoxelObject::initShape(ObjectShape shape)
                         {
                             _voxelStrength[i] = _maxVoxelStrength;
                             ++_numActiveVoxels; 
-                            // Calculate center of voxels for use in VBO rendering
-                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
-                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+3] = 1.0f;
                         }
                     }
                 }
@@ -176,11 +177,6 @@ void VoxelObject::initShape(ObjectShape shape)
                         {
                             ++_numActiveVoxels; 
                             _voxelStrength[i] = _maxVoxelStrength / 4.0;
-                            // Calculate center of voxels for use in VBO rendering
-                            _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
-                            _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
-                            _pos[i*4+3] = 1.0f;
                         }
                     }
                 }
@@ -203,11 +199,6 @@ void VoxelObject::initShape(ObjectShape shape)
                             if (y == 0) {
                                 _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
-                                // Calculate center of voxels for use in VBO rendering
-                                _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
-                                _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
-                                _pos[i*4+2] = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
-                                _pos[i*4+3] = 1.0f;
                             }
                         }
                     }
@@ -236,11 +227,6 @@ void VoxelObject::initShape(ObjectShape shape)
                             if (radius <= (_objectParams._cubeSize.x * _objectParams._voxelSize) / 2.0) {
                                 _voxelStrength[i] = _maxVoxelStrength;
                                 ++_numActiveVoxels; 
-                                // Calculate center of voxels for use in VBO rendering
-                                _pos[i*4] = xPos;
-                                _pos[i*4+1] = yPos;
-                                _pos[i*4+2] = zPos;
-                                _pos[i*4+3] = 1.0f;
                             } 
                         }
                     }
@@ -250,14 +236,6 @@ void VoxelObject::initShape(ObjectShape shape)
         break;
     }
     cudaMemcpy(_dev_voxelStrength, _voxelStrength, sizeof(int) * _objectParams._numVoxels, cudaMemcpyHostToDevice);
-
-    // Copy position data to vbo
-    unregisterGLBufferObject(_cuda_posvbo_resource);
-    glBindBuffer(GL_ARRAY_BUFFER, _posVBO);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, _objectParams._numVoxels*4*sizeof(float), _pos);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    registerGLBufferObject(_posVBO, &_cuda_posvbo_resource);
 
 }
 
@@ -286,6 +264,11 @@ float* VoxelObject::getPosArray() {
     return dPos;
 }
 
+float* VoxelObject::getNormalArray() {
+    float *dNorm = (float *) mapGLBufferObject(&_cuda_normvbo_resource);
+    return dNorm;
+}
+
 float* VoxelObject::getCpuPosArray() {
     return _pos;
 }
@@ -300,13 +283,6 @@ void VoxelObject::unbindPosArray() {
     unmapGLBufferObject(_cuda_posvbo_resource);
 }
 
-unsigned int
-VoxelObject::createVBO(unsigned int size)
-{
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, size, 0, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    return vbo;
+void VoxelObject::unbindNormalArray() {
+    unmapGLBufferObject(_cuda_normvbo_resource);
 }

@@ -32,7 +32,6 @@ extern "C"
                          float *posAfterLastSort, 
                          float deltaTime,
                          uint numParticles, 
-                         float *voxelPos, 
                          float *voxelStrength,  
                          bool posAfterLastSortIsValid, 
                          bool *pointHasMovedMoreThanThreshold,
@@ -96,7 +95,6 @@ extern "C"
                  float *vel,
                  float *force,
                  float  *voxelStrength,
-                 float *voxelPos,
                  float *normals,
                  uint  *cellIndex,
                  uint  *cellStart,
@@ -106,6 +104,16 @@ extern "C"
                  float deltaTime, 
                  uint   numCells,
                  EventTimer* timer);
+
+    void createMarchingCubesMesh(float *voxelPos,
+                                 float *norm,
+                                 float *voxelStrength,
+                                 uint  *tri,
+                                 uint  *numVerts,
+                                 uint  *numVerticesClaimed,
+                                 uint numVoxelsToDraw,
+                                 uint numVoxels,
+                                 EventTimer* timer);
 
     bool checkForResort(bool *pointHasMovedMoreThanThreshold);
 
