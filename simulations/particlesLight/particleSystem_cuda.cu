@@ -386,6 +386,7 @@ extern "C"
                  uint  *cellEnd,
                  uint  *numNeighbors,
                  uint   numParticles,
+                 float deltaTime,
                  uint   numCells,
                  EventTimer* timer)
     {
@@ -415,6 +416,7 @@ extern "C"
                                               cellStart,
                                               cellEnd,
                                               numParticles,
+                                              deltaTime,
                                               numNeighbors);
         timer->stopTimer(5, true);
     

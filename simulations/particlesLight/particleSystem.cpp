@@ -88,7 +88,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize,
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
     _params.spring = 0.5f;
-    _params.damping = 0.0005f;
+    _params.damping = 0.6f;
     _params.shear = 0.1f;
     _params.attraction = 0.0f;
     _params.boundaryDamping = -0.5f;
@@ -422,6 +422,7 @@ ParticleSystem::update(const float deltaTime,
             _dev_cellEnd,
             _dev_numNeighbors,
             _numActiveParticles,
+            deltaTime,
             _numGridCells,
             _timer);
 

@@ -175,6 +175,7 @@ void VoxelObject::initShape(ObjectShape shape)
                         if (i < _objectParams._numVoxels)
                         {
                             ++_numActiveVoxels; 
+                            _voxelStrength[i] = _maxVoxelStrength / 4.0;
                             // Calculate center of voxels for use in VBO rendering
                             _pos[i*4] = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
                             _pos[i*4+1] = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
@@ -184,7 +185,7 @@ void VoxelObject::initShape(ObjectShape shape)
                     }
                 }
             }
-            generateLandscapeStrength();
+            //generateLandscapeStrength();
         }
         break;
 

@@ -99,8 +99,8 @@ int buttonState = 0;
 float camera_trans[] = {0, 0, -1.5};
 float camera_rot[]   = {-3.6, -73.4, 0};
 #else
-float camera_trans[] = {0, 0, -15};
-float camera_rot[]   = {0, 0, 0};
+float camera_trans[] = {1.8, -0.1, -4.7};
+float camera_rot[]   = {0.8, 0.2, 0};
 #endif
 float camera_trans_lag[] = {0, 0, -3};
 float camera_rot_lag[] = {0, 0, 0};
@@ -305,10 +305,10 @@ void display()
     if (timeDiff >= (timestep/0.5) * 10.0)
     {
         timeOfLastPhysics = currentTime;
-        psystem->setDamping(damping);
+        //psystem->setDamping(damping);
         psystem->setGravity(-gravity);
         psystem->setCollideSpring(collideSpring);
-        psystem->setCollideDamping(collideDamping);
+        //psystem->setCollideDamping(collideDamping);
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
         psystem->setRotation(camera_rot);

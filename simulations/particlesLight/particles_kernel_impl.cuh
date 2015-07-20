@@ -192,6 +192,7 @@ float3 calcForceFromVoxel(float3 particlePos,
                           float3 voxelPos, 
                           float3 particleVel,
                           uint voxelIndex,
+                          float deltaTime, 
                           float* voxelStrength)
 {
     // calculate relative position
@@ -200,17 +201,18 @@ float3 calcForceFromVoxel(float3 particlePos,
     //float relativeMass = voxelMass / particleMass;
 
     float dist = length(relPos);
-    float collideDist = params.particleRadius + 2 * objParams._voxelSize;
+    float collideDist = params.particleRadius;
 
     float3 forceOnParticle = make_float3(0.0f);
 
     if (dist < collideDist)
     {
         // Faster particles do more damage
-        float amountToReduceStrength = length(cross(particleVel, relPos));
-        atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
+        float t_c = 0.1; 
+        float amountToReduceStrength = min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
+        atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
 
-        forceOnParticle = params.damping * (relPos) / dist;
+        forceOnParticle =  params.damping * (relPos) / dist * (params.particleRadius - dist) / params.particleRadius;
     }
 
     return forceOnParticle;
@@ -610,7 +612,7 @@ float3 collideSpheres(float3 posA, float3 posB,
         // spring force
         force = -params.spring*(collideDist - dist) * norm;
         // dashpot (damping) force
-        force += params.damping*relVel;
+        force += 0.0005*relVel;
         // tangential shear force
         force += params.shear*tanVel;
         // attraction
@@ -876,7 +878,7 @@ float3 collideCell(int3    gridPos,
                 // Check that we aren't looking at a far away particle, then find viscous + tension forces
                 if (length(particlePos - pos2) < 10 * params.cellSize.x) {
                     particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                    particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                    //particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
                 }
 
                 ++neighbors; 
@@ -899,6 +901,7 @@ void collideD(float4 *pos,               // input: position
               uint   *cellStart,
               uint   *cellEnd,
               uint    numParticles,
+              float   deltaTime,
               uint*   numNeighbors)
 {
     uint index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
@@ -950,7 +953,7 @@ void collideD(float4 *pos,               // input: position
                     int3 neighborGridPos = voxelGridPos + make_int3(x, y, z);
                     if (isActiveVoxel(neighborGridPos, voxelStrength)) {
                         float3 voxelPosition = calculateVoxelCenter(neighborGridPos);
-                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, getVoxelIndex(neighborGridPos), voxelStrength);
+                        float3 forceFromObject = calcForceFromVoxel(particlePos, voxelPosition, particleVel, getVoxelIndex(neighborGridPos), deltaTime, voxelStrength);
                         particleForce += forceFromObject;
                     }
                 }
