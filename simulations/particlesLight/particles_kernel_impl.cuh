@@ -268,10 +268,12 @@ void integrateSystemD(float4 *pos,
     float3 threadForce        = make_float3(force[index]);
     float density             = force[index].w;
     if (density == 0) {
-        iters = params.maxIterations * 2; 
-        atomicAdd(numParticlesToRemove, 1);
-        *pointHasMovedMoreThanThreshold = true;
         density = 1;
+        if (iters != 0) {
+            iters = params.maxIterations * 2; 
+            atomicAdd(numParticlesToRemove, 1);
+            *pointHasMovedMoreThanThreshold = true;
+        }
     }
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
 
@@ -1030,10 +1032,10 @@ void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, f
 {
     float t = (isolevel - f0.w) / (f1.w - f0.w);
     p = lerp(p0, p1, 0.5);
-    n.x = lerp(f0.x, f1.x, 0.5);
-    n.y = lerp(f0.y, f1.y, 0.5);
-    n.z = lerp(f0.z, f1.z, 0.5);
-    //    n = normalize(n);
+    n.x = lerp(f0.x, f1.x, t);
+    n.y = lerp(f0.y, f1.y, t);
+    n.z = lerp(f0.z, f1.z, t);
+    n = normalize(n);
 }
 
 __global__
@@ -1067,49 +1069,49 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 1); 
     cubeVertexPos[1] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[1]);
+    field[1] = fieldFunc4(cubeVertexPos[1]);
 
     i = make_int3(0,0,-1);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 2); 
     cubeVertexPos[2] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[2]);
+    field[2] = fieldFunc4(cubeVertexPos[2]);
 
     i = make_int3(-1,0,-1);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 3); 
     cubeVertexPos[3] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[3]);
+    field[3] = fieldFunc4(cubeVertexPos[3]);
 
     i = make_int3(-1,-1,0);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 4); 
     cubeVertexPos[4] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[4]);
+    field[4] = fieldFunc4(cubeVertexPos[4]);
 
     i = make_int3(0,-1,0);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 5); 
     cubeVertexPos[5] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[5]);
+    field[5] = fieldFunc4(cubeVertexPos[5]);
 
     i = make_int3(0,0,0);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 6); 
     cubeVertexPos[6] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[6]);
+    field[6] = fieldFunc4(cubeVertexPos[6]);
 
     i = make_int3(-1,0,0);
     toCheck = make_int3(gridPos) + i;
     isActive = isActiveVoxel(toCheck, voxelStrength);
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 7); 
     cubeVertexPos[7] = calculateVoxelCenter(toCheck);
-    field[0] = fieldFunc4(cubeVertexPos[7]);
+    field[7] = fieldFunc4(cubeVertexPos[7]);
 
 
 
@@ -1130,20 +1132,20 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     float3 vertlist[12];
     float3 normList[12];
 
-    vertexInterp2(0.5, cubeVertexPos[0], cubeVertexPos[1], field[0], field[1], vertlist[0], normList[0]);
-    vertexInterp2(0.5, cubeVertexPos[1], cubeVertexPos[2], field[1], field[2], vertlist[1], normList[1]);
-    vertexInterp2(0.5, cubeVertexPos[2], cubeVertexPos[3], field[2], field[3], vertlist[2], normList[2]);
-    vertexInterp2(0.5, cubeVertexPos[3], cubeVertexPos[0], field[3], field[0], vertlist[3], normList[3]);
+    vertexInterp2(0.0, cubeVertexPos[0], cubeVertexPos[1], field[0], field[1], vertlist[0], normList[0]);
+    vertexInterp2(0.0, cubeVertexPos[1], cubeVertexPos[2], field[1], field[2], vertlist[1], normList[1]);
+    vertexInterp2(0.0, cubeVertexPos[2], cubeVertexPos[3], field[2], field[3], vertlist[2], normList[2]);
+    vertexInterp2(0.0, cubeVertexPos[3], cubeVertexPos[0], field[3], field[0], vertlist[3], normList[3]);
 
-    vertexInterp2(0.5, cubeVertexPos[4], cubeVertexPos[5], field[4], field[5], vertlist[4], normList[4]);
-    vertexInterp2(0.5, cubeVertexPos[5], cubeVertexPos[6], field[5], field[6], vertlist[5], normList[5]);
-    vertexInterp2(0.5, cubeVertexPos[6], cubeVertexPos[7], field[6], field[7], vertlist[6], normList[6]);
-    vertexInterp2(0.5, cubeVertexPos[7], cubeVertexPos[4], field[7], field[4], vertlist[7], normList[7]);
+    vertexInterp2(0.0, cubeVertexPos[4], cubeVertexPos[5], field[4], field[5], vertlist[4], normList[4]);
+    vertexInterp2(0.0, cubeVertexPos[5], cubeVertexPos[6], field[5], field[6], vertlist[5], normList[5]);
+    vertexInterp2(0.0, cubeVertexPos[6], cubeVertexPos[7], field[6], field[7], vertlist[6], normList[6]);
+    vertexInterp2(0.0, cubeVertexPos[7], cubeVertexPos[4], field[7], field[4], vertlist[7], normList[7]);
 
-    vertexInterp2(0.5, cubeVertexPos[0], cubeVertexPos[4], field[0], field[0], vertlist[8], normList[8]);
-    vertexInterp2(0.5, cubeVertexPos[1], cubeVertexPos[5], field[1], field[1], vertlist[9], normList[9]);
-    vertexInterp2(0.5, cubeVertexPos[2], cubeVertexPos[6], field[2], field[2], vertlist[10], normList[10]);
-    vertexInterp2(0.5, cubeVertexPos[3], cubeVertexPos[7], field[3], field[3], vertlist[11], normList[11]);
+    vertexInterp2(0.0, cubeVertexPos[0], cubeVertexPos[4], field[0], field[4], vertlist[8], normList[8]);
+    vertexInterp2(0.0, cubeVertexPos[1], cubeVertexPos[5], field[1], field[5], vertlist[9], normList[9]);
+    vertexInterp2(0.0, cubeVertexPos[2], cubeVertexPos[6], field[2], field[6], vertlist[10], normList[10]);
+    vertexInterp2(0.0, cubeVertexPos[3], cubeVertexPos[7], field[3], field[7], vertlist[11], normList[11]);
 
     uint numVerticesToAdd = FETCH(numVerts, lookupIndexForActiveVertices);
     uint positionToAdd = atomicAdd(numVerticesClaimed, numVerticesToAdd); 
