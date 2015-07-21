@@ -125,7 +125,7 @@ class VoxelTree
         // CPU values
         bool _isInitialized;
         bool _numberOfLevels;
-        vector<unsigned int> _numberOfCellsPerSideForLevel;
+        std::vector<unsigned int> _numberOfCellsPerSideForLevel;
 
         // scalar values
         unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
