@@ -65,9 +65,18 @@ VoxelTree::~VoxelTree()
 
 }
 
+
+// NOTE:
+/*
+    This currently treats the first entry of the numberOfCellsPerSideForLevel array
+    as the split for the bounding box of the entire object. This implicitly requires
+    variable sized voxels because the bounding box determines determines the size
+    of the smallest cell. This will likely cause errors for anything that isn't
+    a cube and should be improved.
+*/
 void VoxelTree::initializeTree()
 {   
-    // TODO
+    // TODO: pass in VDB (?)
     // For now, we will just initialize a fixed size cube with arbitrarily-sized voxels
 
     // make the space for the bounding box and set it
@@ -86,7 +95,7 @@ void VoxelTree::initializeTree()
     // first, create the space for the data at each level
     unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
-        numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[0];
+        numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[0], numberOfEntriesInLevel*sizeof(unsigned int)));
         checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[0], numberOfEntriesInLevel*sizeof(unsigned int)));
     }
@@ -99,12 +108,26 @@ void VoxelTree::initializeTree()
 
 
     // set the top level of the tree to active to represent the cube.
-
-    
-    
-    // std::vector<unsigned int> dummyLevelData({1, 1, 1, 1});
-    // checkCudaErrors(cudaMemcpy(_dev_pointersToLevelStatuses));
+    const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
+    checkCudaErrors(cudaMemset((pointersToStatusesOnGPU[0]), (unsigned int) 1, numberOfTopLevelEntries*sizeof(unsigned int)));
 
     _isInitialized = true;
 }
+
+// ***************
+// *** TESTING ***
+// ***************
+
+void VoxelTree::test()
+{
+    std::array<unsigned int, 4> blah = {2, 2, 2, 2};
+    std::vector<unsigned int> cellsPerSide(blah.begin(), blah.end());
+
+    VoxelTree tree(cellsPerSide);
+}
+
+
+
+
+
 

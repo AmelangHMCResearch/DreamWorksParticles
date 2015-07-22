@@ -53,6 +53,9 @@
 #include "paramgl.h"
 #include "event_timer.h"
 
+// TODO: remove
+#include "gpuVoxeltree.h"
+
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
 uint3 gridSize = {256, 256, 256};
@@ -239,6 +242,10 @@ void computeFPS()
 
 void display()
 {
+
+    // TODO: Remove
+    // testing the VoxelTree
+    VoxelTree::test();
 
     // update the simulation
     if (!bPause)

@@ -114,6 +114,8 @@ class VoxelTree
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
 
+        // TODO: Remove
+        static void test();
 
     private:
         // status checking functions
