@@ -150,7 +150,7 @@ void VoxelObject::initShape(ObjectShape shape)
                 {
                     for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
+                        unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
 
                         if (i < _objectParams._numVoxels)
                         {
@@ -193,7 +193,7 @@ void VoxelObject::initShape(ObjectShape shape)
                 {
                     for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
+                        unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
                         if (i < _objectParams._numVoxels)
                         {
                             if (y == 0) {
@@ -214,7 +214,7 @@ void VoxelObject::initShape(ObjectShape shape)
                 {
                     for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
                     {
-                        unsigned int i = (z*_objectParams._cubeSize.z * _objectParams._cubeSize.z) + (y * _objectParams._cubeSize.y) + x;
+                        unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
 
                         if (i < _objectParams._numVoxels)
                         {

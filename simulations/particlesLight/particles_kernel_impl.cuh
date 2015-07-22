@@ -225,7 +225,7 @@ float3 calcForceFromVoxel(float3 particlePos,
     //float relativeMass = voxelMass / particleMass;
 
     float dist = length(relPos);
-    float collideDist = params.particleRadius;
+    float collideDist = params.particleRadius + 1.5 * objParams._voxelSize;
 
     float3 forceOnParticle = make_float3(0.0f);
 
@@ -233,10 +233,13 @@ float3 calcForceFromVoxel(float3 particlePos,
     {
         // Faster particles do more damage
         float t_c = 0.1; 
-        float amountToReduceStrength = min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
-        atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
+        if (particleVel.x < 0.3f && particleVel.x > 0.01f) {
+            // float amountToReduceStrength = 100 * min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
+            float amountToReduceStrength = -100.0 * length(cross(particleVel, relPos)) * deltaTime / t_c;
+            atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
+        }
 
-        forceOnParticle = (128 * objParams._voxelSize) * params.damping * (relPos) / dist * (params.particleRadius - dist) / params.particleRadius;
+        forceOnParticle = (128 * objParams._voxelSize) * params.damping * (relPos) / dist * (collideDist - dist) / collideDist;
     }
 
     return forceOnParticle;
@@ -274,6 +277,7 @@ void integrateSystemD(float4 *pos,
             atomicAdd(numParticlesToRemove, 1);
             *pointHasMovedMoreThanThreshold = true;
         }
+        ++iters; 
     }
     const float3 threadOldPos = make_float3(posAfterLastSort[index]);
 
@@ -610,46 +614,6 @@ float C(float r)
     }
 }
 
-// This function is currently not used, but saving it just in case
-__device__
-float3 collideSpheres(float3 posA, float3 posB,
-                      float3 velA, float3 velB,
-                      float radiusA, float radiusB,
-                      float attraction)
-{
-    
-    // calculate relative position
-    float3 relPos = posB - posA;
-
-    float dist = length(relPos);
-    float collideDist = 2 * radiusA + radiusB;
-
-    float3 force = make_float3(0.0f);
-
-    if (dist < collideDist)
-    {
-        float3 norm = relPos / dist;
-
-        // relative velocity
-        float3 relVel = velB - velA;
-
-        // relative tangential velocity
-        float3 tanVel = relVel - (dot(relVel, norm) * norm);
-
-        // spring force
-        force = -params.spring*(collideDist - dist) * norm;
-        // dashpot (damping) force
-        force += 0.0005*relVel;
-        // tangential shear force
-        force += params.shear*tanVel;
-        // attraction
-        force += attraction*relPos;
-    }
-
-    return force;
-}
-
-
 
 // Calculate the contribution of one cell to a particle's density
 __device__
@@ -862,6 +826,45 @@ float3 calcSurfaceTensionForce(float3 pos1,
     return k * (force1 + force2);
 }
 
+// This function is currently not used, but saving it just in case
+__device__
+float3 collideSpheres(float3 posA, float3 posB,
+                      float3 velA, float3 velB,
+                      float radiusA, float radiusB,
+                      float attraction)
+{
+    
+    // calculate relative position
+    float3 relPos = posB - posA;
+
+    float dist = length(relPos);
+    float collideDist = 2 * radiusA + radiusB;
+
+    float3 force = make_float3(0.0f);
+
+    if (dist < collideDist)
+    {
+        float3 norm = relPos / dist;
+
+        // relative velocity
+        float3 relVel = velB - velA;
+
+        // relative tangential velocity
+        float3 tanVel = relVel - (dot(relVel, norm) * norm);
+
+        // spring force
+        force = -params.spring*(collideDist - dist) * norm;
+        // dashpot (damping) force
+        force += 0.02*relVel;
+        // tangential shear force
+        force += params.shear*tanVel;
+        // attraction
+        force += attraction*relPos;
+    }
+
+    return force;
+}
+
 
 
 // collide a particle against all other particles in a given cell
@@ -905,7 +908,7 @@ float3 collideCell(int3    gridPos,
                 // Check that we aren't looking at a far away particle, then find viscous + tension forces
                 if (length(particlePos - pos2) < 10 * params.cellSize.x) {
                     particleForce += calcViscousForce(particlePos, pos2, particleVel, vel2, particleDensity, density2);
-                    //particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
+                    particleForce += calcSurfaceTensionForce(particlePos, pos2, particleNormal, normal2, particleDensity, density2);
                 }
 
                 ++neighbors; 
@@ -989,7 +992,7 @@ void collideD(float4 *pos,               // input: position
                 }
             }
         }
-        if (numNeighboringVoxels >= (loopEnd - loopStart) * (loopEnd - loopStart)) {
+        if (numNeighboringVoxels >= (loopEnd - loopStart) * (loopEnd - loopStart) * (loopEnd - loopStart)) {
             density = 0; 
         }
         particleForce += forceFromObject;
@@ -1019,6 +1022,7 @@ float tangle(float x, float y, float z)
 __device__
 float4 fieldFunc4(float3 p)
 {
+    p = p - objParams._origin;
     float v = tangle(p.x, p.y, p.z);
     const float d = 0.001f;
     float dx = tangle(p.x + d, p.y, p.z) - v;
@@ -1112,23 +1116,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 7); 
     cubeVertexPos[7] = calculateVoxelCenter(toCheck);
     field[7] = fieldFunc4(cubeVertexPos[7]);
-
-
-
-
-    /*for (int z = -1; z < 1; ++z) {
-        for (int y = -1; y < 1; ++y) {
-            for (int x = -1; x < 1; ++x) {
-                int loopIndex = (x+1) + (y+1) * 2 + (z+1) * 4;
-                int3 voxelToCheck = make_int3(gridPos) + make_int3(x, y, z); 
-                bool voxelIsActive = isActiveVoxel(voxelToCheck, voxelStrength);
-                lookupIndexForActiveVertices = lookupIndexForActiveVertices | 
-                                               (voxelIsActive << loopIndex); 
-                cubeVertexPos[loopIndex] = calculateVoxelCenter(voxelToCheck);
-            }
-        }
-    }*/
-
+    
     float3 vertlist[12];
     float3 normList[12];
 

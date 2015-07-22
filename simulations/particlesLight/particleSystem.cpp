@@ -88,7 +88,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize,
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
     _params.spring = 0.5f;
-    _params.damping = 0.6f;
+    _params.damping = 0.8f;
     _params.shear = 0.1f;
     _params.attraction = 0.0f;
     _params.boundaryDamping = -0.5f;
@@ -382,6 +382,9 @@ ParticleSystem::update(const float deltaTime,
         _numActiveParticles = _numActiveParticles - numParticlesToRemove;
     } else {
         _numActiveParticles = 0;
+    }
+    if (numParticlesToRemove > 0) {
+        printf("To Remove: %d Total: %d\n", numParticlesToRemove, _numActiveParticles);
     }
 
     // Calculate the "density" of each particle based on its neighbors
@@ -821,7 +824,7 @@ ParticleSystem::addRiverParticles(const unsigned int timestepIndex,
 
         std::vector<float2> gridOfPositions; 
         for (float z = -0.3; z <= 0.3; z += 2 * _params.particleRadius) {
-            for (float y = _params.particleRadius; y <= 0.10; y += 2 * _params.particleRadius) {
+            for (float y = 2 * _params.particleRadius; y <= 0.10; y += 2 * _params.particleRadius) {
                 gridOfPositions.push_back(make_float2(y, z));
             }
         }
