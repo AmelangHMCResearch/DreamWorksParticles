@@ -88,7 +88,7 @@ ParticleSystem::ParticleSystem(uint numParticles, uint3 gridSize,
     _params.cellSize = make_float3(cellSize, cellSize, cellSize);
 
     _params.spring = 0.5f;
-    _params.damping = 0.8f;
+    _params.damping = 1.0f;
     _params.shear = 0.1f;
     _params.attraction = 0.0f;
     _params.boundaryDamping = -0.5f;

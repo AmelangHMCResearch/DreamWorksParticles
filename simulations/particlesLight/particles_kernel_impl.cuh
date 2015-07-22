@@ -233,8 +233,8 @@ float3 calcForceFromVoxel(float3 particlePos,
     {
         // Faster particles do more damage
         float t_c = 0.1; 
-        if (particleVel.x < 0.3f && particleVel.x > 0.01f) {
-            // float amountToReduceStrength = 100 * min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
+        if (particleVel.x < 0.1f) {
+            //float amountToReduceStrength = 50 * min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
             float amountToReduceStrength = -100.0 * length(cross(particleVel, relPos)) * deltaTime / t_c;
             atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
         }
