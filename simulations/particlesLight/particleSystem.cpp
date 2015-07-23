@@ -321,9 +321,6 @@ ParticleSystem::update(const float deltaTime,
     uint numParticlesToRemove; 
     checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
-    /*if (numParticlesToRemove > 10) {
-        printf("Timestep: %d To Remove: %d\n", timestepIndex, numParticlesToRemove);
-    }*/
 
     if (needToResort) {
 
@@ -383,9 +380,6 @@ ParticleSystem::update(const float deltaTime,
     } else {
         _numActiveParticles = 0;
     }
-    if (numParticlesToRemove > 0) {
-        printf("To Remove: %d Total: %d\n", numParticlesToRemove, _numActiveParticles);
-    }
 
     // Calculate the "density" of each particle based on its neighbors
     calcDensities(dPos,
@@ -397,27 +391,11 @@ ParticleSystem::update(const float deltaTime,
                   _numGridCells,
                   _timer);
 
-
-    float* normals;
-    // array of "normals" necessary for calculation of surface tension
-    allocateArray((void **)&normals, _numActiveParticles*sizeof(float));
-
-    calcNormals(dPos,
-                _dev_force,
-                normals,
-                _dev_cellIndex,
-                _dev_cellStart,
-                _dev_cellEnd,
-                _numActiveParticles,
-                _numGridCells,
-                _timer);
-
     // process collisions
     collide(dPos,
             _dev_vel,
             _dev_force,
             voxelStrength,
-            normals,
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -439,8 +417,6 @@ ParticleSystem::update(const float deltaTime,
                                 voxelObject->getNumVoxels(),
                                 _timer);
     }
-
-    freeArray(normals);
     
 
     checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 

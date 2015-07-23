@@ -42,7 +42,7 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, flo
             exit(1);
         } 
         fclose(fp);*/
-        unsigned short sizeOfObject[3] = {256, 256, 178};
+        unsigned short sizeOfObject[3] = {256, 256, 256};
 
         _objectParams._cubeSize.x = getNextHighestPowerOfTwo(sizeOfObject[0]);
         _objectParams._cubeSize.y = getNextHighestPowerOfTwo(sizeOfObject[1]);
@@ -273,7 +273,7 @@ void VoxelObject::initShape(ObjectShape shape)
         break;
         case VOXEL_FROM_FILE:
         {
-            FILE *fp = fopen("BostonTeapot.raw", "rb");
+            FILE *fp = fopen("bonsai.raw", "rb");
             if (fp == NULL) {
                 printf("Problem opening file 2\n");
                 exit(1);
@@ -288,7 +288,7 @@ void VoxelObject::initShape(ObjectShape shape)
             uint max = 0; 
             uint min = 256; 
             uint average = 0; 
-            unsigned short dataSize[3] = {256, 256, 178};    
+            unsigned short dataSize[3] = {256, 256, 256};    
 
             for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
             {

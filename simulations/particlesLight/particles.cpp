@@ -69,7 +69,7 @@
 
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 999424;
-uint3 gridSize = {128, 128, 128};
+uint3 gridSize = {256, 256, 256};
 int numIterations = 1500000; // run until exit
 
 bool usingObject = false;
@@ -99,13 +99,12 @@ int buttonState = 0;
 float camera_trans[] = {0, 0, -1.5};
 float camera_rot[]   = {-3.6, -73.4, 0};
 #else
-float camera_trans[] = {1.8, -0.1, -4.7};
-float camera_rot[]   = {0.8, 0.2, 0};
+float camera_trans[] = {0.0, 0.0, -5};
+float camera_rot[]   = {0, 0, 0};
 #endif
 float camera_trans_lag[] = {0, 0, -3};
 float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
-//ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
 ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
 
 int mode = 0;
@@ -400,8 +399,6 @@ void display()
         glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
         glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
         glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
-        float lightPos[] = { -3.0f, -15.0f, -3.0f, 0.0f };
-        glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 #endif
 #if 0
         printf("camera = (%5.1f %5.1f %5.1f) (%5.1f %5.1f)\n",
@@ -411,15 +408,17 @@ void display()
                camera_rot[0],
                camera_rot[1]);
 #endif
+        float lightPos[] = { -3.0f, -15.0f, -3.0f, 0.0f };
+        glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
         glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
         // cube
-        glColor3f(1.0, 1.0, 1.0);
+        /*glColor3f(1.0, 1.0, 1.0);
         glPushMatrix();
         glScaled(8.0, 1.0, 1.0);
         glutWireCube(1.0);
-        glPopMatrix();
+        glPopMatrix();*/
 
         // now, to draw the voxels.
         // for each voxel
@@ -455,15 +454,6 @@ void display()
 
         }
 
-        // collider
-        /*
-        glPushMatrix();
-        float3 p = psystem->getColliderPos();
-        glTranslatef(p.x, p.y, p.z);
-        glColor3f(1.0, 0.0, 0.0);
-        glutSolidSphere(psystem->getColliderRadius(), 20, 10);
-        glPopMatrix();
-        */
         if (renderer && displayEnabled)
         {
             renderer->setColorBuffer(psystem->getColorBuffer());
@@ -472,28 +462,6 @@ void display()
             renderer->setPointSize(psystem->getParticleRadius());
             renderer->display(displayMode);
         }
-
-#if 0
-        if (renderer)
-          {
-            renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
-            renderer->setParticleRadius(voxelObject->getVoxelSize());
-            renderer->setPointSize(50 * voxelObject->getVoxelSize());
-            renderer->display(displayMode);
-          }
-#endif
-
-        /*
-        if (displaySliders)
-        {
-            glDisable(GL_DEPTH_TEST);
-            glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO); // invert color
-            glEnable(GL_BLEND);
-            params->Render(0, 0);
-            glDisable(GL_BLEND);
-            glEnable(GL_DEPTH_TEST);
-        }
-        */
         
 
         glutSwapBuffers();
