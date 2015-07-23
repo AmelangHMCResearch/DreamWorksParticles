@@ -30,7 +30,7 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, flo
 
     if (shape == VOXEL_FROM_FILE) {
         // Get size of sample from file
-        FILE *fp = fopen("stagbeetle208x208x123.dat", "rb");
+        /*FILE *fp = fopen("BostonTeapot.raw", "rb");
         if (fp == NULL) {
             printf("Problem opening file 1\n");
             exit(1);
@@ -41,7 +41,8 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, flo
             printf("Problem reading file 1\n");
             exit(1);
         } 
-        fclose(fp);
+        fclose(fp);*/
+        unsigned short sizeOfObject[3] = {256, 256, 178};
 
         _objectParams._cubeSize.x = getNextHighestPowerOfTwo(sizeOfObject[0]);
         _objectParams._cubeSize.y = getNextHighestPowerOfTwo(sizeOfObject[1]);
@@ -272,18 +273,22 @@ void VoxelObject::initShape(ObjectShape shape)
         break;
         case VOXEL_FROM_FILE:
         {
-            FILE *fp = fopen("stagbeetle208x208x123.dat", "rb");
+            FILE *fp = fopen("BostonTeapot.raw", "rb");
             if (fp == NULL) {
                 printf("Problem opening file 2\n");
                 exit(1);
             }
 
-            unsigned short dataSize[3];
+            /*unsigned short dataSize[3];
             int result = fread((void*) &dataSize[0],sizeof(unsigned short), 3,fp);
             if (result == 0) {
                 printf("Problem reading file 2\n");
                 exit(1); 
-            }
+            }*/
+            uint max = 0; 
+            uint min = 256; 
+            uint average = 0; 
+            unsigned short dataSize[3] = {256, 256, 178};    
 
             for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
             {
@@ -294,20 +299,23 @@ void VoxelObject::initShape(ObjectShape shape)
                         unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
                         if (x < dataSize[0] && y < dataSize[1] && z < dataSize[2]) {
                             unsigned short strength; 
-                            result = fread(&strength, sizeof(unsigned short), 1, fp);
+                            int result = fread(&strength, sizeof(char), 1, fp);
                             if (result == 0 && (feof(fp) || ferror(fp))) {
-                               printf("Problem reading file 3\n");
+                               printf("Problem reading file 3 at index %d\n", i);
                                exit(1); 
                             }
-                            _voxelStrength[i] = strength; 
-                            ++_numActiveVoxels;
+                            if (strength < 60) {
+                                _voxelStrength[i] = 0; 
+                            } else {
+                                _voxelStrength[i] = _maxVoxelStrength; 
+                            }
+                            
                         } else {
                             _voxelStrength[i] = 0; 
                         }
                     }
                 }
             }
-            printf("NumVoxels: %d Expected: %d\n", _numActiveVoxels, 170 * 170 * 166);
             fclose(fp); 
         }
         break;
