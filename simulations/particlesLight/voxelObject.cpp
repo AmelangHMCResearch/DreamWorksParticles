@@ -285,9 +285,6 @@ void VoxelObject::initShape(ObjectShape shape)
                 printf("Problem reading file 2\n");
                 exit(1); 
             }*/
-            uint max = 0; 
-            uint min = 256; 
-            uint average = 0; 
             unsigned short dataSize[3] = {256, 256, 256};    
 
             for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
