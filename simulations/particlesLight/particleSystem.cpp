@@ -435,6 +435,7 @@ ParticleSystem::update(const float deltaTime,
                                 voxelObject->getNumVertsTable(),
                                 voxelObject->getVerticesInPosArray(),
                                 voxelObject->getNumVoxelsToDraw(),
+                                voxelObject->getNumMarchingCubes(),
                                 voxelObject->getNumVoxels(),
                                 _timer);
     }

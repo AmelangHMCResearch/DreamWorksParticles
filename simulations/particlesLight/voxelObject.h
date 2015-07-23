@@ -29,7 +29,8 @@ public:
         VOXEL_CUBE,
         VOXEL_PLANE,
         VOXEL_SPHERE,
-        VOXEL_GEOLOGY
+        VOXEL_GEOLOGY,
+        VOXEL_FROM_FILE
     };
 
     VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin);
@@ -58,6 +59,10 @@ public:
 
     unsigned int getNumVoxelsToDraw() {
         return _objectParams._maxVoxelsToDraw;
+    }
+
+    unsigned int getNumMarchingCubes() {
+        return (_objectParams._cubeSize.x + 1) * (_objectParams._cubeSize.y + 1) * (_objectParams._cubeSize.z + 1);
     }
 
     unsigned int getCPUNumVoxelsDrawn() {

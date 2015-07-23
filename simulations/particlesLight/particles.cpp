@@ -211,9 +211,9 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     if (usingObject) {
         float voxelSize = 1.0f/128.0f; // Voxel size arbitrarily chose to be multiple of particle radius
         //uint3 cubeSize = make_uint3(1 / voxelSize, 1 / (2 * voxelSize), 1 / voxelSize);    // Dimension of each side of the cube
-        uint3 cubeSize = make_uint3(4.0 / voxelSize, 0.25 / voxelSize, 1.0 / voxelSize);    // Dimension of each side of the cube
-        float3 origin = make_float3(-2.0, -0.13, 0.0);
-        voxelObject = new VoxelObject(VoxelObject::VOXEL_CUBE, voxelSize, cubeSize, origin);
+        uint3 cubeSize = make_uint3(1.0 / voxelSize, 1.0 / voxelSize, 1.0 / voxelSize);    // Dimension of each side of the cube
+        float3 origin = make_float3(0, 0, 0);
+        voxelObject = new VoxelObject(VoxelObject::VOXEL_FROM_FILE, voxelSize, cubeSize, origin);
     }
 
     psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, usingRiver, limitLifeByTime, limitLifeByHeight, usingObject);

@@ -1137,6 +1137,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
 
     uint numVerticesToAdd = FETCH(numVerts, lookupIndexForActiveVertices);
     uint positionToAdd = atomicAdd(numVerticesClaimed, numVerticesToAdd); 
+    //if (gridPos.z ==0 && index % 1000 == 0) printf("To add: %d Pos: %d Total: %d\n", numVerticesToAdd, positionToAdd, numVoxelsToDraw * 15);
     for (int i= 0; i < numVerticesToAdd; ++i) {
 
         uint edge = FETCH(tri, lookupIndexForActiveVertices*16 + i);

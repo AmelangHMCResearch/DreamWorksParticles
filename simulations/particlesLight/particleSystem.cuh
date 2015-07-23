@@ -112,6 +112,7 @@ extern "C"
                                  uint  *numVerts,
                                  uint  *numVerticesClaimed,
                                  uint numVoxelsToDraw,
+                                 uint numMarchingCubes,
                                  uint numVoxels,
                                  EventTimer* timer);
 

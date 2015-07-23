@@ -441,6 +441,7 @@ extern "C"
                                  uint  *numVerts,
                                  uint  *numVerticesClaimed,
                                  uint numVoxelsToDraw,
+                                 uint numMarchingCubes,
                                  uint numVoxels,
                                  EventTimer* timer)
     {
@@ -452,7 +453,7 @@ extern "C"
 
         // thread per particle
         uint numThreads, numBlocks;
-        computeGridSize(numVoxelsToDraw, 256, numBlocks, numThreads);
+        computeGridSize(numMarchingCubes, 256, numBlocks, numThreads);
         cudaMemset(numVerticesClaimed, 0, sizeof(uint));
 
         // execute the kernel

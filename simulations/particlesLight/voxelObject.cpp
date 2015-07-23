@@ -3,6 +3,21 @@
 #include "tables.h"
 #include <stack>
 #include <algorithm>
+#include <stdio.h>
+
+
+// Taken from Sean Anderson's Bit Twiddling Hacks
+uint getNextHighestPowerOfTwo(uint x) {
+    --x; 
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4; 
+    x |= x >> 8;
+    x |= x >> 16;
+    ++x; 
+    return x; 
+
+}
 
 VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, float3 origin)
   :  _pos(0),
@@ -11,9 +26,33 @@ VoxelObject::VoxelObject(ObjectShape shape, float voxelSize, uint3 cubeSize, flo
     _maxVoxelStrength(MAX_ROCK_STRENGTH)
 {
     _objectParams._voxelSize = voxelSize; // Length of a side of a voxel
-    _objectParams._cubeSize = cubeSize;   // Number of voxels per side
-    _objectParams._numVoxels = cubeSize.x * cubeSize.y * cubeSize.z;
     _objectParams._origin = origin;       // Position object is centered at
+
+    if (shape == VOXEL_FROM_FILE) {
+        // Get size of sample from file
+        FILE *fp = fopen("stagbeetle208x208x123.dat", "rb");
+        if (fp == NULL) {
+            printf("Problem opening file 1\n");
+            exit(1);
+        }
+        unsigned short sizeOfObject[3];
+        int result = fread((void*) &sizeOfObject[0],sizeof(unsigned short), 3,fp);
+        if (result == 0) {
+            printf("Problem reading file 1\n");
+            exit(1);
+        } 
+        fclose(fp);
+
+        _objectParams._cubeSize.x = getNextHighestPowerOfTwo(sizeOfObject[0]);
+        _objectParams._cubeSize.y = getNextHighestPowerOfTwo(sizeOfObject[1]);
+        _objectParams._cubeSize.z = getNextHighestPowerOfTwo(sizeOfObject[2]);
+
+        _objectParams._numVoxels = _objectParams._cubeSize.x * _objectParams._cubeSize.y * _objectParams._cubeSize.z;
+
+    } else {
+        _objectParams._cubeSize = cubeSize;   // Number of voxels per side
+        _objectParams._numVoxels = cubeSize.x * cubeSize.y * cubeSize.z;
+    }
     initObject(shape);
 }
 
@@ -216,22 +255,60 @@ void VoxelObject::initShape(ObjectShape shape)
                     {
                         unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
 
-                        if (i < _objectParams._numVoxels)
-                        {
-                            float xPos = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
-                            float yPos = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
-                            float zPos = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
-                            float radius = sqrt((xPos - _objectParams._origin.x) * (xPos - _objectParams._origin.x) + 
-                                                (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
-                                                (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
-                            if (radius <= (_objectParams._cubeSize.x * _objectParams._voxelSize) / 2.0) {
-                                _voxelStrength[i] = _maxVoxelStrength;
-                                ++_numActiveVoxels; 
-                            } 
+                        float xPos = _objectParams._origin.x + (_objectParams._voxelSize / 2.0) + (x - _objectParams._cubeSize.x / 2.0) * _objectParams._voxelSize;
+                        float yPos = _objectParams._origin.y + (_objectParams._voxelSize / 2.0) + (y - _objectParams._cubeSize.y / 2.0) *_objectParams. _voxelSize;
+                        float zPos = _objectParams._origin.z + (_objectParams._voxelSize / 2.0) + (z - _objectParams._cubeSize.z / 2.0) * _objectParams._voxelSize;
+                        float radius = sqrt((xPos - _objectParams._origin.x) * (xPos - _objectParams._origin.x) + 
+                                            (yPos - _objectParams._origin.y) * (yPos - _objectParams._origin.y) +
+                                            (zPos - _objectParams._origin.z) * (zPos - _objectParams._origin.z));
+                        if (radius <= (_objectParams._cubeSize.x * _objectParams._voxelSize) / 2.0) {
+                            _voxelStrength[i] = _maxVoxelStrength;
+                            ++_numActiveVoxels; 
+                        } 
+                    }
+                }
+            }
+        }
+        break;
+        case VOXEL_FROM_FILE:
+        {
+            FILE *fp = fopen("stagbeetle208x208x123.dat", "rb");
+            if (fp == NULL) {
+                printf("Problem opening file 2\n");
+                exit(1);
+            }
+
+            unsigned short dataSize[3];
+            int result = fread((void*) &dataSize[0],sizeof(unsigned short), 3,fp);
+            if (result == 0) {
+                printf("Problem reading file 2\n");
+                exit(1); 
+            }
+
+            for (unsigned int z = 0; z < _objectParams._cubeSize.z; z++)
+            {
+                for (unsigned int y = 0; y < _objectParams._cubeSize.y; y++)
+                {
+                    for (unsigned int x = 0; x < _objectParams._cubeSize.x; x++)
+                    {
+                        unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
+                        if (x < dataSize[0] && y < dataSize[1] && z < dataSize[2]) {
+                            unsigned short strength; 
+                            result = fread(&strength, sizeof(unsigned short), 1, fp);
+                            if (result == 0 && (feof(fp) || ferror(fp))) {
+                               printf("Problem reading file 3\n");
+                               exit(1); 
+                            }
+                            _voxelStrength[i] = strength; 
+                            ++_numActiveVoxels;
+                        } else {
+                            _voxelStrength[i] = 0; 
                         }
                     }
                 }
             }
+            printf("NumVoxels: %d Expected: %d\n", _numActiveVoxels, 170 * 170 * 166);
+            fclose(fp); 
         }
         break;
     }
