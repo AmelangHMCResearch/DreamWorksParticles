@@ -321,6 +321,9 @@ ParticleSystem::update(const float deltaTime,
     uint numParticlesToRemove; 
     checkCudaErrors(cudaMemcpy(&numParticlesToRemove, _dev_numParticlesToRemove, sizeof(uint), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemset(_dev_numParticlesToRemove, 0, sizeof(uint)));
+    if (numParticlesToRemove > 0) {
+        printf("To remove: %d Total: %d\n", numParticlesToRemove, _numActiveParticles);
+    }
 
     if (needToResort) {
 

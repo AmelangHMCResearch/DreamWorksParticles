@@ -265,131 +265,122 @@ void integrateSystemD(float4 *pos,
     if (index >= numParticles) return;
 
     // Grab the numbers that we need to from memory
-    float3 threadPos          = make_float3(pos[index]);
-    float3 threadVel          = make_float3(vel[index]);
+    float3 particlePos          = make_float3(pos[index]);
+    float3 particleVel          = make_float3(vel[index]);
     float iters = vel[index].w;
-    float3 threadForce        = make_float3(force[index]);
+    float3 particleForce        = make_float3(force[index]);
     float density             = force[index].w;
     if (density == 0) {
         density = 1;
-        if (iters != 0) {
-            iters = params.maxIterations * 2; 
+        /*if (iters != 0) {
+            iters = params.maxIterations * 2 + 1; 
             atomicAdd(numParticlesToRemove, 1);
             *pointHasMovedMoreThanThreshold = true;
         }
-        ++iters; 
+        ++iters; */
     }
-    const float3 threadOldPos = make_float3(posAfterLastSort[index]);
-
-    // Do first half of verlet integration
-    threadVel += threadForce / density * deltaTime / 2;
-    threadVel += params.gravity * deltaTime;
-    threadVel *= params.globalDamping;
-
-    // new position = old position + velocity * deltaTime
-    // Second part of verlet integration
-    threadPos += threadVel * deltaTime + 0.5 * threadForce / density * deltaTime * deltaTime;
-    threadVel += (threadForce / density * deltaTime / 2);
+    const float3 particleOldPos = make_float3(posAfterLastSort[index]);
 
 #if USE_HARD_CUBE
     if (params.usingObject) {
-        // Check that containing voxel is active
-        const int3 voxelGridPos = getVoxelGridPos(threadPos);
-        if (isActiveVoxel(voxelGridPos, voxelStrength)) {
-            // Do the collision
-            uint voxelIndex = getVoxelIndex(voxelGridPos);
-            float3 currentVoxelPos = calculateVoxelCenter(voxelGridPos);
-            const float3 direction = findNearestFace(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
+        // Check for collisions with voxel object
+        int3 voxelGridPos = getVoxelGridPos(particlePos);
 
-            // Update strength of voxel post-collision
-#if 1
-            float strength = voxelStrength[voxelIndex];
-            if (strength > 0) {
-                // Faster particles do more damage
-                float amountToReduceStrength = abs(5.0 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
-                //float amountToReduceStrength = 5.0 * threadVel.x * threadVel.x;
-                atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
-                /*float newStrength = max((float)(strength - (10 * (length(threadVel)/0.5))), 0.0f);
-                atomicMin(&voxelStrength[voxelIndex], newStrength);*/
+        uint numNeighboringVoxels = 0; 
+        float3 averagePositionOfVoxels = make_float3(0); 
+
+        // Check all voxels which might intersecting the cube
+        int loopStart = -floor(params.particleRadius / objParams._voxelSize);
+        int loopEnd = ceil(params.particleRadius / objParams._voxelSize);
+        for (int z = loopStart; z <= loopEnd; ++z) {
+            for (int y = loopStart; y <= loopEnd; ++y) {
+                for (int x = loopStart; x <= loopEnd; ++x) {
+                    int3 neighborGridPos = voxelGridPos + make_int3(x, y, z);
+                    uint voxelIndex = getVoxelIndex(neighborGridPos);
+                    if (isActiveVoxel(neighborGridPos, voxelStrength)) {
+                        float3 voxelPosition = calculateVoxelCenter(neighborGridPos);
+                        averagePositionOfVoxels += voxelPosition; 
+                        ++numNeighboringVoxels;
+                        float t_c = 0.1; 
+                        //float amountToReduceStrength = 50 * min(dot(particleVel, relPos), 0.0f) * deltaTime / t_c;
+                        float amountToReduceStrength = -10.0 * length(cross(particleVel, particlePos - voxelPosition)) * deltaTime / t_c;
+                        atomicAdd(&voxelStrength[voxelIndex], amountToReduceStrength);
+                    }
+                }
             }
-#endif
-            
-            // If it's trying to move into an active particle, remove it
-            int3 neighborVoxelGridPos = voxelGridPos + make_int3(direction);
-            if (isActiveVoxel(neighborVoxelGridPos, voxelStrength)) {
-                iters = params.maxIterations * 2; 
+        }
+        if (numNeighboringVoxels > 0) {
+            averagePositionOfVoxels.x = averagePositionOfVoxels.x / numNeighboringVoxels;
+            averagePositionOfVoxels.y = averagePositionOfVoxels.y / numNeighboringVoxels;
+            averagePositionOfVoxels.z = averagePositionOfVoxels.z / numNeighboringVoxels;
+
+            float3 normalVector = (particlePos - averagePositionOfVoxels) / length(particlePos - averagePositionOfVoxels);
+            particleVel -= 2 * dot(normalVector, particleVel) * normalVector;
+            particlePos = averagePositionOfVoxels + (5 * objParams._voxelSize * normalVector);
+
+            if (numNeighboringVoxels >= (loopEnd - loopStart) * (loopEnd - loopStart) * (loopEnd - loopStart)) {
+                iters = 2 * params.maxIterations + 1; 
                 atomicAdd(numParticlesToRemove, 1);
                 *pointHasMovedMoreThanThreshold = true;
             }
-            // Calculate new position and velocity
-            float distanceToMove = objParams._voxelSize / 2.0 + 0.0001;
-            if (direction.x != 0.0) {
-                if (threadVel.x * direction.x < 0) {
-                    threadVel.x *= -1.0;
-                }
-                threadPos.x = currentVoxelPos.x + direction.x * distanceToMove;
-            }
-            else if (direction.y != 0.0) {
-                if (threadVel.y * direction.y < 0) {
-                    threadVel.y *= -1.0;
-                }
-                threadPos.y = currentVoxelPos.y + direction.y * distanceToMove;
-            }
-            else {
-                if (threadVel.z * direction.z < 0) {
-                    threadVel.z *= -1.0;
-                }
-                threadPos.z = currentVoxelPos.z + direction.z * distanceToMove;
-            }
-              
         }
     }
 #endif
+
+    // Do first half of verlet integration
+    particleVel += particleForce / density * deltaTime / 2;
+    particleVel += params.gravity * deltaTime;
+    particleVel *= params.globalDamping;
+
+    // new position = old position + velocity * deltaTime
+    // Second part of verlet integration
+    particlePos += particleVel * deltaTime + 0.5 * particleForce / density * deltaTime * deltaTime;
+    particleVel += (particleForce / density * deltaTime / 2);
     
     // set this to zero to disable collisions with cube top
 #if 0
-    if (threadPos.y > 0.5.0f - params.particleRadius)
+    if (particlePos.y > 0.5.0f - params.particleRadius)
     {
-        threadPos.y = 0.5f - params.particleRadius;
-        threadVel.y *= params.boundaryDamping;
+        particlePos.y = 0.5f - params.particleRadius;
+        particleVel.y *= params.boundaryDamping;
     }
 #endif
 
 // set this to zero to disable collisions with cube sides
 #if 0
-    if (threadPos.x > 4.0f - params.particleRadius)
+    if (particlePos.x > 4.0f - params.particleRadius)
     {
-        threadPos.x = 4.0f - params.particleRadius;
-        threadVel.x *= params.boundaryDamping;
+        particlePos.x = 4.0f - params.particleRadius;
+        particleVel.x *= params.boundaryDamping;
     }
-    if (threadPos.x < -4.0f + params.particleRadius)
+    if (particlePos.x < -4.0f + params.particleRadius)
     {
-        threadPos.x = -4.0f + params.particleRadius;
-        threadVel.x *= params.boundaryDamping;
+        particlePos.x = -4.0f + params.particleRadius;
+        particleVel.x *= params.boundaryDamping;
     }
-    if (threadPos.z > 0.5f - params.particleRadius)
+    if (particlePos.z > 0.5f - params.particleRadius)
     {
-        threadPos.z = 0.5f - params.particleRadius;
-        threadVel.z *= params.boundaryDamping;
+        particlePos.z = 0.5f - params.particleRadius;
+        particleVel.z *= params.boundaryDamping;
     }
-    if (threadPos.z < -0.5f + params.particleRadius)
+    if (particlePos.z < -0.5f + params.particleRadius)
     {
-        threadPos.z = -0.5f + params.particleRadius;
-        threadVel.z *= params.boundaryDamping;
+        particlePos.z = -0.5f + params.particleRadius;
+        particleVel.z *= params.boundaryDamping;
     }
 #endif
 
-    if (threadPos.y < -0.5f + params.particleRadius)
+    if (particlePos.y < -0.5f + params.particleRadius)
     {
-        threadPos.y = -0.5f + params.particleRadius;
-        threadVel.y *= params.boundaryDamping;
+        particlePos.y = -0.5f + params.particleRadius;
+        particleVel.y *= params.boundaryDamping;
     }
 
     // Check for particles to be removed by height or time - filter out those 
     // That were already removed by collision with cube
     if ((iters < 2 * params.maxIterations) && 
         ((params.limitParticleLifeByTime && (iters >= params.maxIterations)) ||
-        (params.limitParticleLifeByHeight && (threadPos.x > params.maxDistance))))
+        (params.limitParticleLifeByHeight && (particlePos.x > params.maxDistance))))
     {
         iters = params.maxIterations + 1; 
         atomicAdd(numParticlesToRemove, 1);
@@ -401,10 +392,10 @@ void integrateSystemD(float4 *pos,
     }
 
     // store new position and velocity
-    pos[index] = make_float4(threadPos, 1.0f);
-    vel[index] = make_float4(threadVel, iters);
+    pos[index] = make_float4(particlePos, 1.0f);
+    vel[index] = make_float4(particleVel, iters);
     if (posAfterLastSortIsValid) {
-        float3 movementSinceLastSort = threadPos - threadOldPos;
+        float3 movementSinceLastSort = particlePos - particleOldPos;
         float movementMagnitude = length(movementSinceLastSort);
         if (movementMagnitude >= params.movementThreshold) {
             *pointHasMovedMoreThanThreshold = true;
