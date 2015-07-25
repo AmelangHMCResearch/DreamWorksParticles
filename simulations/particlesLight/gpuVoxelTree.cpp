@@ -22,7 +22,7 @@
 // takes in a vector that determines the branching of the tree
 VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
     _isInitialized(false)
-{   
+{       
     _numberOfCellsPerSideForLevel = numberOfCellsPerSideForLevel;
     _numberOfLevels = numberOfCellsPerSideForLevel.size();
 
@@ -44,9 +44,9 @@ VoxelTree::~VoxelTree()
         std::vector<void *> statusPointersToDeallocateOnGPU(_numberOfLevels);
         std::vector<void *> delimeterPointersToDeallocateOnGPU(_numberOfLevels);
         checkCudaErrors(cudaMemcpy(&statusPointersToDeallocateOnGPU[0], _dev_pointersToLevelStatuses,
-                                   _numberOfLevels*sizeof(unsigned int), cudaMemcpyDeviceToHost));
+                                   _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
         checkCudaErrors(cudaMemcpy(&delimeterPointersToDeallocateOnGPU[0], _dev_pointersToLevelDelimiters,
-                                   _numberOfLevels*sizeof(unsigned int), cudaMemcpyDeviceToHost));
+                                   _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
         for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
             checkCudaErrors(cudaFree(statusPointersToDeallocateOnGPU[levelIndex]));            
             checkCudaErrors(cudaFree(delimeterPointersToDeallocateOnGPU[levelIndex]));            
@@ -55,14 +55,12 @@ VoxelTree::~VoxelTree()
         checkCudaErrors(cudaFree(_dev_boundary));
         checkCudaErrors(cudaFree(_dev_pointersToLevelStatuses));
         checkCudaErrors(cudaFree(_dev_pointersToLevelDelimiters));
-        checkCudaErrors(cudaFree(_dev_voxels));
+        // checkCudaErrors(cudaFree(_dev_voxels));
     }
 
     // always free configuration data
     checkCudaErrors(cudaFree(_dev_numberOfLevels));
     checkCudaErrors(cudaFree(_dev_numberOfCellsPerSideForLevel));
-
-
 }
 
 
@@ -96,8 +94,8 @@ void VoxelTree::initializeTree()
     unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
         numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
-        checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[0], numberOfEntriesInLevel*sizeof(unsigned int)));
-        checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[0], numberOfEntriesInLevel*sizeof(unsigned int)));
+        checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
+        checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
     }
 
     // then, create the space and copy the pointers to that data to the GPU
@@ -109,10 +107,69 @@ void VoxelTree::initializeTree()
 
     // set the top level of the tree to active to represent the cube.
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
-    checkCudaErrors(cudaMemset((pointersToStatusesOnGPU[0]), (unsigned int) 1, numberOfTopLevelEntries*sizeof(unsigned int)));
+    const float topLevel[4] = {1.0, 1.0, 1.0, 1.0};
+    checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], topLevel, numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
 
     _isInitialized = true;
 }
+
+
+std::vector<std::vector<float> > VoxelTree::getStatuses() {
+    // copy over the pointers to the status data
+    std::vector<void *> pointersToStatusesOnGPU(_numberOfLevels);
+    checkCudaErrors(cudaMemcpy(&pointersToStatusesOnGPU[0], _dev_pointersToLevelStatuses, _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
+
+    // space to hold the statuses on CPU
+    std::vector<std::vector<float> > statuses(_numberOfLevels);
+
+    // copy over all the allocated data, whether or not it is valid
+    unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
+    for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
+        numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
+
+        // make enough room for the data to be copied
+        statuses[levelIndex].reserve(numberOfEntriesInLevel);
+
+        // copy the data over to CPU
+        checkCudaErrors(cudaMemcpy(&statuses[levelIndex][0], pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
+    // printf("Status of first four entries in top level of tree are:\n");
+    // printf("%5.8f %5.8f %5.8f %5.8f\n", statuses[0][0], statuses[0][1], statuses[0][2], statuses[0][3]);
+    return statuses;
+}
+
+
+void VoxelTree::debugDisplay() {
+    if (_isInitialized) {
+        std::vector<std::vector<float> > statuses = getStatuses();
+        // printf("Status of first four entries in top level of tree are:\n");
+        // printf("%5.8f %5.8f %5.8f %5.8f\n", statuses[0][0], statuses[0][1], statuses[0][2], statuses[0][3]);
+        // const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
+        // const float * voxelPositionArray = voxelObject->getCpuPosArray();
+        // const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
+        // const float voxelSize = voxelObject->getVoxelSize();
+        // for (unsigned int voxelIndex = 0;
+        //     voxelIndex < numberOfVoxels; ++voxelIndex) {
+        //     if (voxelStrength[voxelIndex] > 0.0f) {
+        //         // save the matrix state
+        //         glPushMatrix();
+        //         // translate for this voxel
+        //         glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
+        //                      voxelPositionArray[voxelIndex * 4 + 1],
+        //                      voxelPositionArray[voxelIndex * 4 + 2]);
+        //         float* color = new float[3];
+        //         getColor(voxelStrength[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+        //         glColor3f(color[0], color[1], color[2]);
+        //         delete [] color;
+        //         glutSolidCube(voxelSize);
+        //         // reset the matrix state
+        //         glPopMatrix();
+        //     }
+        // }
+    }
+}
+
 
 // ***************
 // *** TESTING ***
@@ -120,10 +177,13 @@ void VoxelTree::initializeTree()
 
 void VoxelTree::test()
 {
-    std::array<unsigned int, 4> blah = {2, 2, 2, 2};
-    std::vector<unsigned int> cellsPerSide(blah.begin(), blah.end());
+    unsigned int blah[4] = {2, 2, 2, 2};
+    std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
+    // printf("size of cellsPerSide is %lu\n", cellsPerSide.size());
 
     VoxelTree tree(cellsPerSide);
+    tree.initializeTree();
+    tree.debugDisplay();
 }
 
 

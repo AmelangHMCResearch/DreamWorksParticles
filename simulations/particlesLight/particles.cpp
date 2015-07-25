@@ -245,7 +245,9 @@ void display()
 
     // TODO: Remove
     // testing the VoxelTree
+    // printf("Creating a tree...\n");
     VoxelTree::test();
+    // printf("A tree has been created!\n");
 
     // update the simulation
     if (!bPause)
@@ -323,6 +325,7 @@ void display()
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
+        // TODO: Uncomment!!!
         // glutLeaveMainLoop();
     }
 }
@@ -726,6 +729,7 @@ main(int argc, char **argv)
     
     initMenus();
     
+    // TODO: Uncomment
     // glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);

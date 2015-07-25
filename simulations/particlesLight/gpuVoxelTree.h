@@ -39,64 +39,6 @@ struct BoundingBox {
     Point upperBoundary;
 };
 
-// To hold the individual voxel data
-template<typename DataType>
-struct Voxel {
-    float3 position;
-    DataType  data;
-};
-
-// to allow for modular tree types
-template<typename ChildNodeType, unsigned int numberOfChildrenPerSide>
-class InternalLevel
-{
-    public:
-        InternalLevel();
-        ~InternalLevel();
-
-    protected:
-        static const unsigned int numberOfChildren = numberOfChildrenPerSide * numberOfChildrenPerSide;
-
-        // single values
-        ChildNodeType* _dev_nextLevelStart; // where to find the next level of tree
-
-        // arrays
-        Status* _dev_childStatuses;
-        unsigned int* _dev_childDelimeters;
-};
-
-// root of tree
-template<typename ChildNodeType, unsigned int numberOfLevels>
-class RootLevel
-{
-    public:
-        RootLevel();
-        ~RootLevel();
-
-    protected:
-        // single values
-        BoundingBox* _dev_boundary; // boundary of complete geometry
-        ChildNodeType* _dev_nextLevelStart; // where to find the next level of tree
-
-
-        // arrays
-        Status* _dev_childStatuses;
-        unsigned int* _dev_childDelimeters;
-};
-
-
-// helpful trees
-template<typename T, unsigned int N1, unsigned int N2>
-struct Tree3 {
-    typedef RootLevel< InternalLevel< Voxel<float> , 4 > , 3 > Type;
-};
-
-// TODO
-// Now that we know the number of levels at the root node, the GPU kernel can iterate through all the
-// levels by following the pointers. This way we only need to pass the top level object to the GPU (?)
-
-
-
 // Note: I think that we should actually go with the class below instead of the templated version.
 //       the only major difference from a usage perspective is a slightly less stdlib-y
 //       constructor, but everything looks much better from both an implementation an performance
@@ -113,9 +55,14 @@ class VoxelTree
         void initializeTree(); // TODO: Needs arguments (input VDB?)
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
+        std::vector<std::vector<float> > getStatuses(); // Only to be used for debugging
+        std::vector<std::vector<unsigned int> > getDelimiters(); // Only to be used for debugging
+        void debugDisplay();
 
         // TODO: Remove
         static void test();
+
+
 
     private:
         // status checking functions
@@ -126,7 +73,7 @@ class VoxelTree
     protected:
         // CPU values
         bool _isInitialized;
-        bool _numberOfLevels;
+        unsigned int _numberOfLevels;
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
 
         // scalar values
@@ -137,7 +84,7 @@ class VoxelTree
         unsigned int*  _dev_numberOfCellsPerSideForLevel; // TODO: constant memory
 
         // data
-        unsigned int** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
+        float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
         float*  _dev_voxels; // TODO: global or texture memory      
 };
