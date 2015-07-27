@@ -19,11 +19,11 @@
 
 // cuda
 #include <cuda_runtime.h>
+#include "vector_types.h"
 
 // c++
 #include <stdlib.h>
 #include <vector>
-#include <array>
 
 enum Status {
     ACTIVE,
@@ -32,11 +32,10 @@ enum Status {
 };
 
 // TODO: adapt to GPU ??
-typedef std::array<float, 2> Point;
 
 struct BoundingBox {
-    Point lowerBoundary;
-    Point upperBoundary;
+    float3 lowerBoundary;
+    float3 upperBoundary;
 };
 
 // To hold the individual voxel data
@@ -106,13 +105,17 @@ struct Tree3 {
 class VoxelTree
 {
     public: 
-        VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel);
+        VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel, float voxelSize);
 
         ~VoxelTree();
 
         void initializeTree(); // TODO: Needs arguments (input VDB?)
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
+        void runCollisions(float *particlePos, 
+                           float *particleVel, 
+                           float  particleRadius,
+                           unsigned int numParticles);
 
         // TODO: Remove
         static void test();
@@ -126,20 +129,11 @@ class VoxelTree
     protected:
         // CPU values
         bool _isInitialized;
-        bool _numberOfLevels;
+        unsigned int _numberOfLevels;
+        unsigned int _numVoxels; 
+        BoundingBox _boundary; 
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
-
-        // scalar values
-        unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
-        BoundingBox*  _dev_boundary; // TODO: allocate in constant memory
-
-        // configuration data
-        unsigned int*  _dev_numberOfCellsPerSideForLevel; // TODO: constant memory
-
-        // data
-        unsigned int** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
-        unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        float*  _dev_voxels; // TODO: global or texture memory      
+        float _voxelSize; 
 };
 
 

@@ -132,20 +132,6 @@ extern "C"
                          bool *pointHasMovedMoreThanThreshold,
                          EventTimer* timer)                 
     {
-#if 0
-        thrust::device_ptr<float4> pos4((float4 *)pos);
-        thrust::device_ptr<float4> vel4((float4 *)vel);
-        thrust::device_ptr<float4> force4((float4 *)force);
-        thrust::device_ptr<float4> posAfterLastSort4((float4 *)posAfterLastSort);
-
-        timer->startTimer(0, false);
-        thrust::for_each(
-            thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4, force4, posAfterLastSort4)),
-            thrust::make_zip_iterator(thrust::make_tuple(pos4+numParticles, vel4+numParticles, 
-                                                         force4+numParticles, posAfterLastSort4+numParticles)),
-            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
-        timer->stopTimer(0, false);
-#else
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -160,8 +146,6 @@ extern "C"
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold);
         timer->stopTimer(0, false);
-
-#endif
     }
 
     void calcCellIndices(uint  *cellIndex,

@@ -54,7 +54,7 @@
 #include "event_timer.h"
 
 // TODO: remove
-#include "gpuVoxeltree.h"
+#include "gpuVoxelTree.h"
 
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 16384;
