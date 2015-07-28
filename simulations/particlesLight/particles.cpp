@@ -242,13 +242,6 @@ void computeFPS()
 
 void display()
 {
-
-    // TODO: Remove
-    // testing the VoxelTree
-    // printf("Creating a tree...\n");
-    VoxelTree::test();
-    // printf("A tree has been created!\n");
-
     // update the simulation
     if (!bPause)
     {
@@ -289,6 +282,11 @@ void display()
     // cube
     glColor3f(1.0, 1.0, 1.0);
     glutWireCube(8.0);
+
+
+    // TODO: Remove
+    // testing the VoxelTree
+    VoxelTree::test();
 
     // collider
     /*

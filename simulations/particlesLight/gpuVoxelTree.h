@@ -32,7 +32,7 @@ enum Status {
 };
 
 // TODO: adapt to GPU ??
-typedef std::array<float, 2> Point;
+typedef std::array<float, 3> Point;
 
 struct BoundingBox {
     Point lowerBoundary;
@@ -74,6 +74,7 @@ class VoxelTree
         // CPU values
         bool _isInitialized;
         unsigned int _numberOfLevels;
+        BoundingBox _boundary;
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
 
         // scalar values
