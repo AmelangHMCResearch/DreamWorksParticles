@@ -19,11 +19,11 @@
 
 // cuda
 #include <cuda_runtime.h>
+#include "vector_types.h"
 
 // c++
 #include <stdlib.h>
 #include <vector>
-#include <array>
 
 enum Status {
     ACTIVE,
@@ -31,12 +31,9 @@ enum Status {
     DIG_DEEPER
 };
 
-// TODO: adapt to GPU ??
-typedef std::array<float, 3> Point;
-
 struct BoundingBox {
-    Point lowerBoundary;
-    Point upperBoundary;
+    float3 lowerBoundary;
+    float3 upperBoundary;
 };
 
 // Note: I think that we should actually go with the class below instead of the templated version.
@@ -55,9 +52,15 @@ class VoxelTree
         void initializeTree(); // TODO: Needs arguments (input VDB?)
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
+        void runCollisions(float *particlePos, 
+                           float *particleVel, 
+                           float  particleRadius,
+                           float deltaTime, 
+                           unsigned int numParticles);
         std::vector<std::vector<float> > getStatuses(); // Only to be used for debugging
         std::vector<std::vector<unsigned int> > getDelimiters(); // Only to be used for debugging
         void debugDisplay();
+        void renderVoxelTree(float modelView[16]); 
 
         // TODO: Remove
         static void test();
@@ -74,8 +77,11 @@ class VoxelTree
         // CPU values
         bool _isInitialized;
         unsigned int _numberOfLevels;
-        BoundingBox _boundary;
+        unsigned int _numMarchingCubes;
+        unsigned int _numVoxelsToDraw;  
+        BoundingBox _boundary; 
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
+        float _voxelSize;
 
         // scalar values
         unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
@@ -88,6 +94,15 @@ class VoxelTree
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
         float*  _dev_voxels; // TODO: global or texture memory      
+
+        // Render Data: 
+        uint *_dev_verticesInPosArray; 
+        uint *_dev_triTable;
+        uint *_dev_numVertsTable;
+        unsigned int   _posVBO;            // vertex buffer object for particle positions
+        unsigned int   _normVBO;
+        struct cudaGraphicsResource *_cuda_posvbo_resource; // handles OpenGL-CUDA exchange
+        struct cudaGraphicsResource *_cuda_normvbo_resource;
 };
 
 

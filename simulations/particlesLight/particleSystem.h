@@ -16,6 +16,7 @@
 #include "particles_kernel.cuh"
 #include "vector_functions.h"
 #include "event_timer.h" 
+#include "gpuVoxelTree.h"
 
 // Particle system class
 class ParticleSystem
@@ -37,7 +38,7 @@ class ParticleSystem
             VELOCITY,
         };
 
-        void update(float deltaTime);
+        void update(float deltaTime, VoxelTree *voxelTree);
         void reset(ParticleConfig config);
 
         void   setArray(ParticleArray array, const float *data, int start, int count);

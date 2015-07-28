@@ -11,14 +11,7 @@
  *          answer the question "is particle x inside a voxel?", and thus it is
  *          meant to be used primarily with particle simulations on the GPU.
  *
- */ 
-
-#include "gpuVoxelTree.h"
-
-#include <cuda_runtime.h>
-#include <helper_cuda.h>    // includes cuda.h and cuda_runtime_api.h
-
-// OpenGL Graphics includes
+ */
 #include <GL/glew.h>
 #if defined (WIN32)
 #include <GL/wglew.h>
@@ -33,11 +26,21 @@
 #include <GL/freeglut.h>
 #endif
 
+#include <cuda_gl_interop.h>
+
+#include <cuda_runtime.h>
+#include <helper_cuda.h>    // includes cuda.h and cuda_runtime_api.h
+
+
+#include "gpuVoxelTree.h"
+#include "gpuVoxelTree.cuh"
+#include "tables.h"
+
 
 // takes in a vector that determines the branching of the tree
 VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
     _isInitialized(false)
-{       
+{   
     _numberOfCellsPerSideForLevel = numberOfCellsPerSideForLevel;
     _numberOfLevels = numberOfCellsPerSideForLevel.size();
 
@@ -50,6 +53,8 @@ VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
     checkCudaErrors(cudaMemcpy(_dev_numberOfLevels, &_numberOfLevels, 1*sizeof(unsigned int), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(_dev_numberOfCellsPerSideForLevel, &numberOfCellsPerSideForLevel[0], 
                                _numberOfLevels*sizeof(unsigned int), cudaMemcpyHostToDevice));
+
+   // rest of setup is done in initializeTree()
 }
 
 VoxelTree::~VoxelTree()
@@ -58,10 +63,12 @@ VoxelTree::~VoxelTree()
     if (_isInitialized) {
         std::vector<void *> statusPointersToDeallocateOnGPU(_numberOfLevels);
         std::vector<void *> delimeterPointersToDeallocateOnGPU(_numberOfLevels);
+
         checkCudaErrors(cudaMemcpy(&statusPointersToDeallocateOnGPU[0], _dev_pointersToLevelStatuses,
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
         checkCudaErrors(cudaMemcpy(&delimeterPointersToDeallocateOnGPU[0], _dev_pointersToLevelDelimiters,
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
+
         for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
             checkCudaErrors(cudaFree(statusPointersToDeallocateOnGPU[levelIndex]));            
             checkCudaErrors(cudaFree(delimeterPointersToDeallocateOnGPU[levelIndex]));            
@@ -76,6 +83,15 @@ VoxelTree::~VoxelTree()
     // always free configuration data
     checkCudaErrors(cudaFree(_dev_numberOfLevels));
     checkCudaErrors(cudaFree(_dev_numberOfCellsPerSideForLevel));
+
+    checkCudaErrors(cudaFree(_dev_triTable));
+    checkCudaErrors(cudaFree(_dev_numVertsTable));
+    
+    checkCudaErrors(cudaGraphicsUnregisterResource(_cuda_posvbo_resource));
+    glDeleteBuffers(1, (const GLuint *)&_posVBO);
+
+    checkCudaErrors(cudaGraphicsUnregisterResource(_cuda_normvbo_resource));
+    glDeleteBuffers(1, (const GLuint *)&_normVBO);
 }
 
 
@@ -86,19 +102,20 @@ VoxelTree::~VoxelTree()
     variable sized voxels because the bounding box determines determines the size
     of the smallest cell. This will likely cause errors for anything that isn't
     a cube and should be improved.
-*/
+*/   
 void VoxelTree::initializeTree()
 {   
     // TODO: pass in VDB (?)
     // For now, we will just initialize a fixed size cube with arbitrarily-sized voxels
 
-    // make the space for the bounding box and set it
+    // copy the bounding box to the GPU
+    _boundary.lowerBoundary = make_float3(-1.0, -1.0, -1.0);
+    _boundary.upperBoundary = make_float3(1.0, 1.0, 1.0);
+
     checkCudaErrors(cudaMalloc((void **) &_dev_boundary, 1*sizeof(BoundingBox)));
 
     // copy the bounding box to the GPU
-    BoundingBox boundary = {{-1.0, -1.0, -1.0}, {1.0, 1.0, 1.0}};
-    _boundary = boundary;
-    checkCudaErrors(cudaMemcpy(_dev_boundary, &boundary, 1*sizeof(BoundingBox), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(_dev_boundary, &_boundary, 1*sizeof(BoundingBox), cudaMemcpyHostToDevice));
 
     // to hold the pointers that will be copied to the GPU data members
     std::vector<void *> pointersToStatusesOnGPU(_numberOfLevels);
@@ -108,10 +125,17 @@ void VoxelTree::initializeTree()
 
     // first, create the space for the data at each level
     unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
+    unsigned int numberOfCellsPerSideInLevel = 1; 
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
         numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
+        numberOfCellsPerSideInLevel *= _numberOfCellsPerSideForLevel[levelIndex];
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
-        checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+        if (levelIndex != _numberOfLevels - 1) {
+            checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+        } else {
+            _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
+            _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
+        }
     }
 
     // then, create the space and copy the pointers to that data to the GPU
@@ -120,15 +144,122 @@ void VoxelTree::initializeTree()
     checkCudaErrors(cudaMemcpy(_dev_pointersToLevelStatuses, &pointersToStatusesOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(_dev_pointersToLevelDelimiters, &pointersToDelimitersOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
 
-
     // set the top level of the tree to active to represent the cube.
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
     const float topLevel[8] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], topLevel, numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
 
+    copyDataToConstantMemory(_numberOfLevels,
+                            _boundary,
+                            _numberOfCellsPerSideForLevel,
+                            _voxelSize,
+                            pointersToStatusesOnGPU,
+                            pointersToDelimitersOnGPU,
+                            numberOfCellsPerSideInLevel);
+
+    // More rendering stuff: 
+
+    checkCudaErrors(cudaMalloc((void **) &_dev_verticesInPosArray, sizeof(uint)));
+
+    // Allocate lookup tables for marching cubes on the GPU
+    checkCudaErrors(cudaMalloc((void **) &_dev_triTable, sizeof(uint) * 256 * 16));
+    cudaMemcpy(_dev_triTable, triTable, sizeof(uint) * 256 * 16, cudaMemcpyHostToDevice);
+    checkCudaErrors(cudaMalloc((void **) &_dev_numVertsTable, sizeof(uint) * 256));
+    cudaMemcpy(_dev_numVertsTable, numVertsTable, sizeof(uint) * 256, cudaMemcpyHostToDevice);
+
+    // Create the VBO
+    _numVoxelsToDraw = std::min(_numMarchingCubes, (uint) 128 * 128 * 128);
+    uint bufferSize = _numVoxelsToDraw * 4 * 15 * sizeof(float); 
+    glGenBuffers(1, &_posVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, _posVBO);
+    glBufferData(GL_ARRAY_BUFFER, bufferSize, 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cuda_posvbo_resource, _posVBO,
+                                                     cudaGraphicsMapFlagsNone));
+
+    glGenBuffers(1, &_normVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, _normVBO);
+    glBufferData(GL_ARRAY_BUFFER, bufferSize, 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    checkCudaErrors(cudaGraphicsGLRegisterBuffer(&_cuda_normvbo_resource, _normVBO,
+                                                     cudaGraphicsMapFlagsNone));
+
     _isInitialized = true;
 }
 
+void VoxelTree::runCollisions(float *particlePos, 
+                              float *particleVel, 
+                              float  particleRadius,
+                              float deltaTime,
+                              unsigned int numParticles)
+{
+    collideWithParticles(particlePos,
+                         particleVel,
+                         particleRadius,
+                         numParticles,
+                         deltaTime); 
+}
+
+void VoxelTree::renderVoxelTree(float modelView[16])
+{
+    float *dPos;
+    checkCudaErrors(cudaGraphicsMapResources(1, &_cuda_posvbo_resource, 0));
+    checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&dPos, NULL,
+                                                             _cuda_posvbo_resource));
+    float *dNorm;
+    checkCudaErrors(cudaGraphicsMapResources(1, &_cuda_normvbo_resource, 0));
+    checkCudaErrors(cudaGraphicsResourceGetMappedPointer((void **)&dNorm, NULL,
+                                                             _cuda_normvbo_resource));
+
+    generateMarchingCubes(dPos,
+                          dNorm,
+                          _dev_triTable,
+                          _dev_numVertsTable,
+                          _dev_verticesInPosArray,
+                          _numVoxelsToDraw,
+                          _numMarchingCubes);
+    checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_posvbo_resource, 0));
+    checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_normvbo_resource, 0));
+
+    // Set lighting and view
+    float lightPos[] = { -3.0f, -15.0f, -3.0f, 0.0f };
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+
+    glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    glEnable(GL_LIGHTING);
+    
+
+    // Bind the buffers for openGL to use    
+    glBindBuffer(GL_ARRAY_BUFFER, _posVBO);
+    glVertexPointer(4, GL_FLOAT, 0, 0);
+    glEnableClientState(GL_VERTEX_ARRAY);
+
+    glBindBufferARB(GL_ARRAY_BUFFER_ARB, _normVBO);
+    glNormalPointer(GL_FLOAT, sizeof(float)*4, 0);
+    glEnableClientState(GL_NORMAL_ARRAY);
+
+    // Figure out how many vertices to draw, and use them for triangles
+    uint num1 = _numVoxelsToDraw * 4 * 15;
+    uint num2;
+    cudaMemcpy(&num2, _dev_verticesInPosArray, sizeof(uint), cudaMemcpyDeviceToHost);
+    uint numToDraw = std::min(num1, num2);
+    glDrawArrays(GL_TRIANGLES, 0, numToDraw);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glDisable(GL_LIGHTING);
+
+    glPopMatrix();
+}
 
 std::vector<std::vector<float> > VoxelTree::getStatuses() {
     // copy over the pointers to the status data
@@ -209,19 +340,18 @@ void VoxelTree::debugDisplay() {
 
         unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[0];
         unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
-        float currentCellSize = (_boundary.upperBoundary[0] - _boundary.lowerBoundary[0]) / currentNumberOfCellsPerSide;
+        float currentCellSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
         printf("VoxelSize is %3.2f\n", currentCellSize);
         
-        for (unsigned int cellIndex = 0;
-            cellIndex < 8; ++cellIndex) {
+        for (unsigned int cellIndex = 0; cellIndex < 8; ++cellIndex) {
             
             unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;
             unsigned int yIndex = (cellIndex % currentSquaredCellsPerSide) / currentNumberOfCellsPerSide;
             unsigned int zIndex = cellIndex / currentSquaredCellsPerSide;
 
-            float xPos = _boundary.lowerBoundary[0] + (0.5 + xIndex)*currentCellSize;
-            float yPos = _boundary.lowerBoundary[1] + (0.5 + yIndex)*currentCellSize;
-            float zPos = _boundary.lowerBoundary[2] + (0.5 + zIndex)*currentCellSize;
+            float xPos = _boundary.lowerBoundary.x + (0.5 + xIndex)*currentCellSize;
+            float yPos = _boundary.lowerBoundary.y + (0.5 + yIndex)*currentCellSize;
+            float zPos = _boundary.lowerBoundary.z + (0.5 + zIndex)*currentCellSize;
 
             if (statuses[0][cellIndex] > 0.0f) {
                 printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
@@ -242,6 +372,7 @@ void VoxelTree::debugDisplay() {
         }
     }
 }
+
 
 
 // ***************

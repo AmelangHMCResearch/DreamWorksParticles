@@ -132,20 +132,6 @@ extern "C"
                          bool *pointHasMovedMoreThanThreshold,
                          EventTimer* timer)                 
     {
-#if 0
-        thrust::device_ptr<float4> pos4((float4 *)pos);
-        thrust::device_ptr<float4> vel4((float4 *)vel);
-        thrust::device_ptr<float4> force4((float4 *)force);
-        thrust::device_ptr<float4> posAfterLastSort4((float4 *)posAfterLastSort);
-
-        timer->startTimer(0, false);
-        thrust::for_each(
-            thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4, force4, posAfterLastSort4)),
-            thrust::make_zip_iterator(thrust::make_tuple(pos4+numParticles, vel4+numParticles, 
-                                                         force4+numParticles, posAfterLastSort4+numParticles)),
-            integrate_functor(deltaTime, posAfterLastSortIsValid, pointHasMovedMoreThanThreshold));
-        timer->stopTimer(0, false);
-#else
         uint numThreads, numBlocks;
         computeGridSize(numParticles, 256, numBlocks, numThreads);
 
@@ -160,8 +146,7 @@ extern "C"
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold);
         timer->stopTimer(0, false);
-
-#endif
+        getLastCudaError("Kernel execution failed");
     }
 
     void calcCellIndices(uint  *cellIndex,
@@ -196,21 +181,6 @@ extern "C"
         timer->stopTimer(2, false);
     }
 
-    void sortParticlesOnce(uint *cellIndex, 
-                       float *pos,
-                       float *vel, 
-                       uint numParticles, 
-                       EventTimer* timer)
-    {
-        timer->startTimer(2, false);
-        thrust::device_ptr<float4> pos4((float4 *)pos);
-        thrust::device_ptr<float4> vel4((float4 *)vel);
-        thrust::sort_by_key(thrust::device_ptr<uint>(cellIndex),
-                            thrust::device_ptr<uint>(cellIndex + numParticles),
-                            thrust::make_zip_iterator(thrust::make_tuple(pos4, vel4)));
-        timer->stopTimer(2, false);
-    }
-
     void copyArrays(float *pos,
                     float *tempPos,
                     float *vel,
@@ -234,6 +204,7 @@ extern "C"
             (float4 *)tempVel,
             numParticles);
         timer->stopTimer(3, true);
+        getLastCudaError("Kernel execution failed");
 
 #if USE_TEX
         checkCudaErrors(cudaUnbindTexture(posTex));
@@ -291,43 +262,6 @@ extern "C"
 #endif
 
         getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
-    }
-
-    void findCellStart(uint  *cellStart,
-                       uint  *cellEnd,
-                       uint  *cellIndex,
-                       float *pos,
-                       float *oldPos,
-                       uint   numParticles,
-                       uint   numCells,
-                       EventTimer* timer)
-    {
-        uint numThreads, numBlocks;
-        computeGridSize(numParticles, 256, numBlocks, numThreads);
-
-        // set all cells to empty
-        checkCudaErrors(cudaMemset(cellStart, 0xffffffff, numCells*sizeof(uint)));
-
-
-#if USE_TEX
-        checkCudaErrors(cudaBindTexture(0, posTex, pos, numParticles*sizeof(float4)));
-#endif
-
-        uint smemSize = sizeof(uint)*(numThreads+1);
-        timer->startTimer(3, true);
-        findCellStartD<<< numBlocks, numThreads, smemSize>>>(
-            cellStart,
-            cellEnd,
-            cellIndex,
-            (float4 *)pos,
-            (float4 *)oldPos,
-            numParticles);
-        timer->stopTimer(3, true);
-        getLastCudaError("Kernel execution failed: reorderDataAndFindCellStartD");
-
-#if USE_TEX
-        checkCudaErrors(cudaUnbindTexture(posTex));
-#endif
     }
 
     void collide(float *pos,
