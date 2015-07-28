@@ -232,7 +232,7 @@ ParticleSystem::_finalize()
 
 // step the simulation
 void
-ParticleSystem::update(float deltaTime)
+ParticleSystem::update(float deltaTime, VoxelTree *voxelTree)
 {
     assert(_systemInitialized);
 
@@ -267,7 +267,6 @@ ParticleSystem::update(float deltaTime)
                         dPos,
                         _numParticles,
                         _timer);
-#if 0
     
         // sort particles based on hash
         sortParticles(_dev_cellIndex, 
@@ -305,27 +304,6 @@ ParticleSystem::update(float deltaTime)
                                     _timer);
         freeArray(tempPos);
         freeArray(tempVel);
-
-#else
-        // sort particles based on hash
-        sortParticlesOnce(_dev_cellIndex, 
-                          dPos,
-                          _dev_vel,
-                          _numParticles, 
-                          _timer);
-    
-        // reorder particle arrays into sorted order and
-        // find start and end of each cell
-        findCellStart(_dev_cellStart,
-                      _dev_cellEnd,
-                      _dev_cellIndex,
-                      dPos,
-                      _dev_posAfterLastSort,
-                      _numParticles,
-                      _numGridCells,
-                      _timer);
-
-#endif
         // printf("Number of iterations since last sort = %d\n", dummy_iterationsSinceLastResort);
         dummy_iterationsSinceLastResort = 0;
     } else {
@@ -343,6 +321,12 @@ ParticleSystem::update(float deltaTime)
             _numParticles,
             _numGridCells,
             _timer);
+
+    voxelTree->runCollisions(dPos, 
+                             _dev_vel, 
+                             _params.particleRadius,
+                             deltaTime, 
+                             _numParticles);
 
     /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
@@ -447,7 +431,7 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
                 if (i < numParticles)
                 {
                     _pos[i*4] = (spacing * x) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+1] = (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
+                    _pos[i*4+1] = 3.0 + (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
                     _pos[i*4+2] = (spacing * z) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
                     _pos[i*4+3] = 1.0f;
                     _vel[i*4] = 0.0f;

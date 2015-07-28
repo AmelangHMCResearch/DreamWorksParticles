@@ -62,7 +62,7 @@ uint3 gridSize = {256, 256, 256};
 int numIterations = 3000; // run until exit
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -79,8 +79,6 @@ int ox, oy;
 int buttonState = 0;
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
-float camera_trans_lag[] = {0, 0, -3};
-float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
 ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
 
@@ -97,6 +95,7 @@ const int idleDelay = 2000;
 enum { M_VIEW = 0, M_MOVE };
 
 ParticleSystem *psystem = 0;
+VoxelTree *voxelTree = 0; 
 
 // fps
 static int fpsCount = 0;
@@ -181,6 +180,12 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     psystem->reset(ParticleSystem::CONFIG_GRID);
     psystem->startTimer(5);
 
+    unsigned int blah[4] = {4, 4, 4, 4};
+    std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
+
+    voxelTree = new VoxelTree(cellsPerSide);
+    voxelTree->initializeTree(); 
+
     if (bUseOpenGL)
     {
         renderer = new ParticleRenderer;
@@ -188,6 +193,32 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         renderer->setColorBuffer(psystem->getColorBuffer());
     }
 
+}
+
+static const char *shader_code =
+    "!!ARBfp1.0\n"
+    "TEX result.color, fragment.texcoord, texture[0], 2D; \n"
+    "END";
+
+GLuint compileASMShader(GLenum program_type, const char *code)
+{
+    GLuint program_id;
+    glGenProgramsARB(1, &program_id);
+    glBindProgramARB(program_type, program_id);
+    glProgramStringARB(program_type, GL_PROGRAM_FORMAT_ASCII_ARB, (GLsizei) strlen(code), (GLubyte *) code);
+
+    GLint error_pos;
+    glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &error_pos);
+
+    if (error_pos != -1)
+    {
+        const GLubyte *error_string;
+        error_string = glGetString(GL_PROGRAM_ERROR_STRING_ARB);
+        fprintf(stderr, "Program error at position: %d\n%s\n", (int)error_pos, error_string);
+        return 0;
+    }
+
+    return program_id;
 }
 
 // initialize OpenGL
@@ -216,8 +247,33 @@ void initGL(int *argc, char **argv)
 
 #endif
 
+    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
     glEnable(GL_DEPTH_TEST);
-    glClearColor(0.25, 0.25, 0.25, 1.0);
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // good old-fashioned fixed function lighting
+    float black[]    = { 0.0f, 0.0f, 0.0f, 1.0f };
+    float white[]    = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float ambient[]  = { 0.1f, 0.1f, 0.1f, 1.0f };
+    float diffuse[]  = { 0.7f, 0.7f, 0.7f, 1.0f };
+    float lightPos[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, diffuse);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, black);
+
+    glLightfv(GL_LIGHT0, GL_AMBIENT, white);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, black);
+
+    glEnable(GL_LIGHT0);
+    glEnable(GL_NORMALIZE);
+
+    GLint gl_Shader = compileASMShader(GL_FRAGMENT_PROGRAM_ARB, shader_code);
 
     glutReportErrors();
 }
@@ -245,7 +301,9 @@ void display()
 
     // TODO: Remove
     // testing the VoxelTree
-    VoxelTree::test();
+    // printf("Creating a tree...\n");
+    //VoxelTree::test();
+    // printf("A tree has been created!\n");
 
     // update the simulation
     if (!bPause)
@@ -257,7 +315,7 @@ void display()
         psystem->setCollideShear(collideShear);
         psystem->setCollideAttraction(collideAttraction);
 
-        psystem->update(timestep);
+        psystem->update(timestep, voxelTree);
 
         if (renderer)
         {
@@ -274,13 +332,13 @@ void display()
     
     for (int c = 0; c < 3; ++c)
     {
-        camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
-        camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
+        camera_trans[c] += (camera_trans[c] - camera_trans[c]) * inertia;
+        camera_rot[c] += (camera_rot[c] - camera_rot[c]) * inertia;
     }
     
-    glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
-    glRotatef(camera_rot_lag[0], 1.0, 0.0, 0.0);
-    glRotatef(camera_rot_lag[1], 0.0, 1.0, 0.0);
+    glTranslatef(camera_trans[0], camera_trans[1], camera_trans[2]);
+    glRotatef(camera_rot[0], 1.0, 0.0, 0.0);
+    glRotatef(camera_rot[1], 0.0, 1.0, 0.0);
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
@@ -301,6 +359,7 @@ void display()
     {
         renderer->display(displayMode);
     }
+    voxelTree->renderVoxelTree(modelView); 
 
     /*
     if (displaySliders)
@@ -323,6 +382,7 @@ void display()
     //writeNeighbors(psystem->getNumNeighbors(), "numNeighbors", numParticles, 150);
 
     if (frameCount >=numIterations) {
+        // TODO: Uncomment!!!
         // glutLeaveMainLoop();
     }
 }
@@ -522,7 +582,7 @@ void key(unsigned char key, int /*x*/, int /*y*/)
             break;
 
         case 13:
-            psystem->update(timestep);
+            psystem->update(timestep, voxelTree);
 
             if (renderer)
             {
@@ -726,13 +786,14 @@ main(int argc, char **argv)
     
     initMenus();
     
-    // glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+    // TODO: Uncomment
+    //glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    // glutMouseFunc(mouse);
-    // glutMotionFunc(motion);
-    // glutKeyboardFunc(key);
-    // glutSpecialFunc(special);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
+    glutKeyboardFunc(key);
+    glutSpecialFunc(special);
     glutIdleFunc(idle);
 
     //glutCloseFunc(cleanup);
