@@ -54,7 +54,9 @@ void copyDataToConstantMemory(unsigned int numberOfLevels,
 __device__
 unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 {
+    // "origin" of box is at the lower boundary
 	float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
+    // Find which cell the position is in
     uint xCoord = (uint) floor(relPos.x / cubeSize); 
     uint yCoord = (uint) floor(relPos.y / cubeSize); 
     uint zCoord = (uint) floor(relPos.z / cubeSize); 
@@ -64,11 +66,13 @@ unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 __device__
 BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cubeSize)
 {
+    // Find which cell of the old bounding box the pos is in
 	float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
 	uint3 lowerIndex;
 	lowerIndex.x = (uint) floor(offsetFromOrigin.x / cubeSize);
 	lowerIndex.y = (uint) floor(offsetFromOrigin.y / cubeSize);
 	lowerIndex.z = (uint) floor(offsetFromOrigin.z / cubeSize);
+    // Calculate the new upper and lower boundaries based on the cell
 	BoundingBox newBB; 
     newBB.lowerBoundary = make_float3(lowerIndex) * (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / cubeSize; 
     newBB.upperBoundary = make_float3((lowerIndex + make_uint3(1,1,1))) * (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / cubeSize; 
@@ -93,19 +97,24 @@ bool isOutsideBoundingBox(float3 pos)
 __device__
 unsigned int getStatus(float3 pos)
 {
+    // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
 	unsigned int currentLevel = 0;
 	BoundingBox currentBB = boundary;
 	unsigned int offset = 0; 
     if (isOutsideBoundingBox(pos)) {
+        // If outside the bounding box, the voxel is inactive
         return 0.0; 
     }
 	while (1) {
+        // Otherwise, get the status of the cell we're in
 		unsigned int cell = getCell(pos, currentBB, numCellsPerSide[currentLevel]);
 		unsigned int status = pointersToStatuses[currentLevel][cell + offset];
 		// Dig deeper = INF
 		if (status != INFINITY) {
+            // If it is active or inactive, return the status
 			return status;
 		} else {
+            // Otherwise, find our new offset and bounding box, and loop
 			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
 			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
 			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
@@ -132,6 +141,7 @@ void calculateNewVelocities(float4 *particlePos,
     float3 currentParticleVel = make_float3(particleVel[index]);
     float iters = particleVel[index].w; 
 
+    // Loop over all voxels that are touching the particle
     int loopStart = -1.0 * floor(particleRadius / voxelSize);
     int loopEnd = ceil(particleRadius / voxelSize); 
 
@@ -144,12 +154,15 @@ void calculateNewVelocities(float4 *particlePos,
     			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
     			float status = getStatus(position); 
     			if (status > 0) {
+                    // Get data for average voxel position
     				++numNeighboringVoxels; 
-                    averagePosition += position; 
+                    averagePosition += position;
+                    // Reduce the strength (do so more for glancing blows) 
                     float t_c = 0.1; 
                     float amountToReduceStrength = -10.0 * length(cross(currentParticleVel, currentParticlePos - position)) * deltaTime / t_c;
                     unsigned int indexToAdd = atomicAdd(sizeOfResult, 1);
                     if (indexToAdd < 10000) {
+                        // Add position of voxel and amount to reduce strength to our output for later use
                         result[indexToAdd] = make_float4(position, amountToReduceStrength);  
                     }  
     			}
@@ -158,10 +171,12 @@ void calculateNewVelocities(float4 *particlePos,
     }
 
     if (numNeighboringVoxels > 0) {
+        // get the average position
         averagePosition.x = averagePosition.x / numNeighboringVoxels;
         averagePosition.y = averagePosition.y / numNeighboringVoxels;
         averagePosition.z = averagePosition.z / numNeighboringVoxels;
-
+        
+        // The particle reflects around the normal.  
         float3 normalVector = (currentParticlePos - averagePosition) / length(currentParticlePos - averagePosition);
         currentParticleVel -= 2 * dot(normalVector, currentParticleVel) * normalVector;
         currentParticlePos = averagePosition + (particleRadius * normalVector);

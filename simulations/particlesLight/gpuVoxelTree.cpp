@@ -222,6 +222,7 @@ void VoxelTree::renderVoxelTree(float modelView[16])
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_posvbo_resource, 0));
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_normvbo_resource, 0));
 
+    // Set lighting and view
     float lightPos[] = { -3.0f, -15.0f, -3.0f, 0.0f };
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
@@ -232,7 +233,9 @@ void VoxelTree::renderVoxelTree(float modelView[16])
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
     glEnable(GL_LIGHTING);
-        
+    
+
+    // Bind the buffers for openGL to use    
     glBindBuffer(GL_ARRAY_BUFFER, _posVBO);
     glVertexPointer(4, GL_FLOAT, 0, 0);
     glEnableClientState(GL_VERTEX_ARRAY);
@@ -241,6 +244,7 @@ void VoxelTree::renderVoxelTree(float modelView[16])
     glNormalPointer(GL_FLOAT, sizeof(float)*4, 0);
     glEnableClientState(GL_NORMAL_ARRAY);
 
+    // Figure out how many vertices to draw, and use them for triangles
     uint num1 = _numVoxelsToDraw * 4 * 15;
     uint num2;
     cudaMemcpy(&num2, _dev_verticesInPosArray, sizeof(uint), cudaMemcpyDeviceToHost);
