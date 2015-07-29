@@ -14,6 +14,7 @@ void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
+                          unsigned int *numClaimedForLevel,
                           float deltaTime); 
 
 void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDeallocate, 

@@ -95,7 +95,8 @@ class VoxelTree
         // data
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        float*  _dev_voxels; // TODO: global or texture memory      
+        float*  _dev_voxels; // TODO: global or texture memory  
+        unsigned int *_dev_numClaimedForLevel;     
 
         // Render Data: 
         uint *_dev_verticesInPosArray; 

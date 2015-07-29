@@ -1,6 +1,6 @@
 
 
-#include <float.h>
+#include <math.h>
 
 #include <cuda_runtime.h>
 #include "vector_types.h"
@@ -13,8 +13,8 @@ __constant__ unsigned int numLevels;
 __constant__ BoundingBox  boundary;
 __constant__ unsigned int  numCellsPerSide[10];
 __constant__ float voxelSize;
-__constant__ unsigned int* pointersToStatuses[10];
-__constant__ unsigned int* pointersToDelimiters[9]; // Don't need delimiters for the lowest level
+__constant__ float* pointersToStatuses[10];
+__constant__ unsigned int* pointersToDelimiters[10]; // Don't need delimiters for the lowest level
 __constant__ unsigned int voxelsPerSide; 
 
 // textures for particle position and velocity
@@ -29,209 +29,32 @@ void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDealloca
                                     uint numLevels)
 {
 	checkCudaErrors(cudaMemcpyFromSymbol(&statusPointersToDeallocate[0], pointersToStatuses,
-                                         numLevels * sizeof(float), 0, cudaMemcpyDeviceToHost));
+                                         numLevels * sizeof(float *), 0, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpyFromSymbol(&delimiterPointersToDeallocate[0], pointersToDelimiters,
-                                         numLevels * sizeof(unsigned int), 0, cudaMemcpyDeviceToHost));
+                                         numLevels * sizeof(unsigned int *), 0, cudaMemcpyDeviceToHost));
 }
 void copyDataToConstantMemory(unsigned int numberOfLevels,
                              BoundingBox BB, 
                              std::vector<unsigned int> numberOfCellsPerSide,
                              float sizeOfVoxel,
-                             std::vector<void  *> pointersToLevelStatuses,
+                             std::vector<void *> pointersToLevelStatuses,
                              std::vector<void *> pointersToLevelDelimiters,
                              unsigned int numberOfVoxelsPerSide)
 {
 	checkCudaErrors(cudaMemcpyToSymbol(numLevels, (void *) &numberOfLevels, sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(boundary, (void *) &BB, sizeof(BoundingBox)));
-	checkCudaErrors(cudaMemcpyToSymbol(numCellsPerSide, (void *) &numberOfCellsPerSide, numberOfLevels * sizeof(float3)));
+	checkCudaErrors(cudaMemcpyToSymbol(numCellsPerSide, (void *) &numberOfCellsPerSide[0], numberOfLevels * sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(voxelSize, (void *) &sizeOfVoxel, sizeof(float)));
-	checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &pointersToLevelStatuses[0], numberOfLevels * sizeof(float)));
-	checkCudaErrors(cudaMemcpyToSymbol(pointersToDelimiters, (void *) &pointersToLevelDelimiters[0], (numberOfLevels - 1) * sizeof(unsigned int)));
+	checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &pointersToLevelStatuses[0], numberOfLevels * sizeof(float *)));
+	checkCudaErrors(cudaMemcpyToSymbol(pointersToDelimiters, (void *) &pointersToLevelDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
     checkCudaErrors(cudaMemcpyToSymbol(voxelsPerSide, (void *) &numberOfVoxelsPerSide, sizeof(unsigned int)));
 }
 
 // Functions for CUDA
 __device__
-unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
-{
-    // "origin" of box is at the lower boundary
-	float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
-    // Find which cell the position is in
-    uint xCoord = (uint) floor(relPos.x / cubeSize); 
-    uint yCoord = (uint) floor(relPos.y / cubeSize); 
-    uint zCoord = (uint) floor(relPos.z / cubeSize); 
-    return zCoord * cubeSize * cubeSize + yCoord * cubeSize + xCoord; 
-}
-
-__device__
-BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cubeSize)
-{
-    // Find which cell of the old bounding box the pos is in
-	float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
-	uint3 lowerIndex;
-	lowerIndex.x = (uint) floor(offsetFromOrigin.x / cubeSize);
-	lowerIndex.y = (uint) floor(offsetFromOrigin.y / cubeSize);
-	lowerIndex.z = (uint) floor(offsetFromOrigin.z / cubeSize);
-    // Calculate the new upper and lower boundaries based on the cell
-	BoundingBox newBB; 
-    newBB.lowerBoundary = make_float3(lowerIndex) * (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / cubeSize; 
-    newBB.upperBoundary = make_float3((lowerIndex + make_uint3(1,1,1))) * (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / cubeSize; 
-    return newBB; 
-}
-
-__device__
-bool isOutsideBoundingBox(float3 pos)
-{
-    float3 lowerBound = boundary.lowerBoundary;
-    float3 upperBound = boundary.upperBoundary; 
-    if (pos.x < lowerBound.x || pos.y < lowerBound.y || pos.z < lowerBound.z) {
-        return true; 
-    }
-    if (pos.x > upperBound.x || pos.y > upperBound.y || pos.z > upperBound.z) {
-        return true;
-    }
-    return false; 
-}
-
-
-__device__
-unsigned int getStatus(float3 pos)
-{
-    // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
-	unsigned int currentLevel = 0;
-	BoundingBox currentBB = boundary;
-	unsigned int offset = 0; 
-    if (isOutsideBoundingBox(pos)) {
-        // If outside the bounding box, the voxel is inactive
-        return 0.0; 
-    }
-	while (1) {
-        // Otherwise, get the status of the cell we're in
-		unsigned int cell = getCell(pos, currentBB, numCellsPerSide[currentLevel]);
-		unsigned int status = pointersToStatuses[currentLevel][cell + offset];
-		// Dig deeper = INF
-		if (status != INFINITY) {
-            // If it is active or inactive, return the status
-			return status;
-		} else {
-            // Otherwise, find our new offset and bounding box, and loop
-			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
-			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
-			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel + 1]);
-		}
-
-	}
-}
-
-__global__
-void calculateNewVelocities(float4 *particlePos,
-                            float4 *particleVel,
-                            float particleRadius,
-                            unsigned int numParticles,
-                            float deltaTime, 
-                            float4 *result,
-                            uint *sizeOfResult)
-{
-	uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
-
-    if (index >= numParticles) return;
-
-    float3 currentParticlePos = make_float3(particlePos[index]);
-    float3 currentParticleVel = make_float3(particleVel[index]);
-    float iters = particleVel[index].w; 
-
-    // Loop over all voxels that are touching the particle
-    int loopStart = -1.0 * floor(particleRadius / voxelSize);
-    int loopEnd = ceil(particleRadius / voxelSize); 
-
-    float3 averagePosition = make_float3(0,0,0); 
-    unsigned int numNeighboringVoxels = 0; 
-
-    for (int z = loopStart; z <= loopEnd; ++z) {
-    	for (int y = loopStart; y <= loopEnd; ++y) {
-    		for (int x = loopStart; x <= loopEnd; ++x) {
-    			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
-    			float status = getStatus(position); 
-    			if (status > 0) {
-                    // Get data for average voxel position
-    				++numNeighboringVoxels; 
-                    averagePosition += position;
-                    // Reduce the strength (do so more for glancing blows) 
-                    float t_c = 0.1; 
-                    float amountToReduceStrength = -10.0 * length(cross(currentParticleVel, currentParticlePos - position)) * deltaTime / t_c;
-                    unsigned int indexToAdd = atomicAdd(sizeOfResult, 1);
-                    if (indexToAdd < 10000) {
-                        // Add position of voxel and amount to reduce strength to our output for later use
-                        result[indexToAdd] = make_float4(position, amountToReduceStrength);  
-                    }  
-    			}
-    		}
-    	}
-    }
-
-    if (numNeighboringVoxels > 0) {
-        // get the average position
-        averagePosition.x = averagePosition.x / numNeighboringVoxels;
-        averagePosition.y = averagePosition.y / numNeighboringVoxels;
-        averagePosition.z = averagePosition.z / numNeighboringVoxels;
-        
-        // The particle reflects around the normal.  
-        float3 normalVector = (currentParticlePos - averagePosition) / length(currentParticlePos - averagePosition);
-        currentParticleVel -= 2 * dot(normalVector, currentParticleVel) * normalVector;
-        currentParticlePos = averagePosition + (particleRadius * normalVector);
-
-        // TODO: Figure out a way to remove particles
-    }
-    particlePos[index] = make_float4(currentParticlePos, 1.0f);
-    particleVel[index] = make_float4(currentParticleVel, iters);
-}
-
-__global__
-void repairVoxelTree(float4 *result)
-{
-    return; 	
-}
-
-__global__
-void coarsenVoxelTree(float4 *result)
-{
-	return; 
-}
-
-void collideWithParticles(float *particlePos,
-                          float *particleVel,
-                          float  particleRadius,
-                          unsigned int numParticles,
-                          float deltaTime)
-{
-	unsigned int numThreads = 256; 
-	unsigned int numBlocks = ceil(numParticles / numThreads);
-	float *result;
-    checkCudaErrors(cudaMalloc((void **) &result, 10000 * sizeof(float4))); 
-    unsigned int *sizeOfResult; 
-    checkCudaErrors(cudaMalloc((void **) &sizeOfResult, 1 * sizeof(unsigned int))); 
-    checkCudaErrors(cudaMemset(sizeOfResult, 0, sizeof(unsigned int))); 
-    calculateNewVelocities<<<numBlocks, numThreads>>>((float4 *) particlePos,
-                                                    (float4 *) particleVel,
-                                                    particleRadius,
-                                                    numParticles,
-                                                    deltaTime,
-                                                    (float4 *) result,
-                                                    sizeOfResult);
-    getLastCudaError("Kernel execution failed");
- 
-    //repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
-
-    //coarsenVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
-    cudaFree(result);
-    cudaFree(sizeOfResult); 
-	
-}
-
-__device__
 uint3 calculateCoordsFromIndex(uint index)
 {
+    // Find the coordinates of a *marching cube* from its index
     uint3 center;
     center.z = index / ((voxelsPerSide + 1) * (voxelsPerSide + 1));
     center.y = (index - center.z * (voxelsPerSide + 1) * (voxelsPerSide + 1)) / (voxelsPerSide + 1); 
@@ -244,10 +67,9 @@ __device__
 float3 calculateVoxelCenter(int3 gridPos)
 {
     float3 center;
-    unsigned int cubeSize = numCellsPerSide[numLevels - 1]; 
-    center.x = boundary.lowerBoundary.x + (voxelSize / 2.0) + (gridPos.x - cubeSize / 2.0) * voxelSize;
-    center.y = boundary.lowerBoundary.x + (voxelSize / 2.0) + (gridPos.y - cubeSize / 2.0) * voxelSize;
-    center.z = boundary.lowerBoundary.x + (voxelSize / 2.0) + (gridPos.z - cubeSize / 2.0) * voxelSize;
+    center.x = boundary.lowerBoundary.x + (voxelSize / 2.0) + gridPos.x * voxelSize;
+    center.y = boundary.lowerBoundary.x + (voxelSize / 2.0) + gridPos.y * voxelSize;
+    center.z = boundary.lowerBoundary.x + (voxelSize / 2.0) + gridPos.z * voxelSize;
     return center;
 }
 
@@ -282,6 +104,259 @@ void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, f
     n.y = lerp(f0.y, f1.y, t);
     n.z = lerp(f0.z, f1.z, t);
     n = normalize(n);
+}
+
+__device__
+unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
+{
+    // "origin" of box is at the lower boundary
+	float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
+    float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
+    // Find which cell the position is in
+    uint xCoord = (uint) floor(relPos.x / sizeOfCell); 
+    uint yCoord = (uint) floor(relPos.y / sizeOfCell); 
+    uint zCoord = (uint) floor(relPos.z / sizeOfCell); 
+    return zCoord * cubeSize * cubeSize + yCoord * cubeSize + xCoord; 
+}
+
+__device__
+BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cubeSize)
+{
+    // Find which cell of the old bounding box the pos is in
+	float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
+    float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
+	uint3 lowerIndex;
+	lowerIndex.x = (uint) floor(offsetFromOrigin.x / sizeOfCell);
+	lowerIndex.y = (uint) floor(offsetFromOrigin.y / sizeOfCell);
+	lowerIndex.z = (uint) floor(offsetFromOrigin.z / sizeOfCell);
+    // Calculate the new upper and lower boundaries based on the cell
+	BoundingBox newBB; 
+    newBB.lowerBoundary = make_float3(lowerIndex) * sizeOfCell; 
+    newBB.upperBoundary = make_float3((lowerIndex + make_uint3(1,1,1))) * sizeOfCell; 
+    return newBB; 
+}
+
+__device__
+bool isOutsideBoundingBox(float3 pos)
+{
+    float3 lowerBound = boundary.lowerBoundary;
+    float3 upperBound = boundary.upperBoundary; 
+    if (pos.x < lowerBound.x || pos.y < lowerBound.y || pos.z < lowerBound.z) {
+        return true; 
+    }
+    if (pos.x > upperBound.x || pos.y > upperBound.y || pos.z > upperBound.z) {
+        return true;
+    }
+    return false; 
+}
+
+
+__device__
+unsigned int getStatus(float3 pos)
+{
+    // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
+	unsigned int currentLevel = 0;
+	BoundingBox currentBB = boundary;
+	unsigned int offset = 0; 
+    if (isOutsideBoundingBox(pos)) {
+        // If outside the bounding box, the voxel is inactive
+        return 0.0; 
+    }
+	while (1) {
+        // Otherwise, get the status of the cell we're in
+		unsigned int cell = getCell(pos, currentBB, numCellsPerSide[currentLevel]);
+		float status = pointersToStatuses[currentLevel][cell + offset];
+		// Dig deeper = INF
+		if (status != NAN) {
+            // If it is active or inactive, return the status
+			return status;
+		} else {
+            // Otherwise, find our new offset and bounding box, and loop
+			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
+			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
+			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
+			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel + 1]);
+		}
+
+	}
+}
+
+__global__
+void calculateNewVelocities(float4 *particlePos,
+                            float4 *particleVel,
+                            float particleRadius,
+                            unsigned int numParticles,
+                            float deltaTime, 
+                            float4 *result,
+                            unsigned int *sizeOfResult,
+                            unsigned int maxResultSize)
+{
+	uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+
+    if (index >= numParticles) return;
+
+    float3 currentParticlePos = make_float3(particlePos[index]);
+    float3 currentParticleVel = make_float3(particleVel[index]);
+    float iters = particleVel[index].w; 
+
+    // Loop over all voxels that are touching the particle
+    int loopStart = -1.0 * floor(particleRadius / voxelSize);
+    int loopEnd = ceil(particleRadius / voxelSize); 
+
+    float3 averagePosition = make_float3(0,0,0); 
+    unsigned int numNeighboringVoxels = 0; 
+
+    for (int z = loopStart; z <= loopEnd; ++z) {
+    	for (int y = loopStart; y <= loopEnd; ++y) {
+    		for (int x = loopStart; x <= loopEnd; ++x) {
+    			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
+    			float status = getStatus(position); 
+    			if (status > 0) {
+                    // Get data for average voxel position
+    				++numNeighboringVoxels; 
+                    averagePosition += position;
+                    // Reduce the strength (do so more for glancing blows) 
+                    float t_c = 0.1; 
+                    float amountToReduceStrength = -10.0 * length(cross(currentParticleVel, currentParticlePos - position)) * deltaTime / t_c;
+                    unsigned int indexToAdd = atomicAdd(sizeOfResult, 1);
+                    if (indexToAdd < maxResultSize) {
+                        // Add position of voxel and amount to reduce strength to our output for later use
+                        result[indexToAdd] = make_float4(position, amountToReduceStrength);  
+                    }  
+    			}
+    		}
+    	}
+    }
+
+    if (numNeighboringVoxels > 0) {
+        // get the average position
+        averagePosition.x = averagePosition.x / numNeighboringVoxels;
+        averagePosition.y = averagePosition.y / numNeighboringVoxels;
+        averagePosition.z = averagePosition.z / numNeighboringVoxels;
+        
+        // The particle reflects around the normal.  
+        float3 normalVector = (currentParticlePos - averagePosition) / length(currentParticlePos - averagePosition);
+        currentParticleVel -= 2 * dot(normalVector, currentParticleVel) * normalVector;
+        currentParticlePos = averagePosition + (2 * particleRadius * normalVector);
+
+        // TODO: Figure out a way to remove particles
+    }
+    particlePos[index] = make_float4(currentParticlePos, 1.0f);
+    particleVel[index] = make_float4(currentParticleVel, iters);
+}
+
+__global__
+void repairVoxelTree(float4 *result,
+                     unsigned int *numClaimedInArrayAtLevel,
+                     unsigned int numToRepair)
+{
+    uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    if (index >= numToRepair) return;
+
+    float WORK_IN_PROGRESS = INFINITY; 
+    float3 pos = make_float3(result[index]); 
+    BoundingBox currentBB = boundary; 
+    //unsigned int cell; 
+    unsigned int offset = 0;
+    unsigned int numCellsInLevel = 1; 
+    unsigned int cell;
+    float amountToReduceStrength = result[index].w;
+
+    for (int level = 0; level < numLevels - 1; ++level) {
+        // Get index of cell 
+        cell = getCell(pos, currentBB, numCellsPerSide[level]);
+        numCellsInLevel *= numCellsPerSide[level] * numCellsPerSide[level] * numCellsPerSide[level]; 
+        if (cell + offset >= numCellsInLevel) {
+            printf("Problem1 at index %d\n", index);
+            return; 
+        }
+        // Check if work is happening already
+        float prevStatus = atomicExch(&(pointersToStatuses[level][cell + offset]), WORK_IN_PROGRESS);
+        if (prevStatus != WORK_IN_PROGRESS) {
+            // If chunk is not allready dig deeper...
+            int chunkNum = pointersToDelimiters[level][cell + offset];
+            if (chunkNum == -1) {
+                // Get pos to add into
+                unsigned int positionToAdd = atomicAdd(&numClaimedInArrayAtLevel[level + 1], 1);
+                unsigned int numCellsInChunk = numCellsPerSide[level + 1] * numCellsPerSide[level + 1] * numCellsPerSide[level + 1];
+
+                unsigned int numCellsInNextLevel = numCellsInLevel * numCellsPerSide[level + 1] * numCellsPerSide[level + 1] * numCellsPerSide[level + 1];
+                for (int i = 0; i < numCellsInChunk; ++i) {
+                    if (positionToAdd * numCellsInChunk + i >= numCellsInNextLevel) {
+                       printf("Problem2 at index %d\n", index);
+                       return; 
+                    }
+                    // Set next level to proper values
+                    pointersToStatuses[level + 1][positionToAdd * numCellsInChunk + i] = 1;
+                    pointersToDelimiters[level + 1][positionToAdd * numCellsInChunk + i] = -1; 
+                }
+                // Update chunk index
+                pointersToDelimiters[level][cell + offset] = positionToAdd; 
+            }
+            //NAN = dig deeper into tree
+            pointersToStatuses[level][cell + offset] = NAN; 
+        } else {
+            while (pointersToStatuses[level][cell + offset] == WORK_IN_PROGRESS) {}
+        }
+        unsigned int delimiter = pointersToDelimiters[level][cell + offset];
+        unsigned int nextLevelCubeSize = numCellsPerSide[level + 1];
+        offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
+        currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[level + 1]);
+    }
+    // TODO: Is amount to Reduce strength negative?
+    atomicAdd(&pointersToStatuses[numLevels - 1][cell + offset], amountToReduceStrength);
+    return; 	
+}
+
+__global__
+void coarsenVoxelTree(float4 *result)
+{
+	return; 
+}
+
+void collideWithParticles(float *particlePos,
+                          float *particleVel,
+                          float  particleRadius,
+                          unsigned int numParticles,
+                          unsigned int *numClaimedInArrayAtLevel,
+                          float deltaTime)
+{
+	unsigned int numThreads = 256; 
+	unsigned int numBlocks = ceil((float) numParticles / numThreads);
+    unsigned int maxResultSize = 10000;
+	float *result;
+    checkCudaErrors(cudaMalloc((void **) &result, maxResultSize * sizeof(float4))); 
+    unsigned int *sizeOfResult; 
+    checkCudaErrors(cudaMalloc((void **) &sizeOfResult, 1 * sizeof(unsigned int))); 
+    checkCudaErrors(cudaMemset(sizeOfResult, 0, sizeof(unsigned int))); 
+    calculateNewVelocities<<<numBlocks, numThreads>>>((float4 *) particlePos,
+                                                    (float4 *) particleVel,
+                                                    particleRadius,
+                                                    numParticles,
+                                                    deltaTime,
+                                                    (float4 *) result,
+                                                    sizeOfResult, 
+                                                    maxResultSize);
+    getLastCudaError("Kernel execution failed");
+
+
+    unsigned int size; 
+    cudaMemcpy(&size, sizeOfResult, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    numThreads = min(256, size); 
+    if (numThreads > 0) {
+        numBlocks = ceil((float) size / numThreads); 
+        if (size > maxResultSize) 
+            printf("problem: Size %d is greater than max size %d\n", size, maxResultSize);
+        repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
+                                                    numClaimedInArrayAtLevel, 
+                                                    min(size, maxResultSize));
+    }
+    getLastCudaError("Kernel execution failed");
+
+    //coarsenVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
+    cudaFree(result);
+    cudaFree(sizeOfResult); 
+	
 }
 
 __global__
