@@ -224,6 +224,7 @@ void collideWithParticles(float *particlePos,
     //repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
 
     //coarsenVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
+
     cudaFree(result);
     cudaFree(sizeOfResult); 
 	

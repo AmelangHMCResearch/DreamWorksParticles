@@ -104,7 +104,8 @@ VoxelTree::~VoxelTree()
     a cube and should be improved.
 */   
 void VoxelTree::initializeTree()
-{   
+{       
+    printf("Starting to initialize tree!!!!\n");
     // TODO: pass in VDB (?)
     // For now, we will just initialize a fixed size cube with arbitrarily-sized voxels
 
@@ -187,6 +188,7 @@ void VoxelTree::initializeTree()
                                                      cudaGraphicsMapFlagsNone));
 
     _isInitialized = true;
+    printf("Completed initialization\n");
 }
 
 void VoxelTree::runCollisions(float *particlePos, 
@@ -333,47 +335,46 @@ void VoxelTree::debugDisplay() {
         }
         printf("\n");
 
-        // const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
-        // const float * voxelPositionArray = voxelObject->getCpuPosArray();
-        // const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
-        // const float voxelSize = voxelObject->getVoxelSize();
-
-        unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[0];
-        unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
-        float currentCellSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
-        printf("VoxelSize is %3.2f\n", currentCellSize);
-        
-        for (unsigned int cellIndex = 0; cellIndex < 8; ++cellIndex) {
-            
-            unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;
-            unsigned int yIndex = (cellIndex % currentSquaredCellsPerSide) / currentNumberOfCellsPerSide;
-            unsigned int zIndex = cellIndex / currentSquaredCellsPerSide;
-
-            float xPos = _boundary.lowerBoundary.x + (0.5 + xIndex)*currentCellSize;
-            float yPos = _boundary.lowerBoundary.y + (0.5 + yIndex)*currentCellSize;
-            float zPos = _boundary.lowerBoundary.z + (0.5 + zIndex)*currentCellSize;
-
-            if (statuses[0][cellIndex] > 0.0f) {
-                printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
-                // save the matrix state
-                glPushMatrix();
-                // translate for this voxel
-                glTranslatef(xPos, yPos, zPos);
-                             
-                // float* color = new float[3];
-                // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-                float color[3] = {1.0, 0, 0};
-                glColor3f(color[0], color[1], color[2]);
-                // delete [] color;
-                glutWireCube(currentCellSize);
-                // reset the matrix state
-                glPopMatrix();
-            }
-        }
+        // TODO
+        drawCell(statuses);   
     }
 }
 
 
+void VoxelTree::drawCell(std::vector<std::vector<float> > statuses) {
+    unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[0];
+    unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
+    float currentCellSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
+    printf("VoxelSize is %3.2f\n", currentCellSize);
+    
+    for (unsigned int cellIndex = 0; cellIndex < 8; ++cellIndex) {
+        
+        unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;
+        unsigned int yIndex = (cellIndex % currentSquaredCellsPerSide) / currentNumberOfCellsPerSide;
+        unsigned int zIndex = cellIndex / currentSquaredCellsPerSide;
+
+        float xPos = _boundary.lowerBoundary.x + (0.5 + xIndex)*currentCellSize;
+        float yPos = _boundary.lowerBoundary.y + (0.5 + yIndex)*currentCellSize;
+        float zPos = _boundary.lowerBoundary.z + (0.5 + zIndex)*currentCellSize;
+
+        if (statuses[0][cellIndex] > 0.0f) {
+            printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
+            // save the matrix state
+            glPushMatrix();
+            // translate for this voxel
+            glTranslatef(xPos, yPos, zPos);
+                         
+            // float* color = new float[3];
+            // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+            float color[3] = {1.0, 0, 0};
+            glColor3f(color[0], color[1], color[2]);
+            // delete [] color;
+            glutWireCube(currentCellSize);
+            // reset the matrix state
+            glPopMatrix();
+        }
+    }
+}
 
 // ***************
 // *** TESTING ***

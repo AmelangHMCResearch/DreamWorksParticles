@@ -71,6 +71,9 @@ class VoxelTree
         // status checking functions
         bool isInitialized();
         bool hasVoxelData();
+
+        // display helper
+        void drawCell(std::vector<std::vector<float> > statuses);
         
 
     protected:
