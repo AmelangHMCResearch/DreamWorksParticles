@@ -31,6 +31,8 @@ enum Status {
     DIG_DEEPER
 };
 
+static const unsigned int INVALID_CHUNK_NUMBER = (unsigned)(-1);
+
 // TODO: adapt to GPU ??
 
 struct BoundingBox {

@@ -130,11 +130,9 @@ void VoxelTree::initializeTree()
         numberOfCellsPerSideInLevel *= _numberOfCellsPerSideForLevel[levelIndex];
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
         checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
-        if (levelIndex == _numberOfLevels - 1) {
-            _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
-            _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
-        }
     }
+    _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
+    _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
 
     // then, create the space and copy the pointers to that data to the GPU
     checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelStatuses, _numberOfLevels*sizeof(void *)));
@@ -144,12 +142,8 @@ void VoxelTree::initializeTree()
 
     // set the top level of the tree to active to represent the cube.
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
-    std::vector<float> topLevel; 
-    std::vector<unsigned int> topLevelDelimiters; 
-    for (int i=0; i < numberOfTopLevelEntries; ++i) {
-        topLevel.push_back(1);
-        topLevelDelimiters.push_back(-1);
-    }
+    std::vector<float> topLevel(numberOfTopLevelEntries, 1);
+    std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
 
@@ -157,12 +151,12 @@ void VoxelTree::initializeTree()
     checkCudaErrors(cudaMemset(_dev_numClaimedForLevel, 0, _numberOfLevels * sizeof(unsigned int)));
 
     copyDataToConstantMemory(_numberOfLevels,
-                            _boundary,
-                            _numberOfCellsPerSideForLevel,
-                            _voxelSize,
-                            pointersToStatusesOnGPU,
-                            pointersToDelimitersOnGPU,
-                            numberOfCellsPerSideInLevel);
+                             _boundary,
+                             _numberOfCellsPerSideForLevel,
+                             _voxelSize,
+                             pointersToStatusesOnGPU,
+                             pointersToDelimitersOnGPU,
+                             numberOfCellsPerSideInLevel);
 
     // More rendering stuff: 
 
