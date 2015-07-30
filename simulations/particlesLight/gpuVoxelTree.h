@@ -65,17 +65,18 @@ class VoxelTree
         // TODO: Remove
         static void test();
 
-
-
     private:
         // status checking functions
         bool isInitialized();
         bool hasVoxelData();
 
         // display helper
-        void drawCell(std::vector<std::vector<float> > statuses);
-        
-
+        void drawCell(std::vector<std::vector<float> > & statuses,
+                      std::vector<std::vector<unsigned int> > & delimiters,
+                      unsigned int cellIndexOffset,
+                      unsigned int currentLevel,
+                      BoundingBox currentBoundary);
+    
     protected:
         // CPU values
         bool _isInitialized;

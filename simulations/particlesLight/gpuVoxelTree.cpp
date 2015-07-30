@@ -31,6 +31,7 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>    // includes cuda.h and cuda_runtime_api.h
 
+#include <math.h>
 
 #include "gpuVoxelTree.h"
 #include "gpuVoxelTree.cuh"
@@ -105,7 +106,7 @@ VoxelTree::~VoxelTree()
 */   
 void VoxelTree::initializeTree()
 {       
-    printf("Starting to initialize tree!!!!\n");
+    // printf("Starting to initialize tree!!!!\n");
     // TODO: pass in VDB (?)
     // For now, we will just initialize a fixed size cube with arbitrarily-sized voxels
 
@@ -130,10 +131,10 @@ void VoxelTree::initializeTree()
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
         numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
         numberOfCellsPerSideInLevel *= _numberOfCellsPerSideForLevel[levelIndex];
+        printf("Initializing %d elements on level %d\n", numberOfEntriesInLevel, levelIndex);
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
-        if (levelIndex != _numberOfLevels - 1) {
-            checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
-        } else {
+        checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+        if (levelIndex == _numberOfLevels - 1) {
             _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
             _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
         }
@@ -146,9 +147,27 @@ void VoxelTree::initializeTree()
     checkCudaErrors(cudaMemcpy(_dev_pointersToLevelDelimiters, &pointersToDelimitersOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
 
     // set the top level of the tree to active to represent the cube.
-    const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
-    const float topLevel[8] = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-    checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], topLevel, numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
+    const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];    
+    std::vector<float> topLevel(numberOfTopLevelEntries, 1.0);
+    // decompose one cell of the cube
+    topLevel[numberOfTopLevelEntries - 1] = NAN;
+    checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
+
+    // set the delimiters for the top level to point toward test cell
+    std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, -1);
+    topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
+    checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
+
+    // for the first level, only have active cells where the missing cell from the top level points to
+    const unsigned int numberOfFirstLevelEntriesPerCell = _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1];
+    const unsigned int numberOfFirstLevelEntries = numberOfTopLevelEntries * numberOfFirstLevelEntriesPerCell;
+    std::vector<float> firstLevel(numberOfFirstLevelEntries, 0.0);
+    for (unsigned int index = 0; index < numberOfFirstLevelEntriesPerCell; ++index) {
+        firstLevel[numberOfFirstLevelEntries - numberOfFirstLevelEntriesPerCell + index] = 1.0;
+        // firstLevel[index] = 1.0;
+    }
+    checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[1], &firstLevel[0], numberOfFirstLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
+
 
     copyDataToConstantMemory(_numberOfLevels,
                             _boundary,
@@ -325,56 +344,115 @@ void VoxelTree::debugDisplay() {
         // status
         printf("Status:");
         for (unsigned int index = 0; index < numberOfTopLevelEntries; ++index) {
-            printf(" %5.2f", statuses[0][index]);
+            printf(" %5.2f", statuses[1][index]);
         }
         printf("\n");
         // delimiter
         printf("Delimiter:");
         for (unsigned int index = 0; index < numberOfTopLevelEntries; ++index) {
-            // printf(" %u", delimiters[0][index]);
+            printf(" %u", delimiters[0][index]);
         }
         printf("\n");
 
+        // make the first call to drawCell (called recursively to draw lower level cells)
         // TODO
-        drawCell(statuses);   
+        drawCell(statuses, delimiters, 0, 0, _boundary);   
     }
 }
 
 
-void VoxelTree::drawCell(std::vector<std::vector<float> > statuses) {
-    unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[0];
-    unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
-    float currentCellSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
-    printf("VoxelSize is %3.2f\n", currentCellSize);
+
+inline float lerp(float a, float b, float t)
+{
+    return a + t*(b-a);
+}
+
+
+// create a color ramp
+void findColor(float t, float *r)
+{
+    const int ncolors = 7;
+    float c[ncolors][3] =
+    {
+        { 1.0, 0.0, 0.0, },
+        { 1.0, 0.5, 0.0, },
+        { 1.0, 1.0, 0.0, },
+        { 0.0, 1.0, 0.0, },
+        { 0.0, 1.0, 1.0, },
+        { 0.0, 0.0, 1.0, },
+        { 1.0, 0.0, 1.0, },
+    };
+    t = t * (ncolors-1);
+    int i = (int) t;
+    float u = t - floor(t);
+    r[0] = lerp(c[i][0], c[i+1][0], u);
+    r[1] = lerp(c[i][1], c[i+1][1], u);
+    r[2] = lerp(c[i][2], c[i+1][2], u);
+}
+
+
+void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
+                         std::vector<std::vector<unsigned int> > & delimiters,
+                         unsigned int delimiterForCurrentCell,
+                         unsigned int currentLevel,
+                         BoundingBox currentBoundary) {
     
-    for (unsigned int cellIndex = 0; cellIndex < 8; ++cellIndex) {
+    const unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[currentLevel];
+    const unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide; 
+    const float currentCellSize = (currentBoundary.upperBoundary.x - currentBoundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
+    // printf("VoxelSize is %3.2f\n", currentCellSize);
+
+    const unsigned int numberOfEntriesInCell = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
+
+    for (unsigned int cellIndex = 0; cellIndex < numberOfEntriesInCell; ++cellIndex) {
         
         unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;
         unsigned int yIndex = (cellIndex % currentSquaredCellsPerSide) / currentNumberOfCellsPerSide;
         unsigned int zIndex = cellIndex / currentSquaredCellsPerSide;
 
-        float xPos = _boundary.lowerBoundary.x + (0.5 + xIndex)*currentCellSize;
-        float yPos = _boundary.lowerBoundary.y + (0.5 + yIndex)*currentCellSize;
-        float zPos = _boundary.lowerBoundary.z + (0.5 + zIndex)*currentCellSize;
+        float xPos = currentBoundary.lowerBoundary.x + (0.5 + xIndex)*currentCellSize;
+        float yPos = currentBoundary.lowerBoundary.y + (0.5 + yIndex)*currentCellSize;
+        float zPos = currentBoundary.lowerBoundary.z + (0.5 + zIndex)*currentCellSize;
 
-        if (statuses[0][cellIndex] > 0.0f) {
-            printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
+        // actual index in status/delimiter arrays
+        unsigned int actualCellIndex = cellIndex + delimiterForCurrentCell * numberOfEntriesInCell;
+
+        if (statuses[currentLevel][actualCellIndex] > 0.0f) {
+            // printf("statuses[currentLevel][actualCellIndex] is %f\n", statuses[currentLevel][actualCellIndex]);
+            // printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
             // save the matrix state
             glPushMatrix();
             // translate for this voxel
             glTranslatef(xPos, yPos, zPos);
                          
-            // float* color = new float[3];
+            float color[3];
+            float t = currentLevel / (float) _numberOfLevels;
+            findColor(t, color);
             // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-            float color[3] = {1.0, 0, 0};
+            // float color[3] = {1.0, 0, 0};
             glColor3f(color[0], color[1], color[2]);
             // delete [] color;
             glutWireCube(currentCellSize);
             // reset the matrix state
             glPopMatrix();
-        }
+        } else if (statuses[currentLevel][actualCellIndex] != statuses[currentLevel][actualCellIndex]) { // check for NaN 
+            printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
+
+            unsigned int delimiterForNextCell = delimiters[currentLevel][actualCellIndex];
+            // printf("NextDelimiter is %d\n", delimiterForNextCell);
+            unsigned int nextLevel = currentLevel + 1;
+            float halfCellSize = 0.5 * currentCellSize;
+            BoundingBox nextBoundary;
+            nextBoundary.lowerBoundary = make_float3(xPos - halfCellSize, yPos - halfCellSize, zPos - halfCellSize);
+            nextBoundary.upperBoundary = make_float3(xPos + halfCellSize, yPos + halfCellSize, zPos + halfCellSize);
+
+            drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary);
+        } //else { 
+        //     printf("Got some other cell value: %f\n", statuses[currentLevel][actualCellIndex]);
+        // }
     }
 }
+
 
 // ***************
 // *** TESTING ***
