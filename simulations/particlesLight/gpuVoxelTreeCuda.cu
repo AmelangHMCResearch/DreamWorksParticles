@@ -124,34 +124,35 @@ unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 }
 
 __device__
-BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cubeSize)
+bool isOutsideBoundingBox(float3 pos, BoundingBox BB)
 {
-    // Find which cell of the old bounding box the pos is in
-	float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
-    float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
-	uint3 lowerIndex;
-	lowerIndex.x = (uint) floor(offsetFromOrigin.x / sizeOfCell);
-	lowerIndex.y = (uint) floor(offsetFromOrigin.y / sizeOfCell);
-	lowerIndex.z = (uint) floor(offsetFromOrigin.z / sizeOfCell);
-    // Calculate the new upper and lower boundaries based on the cell
-	BoundingBox newBB; 
-    newBB.lowerBoundary = make_float3(lowerIndex) * sizeOfCell; 
-    newBB.upperBoundary = make_float3((lowerIndex + make_uint3(1,1,1))) * sizeOfCell; 
-    return newBB; 
-}
-
-__device__
-bool isOutsideBoundingBox(float3 pos)
-{
-    float3 lowerBound = boundary.lowerBoundary;
-    float3 upperBound = boundary.upperBoundary; 
-    if (pos.x < lowerBound.x || pos.y < lowerBound.y || pos.z < lowerBound.z) {
+    if (pos.x < BB.lowerBoundary.x || pos.y < BB.lowerBoundary.y || pos.z < BB.lowerBoundary.z) {
         return true; 
     }
-    if (pos.x > upperBound.x || pos.y > upperBound.y || pos.z > upperBound.z) {
+    if (pos.x > BB.upperBoundary.x || pos.y > BB.upperBoundary.y || pos.z > BB.upperBoundary.z) {
         return true;
     }
     return false; 
+}
+
+__device__
+BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cubeSize)
+{
+    // Find which cell of the old bounding box the pos is in
+    float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
+    float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
+    uint3 lowerIndex;
+    lowerIndex.x = (uint) floor(offsetFromOrigin.x / sizeOfCell);
+    lowerIndex.y = (uint) floor(offsetFromOrigin.y / sizeOfCell);
+    lowerIndex.z = (uint) floor(offsetFromOrigin.z / sizeOfCell);
+    // Calculate the new upper and lower boundaries based on the cell
+    BoundingBox newBB; 
+    newBB.lowerBoundary = boundingBox.lowerBoundary + make_float3(lowerIndex) * sizeOfCell; 
+    newBB.upperBoundary = boundingBox.lowerBoundary + make_float3((lowerIndex + make_uint3(1,1,1))) * sizeOfCell; 
+    if (isOutsideBoundingBox(pos, boundingBox)) {
+        printf("Problem: Bounding box calculated incorrectly\n");
+    }
+    return newBB; 
 }
 
 
@@ -162,7 +163,7 @@ unsigned int getStatus(float3 pos)
 	unsigned int currentLevel = 0;
 	BoundingBox currentBB = boundary;
 	unsigned int offset = 0; 
-    if (isOutsideBoundingBox(pos)) {
+    if (isOutsideBoundingBox(pos, currentBB)) {
         // If outside the bounding box, the voxel is inactive
         return 0.0; 
     }
@@ -320,11 +321,13 @@ void repairVoxelTree(const float4 *result,
                         pointersToStatuses[level + 1][nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i] = 1;
                         pointersToDelimiters[level + 1][nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i] = INVALID_CHUNK_NUMBER; 
                     }
+                    printf("Index %5u is setting offset of level %3u, cell %3u, offset %3u to %3u\n",
+                       index, level, cell, offset, nextLevelsClaimedChunkNumber);
                     // Update chunk index
                     pointersToDelimiters[level][cell + offset] = nextLevelsClaimedChunkNumber; 
                 }
-                printf("Index %5u is setting status %5u to DIG_DEEPER\n",
-                       index, cell+offset);
+                printf("Index %5u is setting status of level %3u, cell %3u, offset %3u to DIG_DEEPER\n",
+                       index, level, cell, offset);
                 pointersToStatuses[level][cell + offset] = STATUS_FLAG_DIG_DEEPER; 
             } else {
                 unsigned int numberOfTimesWeveWaited = 0;
@@ -332,8 +335,8 @@ void repairVoxelTree(const float4 *result,
                        STATUS_FLAG_WORK_IN_PROGRESS) {
                     ++numberOfTimesWeveWaited;
                     if (numberOfTimesWeveWaited > 100000) {
-                      printf("Index %5u is infinite looping, marking and "
-                             "returning\n", index);
+                      //printf("Index %5u is infinite looping, marking and "
+                             //"returning at level %5u\n", index, level);
                       atomicAdd(addressOfErrorField, unsigned(1));
                       return;
                     }
