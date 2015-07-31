@@ -1,6 +1,7 @@
 
 
 #include <math.h>
+#include <limits.h>
 
 #include <cuda_runtime.h>
 #include "vector_types.h"
@@ -25,7 +26,7 @@ texture<uint, 1, cudaReadModeElementType> numVertsTex;
 // I don't like #defines, but we can't do static const variables because
 //  they have to be available to host and device.  grrr...
 #define STATUS_FLAG_WORK_IN_PROGRESS INFINITY
-#define STATUS_FLAG_DIG_DEEPER       NAN
+#define STATUS_FLAG_DIG_DEEPER (-1.0 * INFINITY)       
 
 // Utility Functions
 void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDeallocate, 
@@ -291,15 +292,16 @@ void repairVoxelTree(const float4 *result,
               atomicExch(&(pointersToStatuses[level][cell + offset]),
                          STATUS_FLAG_WORK_IN_PROGRESS);
             if (secondStatusCheck != STATUS_FLAG_WORK_IN_PROGRESS) {
+                printf("Status seen by index %3u at level %3u, cell %3u offset %3u is %5f\n", index, level, cell, offset, secondStatusCheck);
                 // If chunk is not allready dig deeper...
                 const unsigned int chunkNumber =
                   pointersToDelimiters[level][cell + offset];
-                printf("Index %5u is checking chunk number %5u\n",
-                       index, chunkNumber);
+                /*printf("Index %5u is checking chunk number %5u\n",
+                       index, chunkNumber);*/
                 if (chunkNumber == INVALID_CHUNK_NUMBER) {
-                    printf("Index %5u needs to refine cell on level %2u "
+                    /*printf("Index %5u needs to refine cell on level %2u "
                            "offset %5u cell %3u\n",
-                           index, level, offset, cell);
+                           index, level, offset, cell);*/
                     // Claim a chunk number at the next level
                     const unsigned int nextLevelsClaimedChunkNumber =
                       atomicAdd(&numClaimedInArrayAtLevel[level + 1], unsigned(1));
@@ -321,22 +323,22 @@ void repairVoxelTree(const float4 *result,
                         pointersToStatuses[level + 1][nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i] = 1;
                         pointersToDelimiters[level + 1][nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i] = INVALID_CHUNK_NUMBER; 
                     }
-                    printf("Index %5u is setting offset of level %3u, cell %3u, offset %3u to %3u\n",
-                       index, level, cell, offset, nextLevelsClaimedChunkNumber);
+                    /*printf("Index %5u is setting offset of level %3u, cell %3u, offset %3u to %3u\n",
+                       index, level, cell, offset, nextLevelsClaimedChunkNumber);*/
                     // Update chunk index
                     pointersToDelimiters[level][cell + offset] = nextLevelsClaimedChunkNumber; 
                 }
-                printf("Index %5u is setting status of level %3u, cell %3u, offset %3u to DIG_DEEPER\n",
-                       index, level, cell, offset);
+                printf("Index %5u is setting status of level %3u, cell %3u, offset %3u to %5f\n",
+                       index, level, cell, offset, STATUS_FLAG_DIG_DEEPER);
                 pointersToStatuses[level][cell + offset] = STATUS_FLAG_DIG_DEEPER; 
             } else {
                 unsigned int numberOfTimesWeveWaited = 0;
                 while (pointersToStatuses[level][cell + offset] ==
                        STATUS_FLAG_WORK_IN_PROGRESS) {
                     ++numberOfTimesWeveWaited;
-                    if (numberOfTimesWeveWaited > 100000) {
-                      //printf("Index %5u is infinite looping, marking and "
-                             //"returning at level %5u\n", index, level);
+                    if (numberOfTimesWeveWaited > 9000000) {
+                      printf("Index %2u is infinite looping "
+                             "on cell %2u, offset %2u at level %2u, seeing value %3f\n", index, cell, offset, level, pointersToStatuses[level][cell + offset]);
                       atomicAdd(addressOfErrorField, unsigned(1));
                       return;
                     }
@@ -400,13 +402,14 @@ void collideWithParticles(float *particlePos,
         const unsigned int numberOfResultsToProcess =
           std::min(numberOfResultsProduced, maxResultSize);
         unsigned int *addressOfErrorField;
+        unsigned int zero = 0; 
         checkCudaErrors(cudaMalloc((void **) &addressOfErrorField,
                                    1 * sizeof(unsigned int)));
-        checkCudaErrors(cudaMemset(addressOfErrorField, 0,
-                                   sizeof(unsigned int)));
+        checkCudaErrors(cudaMemcpy(addressOfErrorField, &zero,
+                                   sizeof(unsigned int), cudaMemcpyHostToDevice));
         if (numberOfResultsToProcess > 0) {
-            printf("     calling repairVoxelTree to process %5u results with "
-                   "%4u threads and %5u blocks\n",
+            printf("calling repairVoxelTree to process %4u results with "
+                   "%4u threads and %4u blocks\n",
                    numberOfResultsToProcess, numThreads, numBlocks);
         }
         repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
@@ -416,11 +419,7 @@ void collideWithParticles(float *particlePos,
         unsigned int numberOfErrors;
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
                    cudaMemcpyDeviceToHost);
-        if (numberOfResultsToProcess > 0) {
-            printf("done calling repairVoxelTree to process %5u results, had "
-                   "%5u errors\n", numberOfResultsToProcess, numberOfErrors);
-        }
-        if (numberOfErrors > 0) {
+        if (numberOfResultsToProcess > 0 || numberOfResultsToProcess > 0) {
             fprintf(stderr, "found %u errors after call to repairVoxelTree "
                     "with %u results\n", numberOfErrors,
                     numberOfResultsToProcess);

@@ -146,9 +146,10 @@ void VoxelTree::initializeTree()
     std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
+    std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
     checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
-    checkCudaErrors(cudaMemset(_dev_numClaimedForLevel, 0, _numberOfLevels * sizeof(unsigned int)));
+    checkCudaErrors(cudaMemcpy(_dev_numClaimedForLevel, &numClaimedForLevel[0], _numberOfLevels * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
     copyDataToConstantMemory(_numberOfLevels,
                              _boundary,
