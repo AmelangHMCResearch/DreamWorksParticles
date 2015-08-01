@@ -260,22 +260,22 @@ void repairVoxelTree(const float4 *result,
     const uint index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
     if (index >= numToRepair) return;
 
-    const float3 pos = make_float3(result[index]); 
+    const float3 pos = make_float3(result[index]);
     const float amountToReduceStrength = result[index].w;
-    BoundingBox currentBB = boundary; 
-    unsigned int cell; 
+    BoundingBox currentBB = boundary;
+    unsigned int cell;
     unsigned int offset = 0;
-    unsigned int numCellsInThisLevel = 1; 
+    unsigned int numCellsInThisLevel = 1;
 
     for (unsigned int level = 0; level < numLevels - 1; ++level) {
-        // Get index of cell 
+        // Get index of cell
         cell = getCell(pos, currentBB, numCellsPerSide[level]);
         numCellsInThisLevel *= numCellsPerSide[level] *
-          numCellsPerSide[level] * numCellsPerSide[level]; 
+          numCellsPerSide[level] * numCellsPerSide[level];
         if (cell + offset >= numCellsInThisLevel) {
             printf("Problem1 at index %d\n", index);
             atomicAdd(addressOfErrorField, unsigned(1));
-            return; 
+            return;
         }
         // First, check if the cell is DIG_DEEPER.  If it is, then we
         //  don't really need to do any fancy logic, we know we can just
@@ -288,17 +288,27 @@ void repairVoxelTree(const float4 *result,
             //  in progress, then we know someone else is refining the cell
             //  and we just wait.
             // Check if work is happening already
-            const float secondStatusCheck =
-              atomicExch(&(pointersToStatuses[level][cell + offset]),
-                         STATUS_FLAG_WORK_IN_PROGRESS);
-            if (secondStatusCheck != STATUS_FLAG_WORK_IN_PROGRESS) {
-                printf("Status seen by index %3u at level %3u, cell %3u offset %3u is %5f\n", index, level, cell, offset, secondStatusCheck);
-                // If chunk is not allready dig deeper...
-                const unsigned int chunkNumber =
-                  pointersToDelimiters[level][cell + offset];
-                /*printf("Index %5u is checking chunk number %5u\n",
-                       index, chunkNumber);*/
-                if (chunkNumber == INVALID_CHUNK_NUMBER) {
+            bool thisThreadCanContinue = false;
+            unsigned int numberOfTimesWeveSpunOnWorkInProgress = 0;
+            while (thisThreadCanContinue == false) {
+                // if the status was active
+                if (secondStatusCheck != STATUS_FLAG_WORK_IN_PROGRESS) {
+                    // It's active
+                    //printf("Status seen by index %3u at level %3u, cell %3u offset "
+                    //"%3u is %5f\n", index, level, cell, offset, secondStatusCheck);
+                    // If chunk is not allready dig deeper...
+                    const unsigned int chunkNumber =
+                      pointersToDelimiters[level][cell + offset];
+                    /*printf("Index %5u is checking chunk number %5u\n",
+                           index, chunkNumber);*/
+                    if (chunkNumber != INVALID_CHUNK_NUMBER) {
+                        printf("error, index %u found a status of %f which is "
+                               "active, but the chunk number of %u was valid, "
+                               "which shouldn't happen.\n",
+                               index, secondStatusCheck, chunkNumber);
+                        return;
+                    }
+                    // the chunkNumber must be INVALID_CHUNK_NUMBER
                     /*printf("Index %5u needs to refine cell on level %2u "
                            "offset %5u cell %3u\n",
                            index, level, offset, cell);*/
@@ -317,7 +327,7 @@ void repairVoxelTree(const float4 *result,
                            printf("Index %5u is failing to set next chunk's "
                                   "values\n", index);
                            atomicAdd(addressOfErrorField, unsigned(1));
-                           return; 
+                           return;
                         }
                         // Set next level to proper values
                         pointersToStatuses[level + 1][nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i] = 1;
@@ -327,18 +337,23 @@ void repairVoxelTree(const float4 *result,
                        index, level, cell, offset, nextLevelsClaimedChunkNumber);*/
                     // Update chunk index
                     pointersToDelimiters[level][cell + offset] = nextLevelsClaimedChunkNumber; 
-                }
-                printf("Index %5u is setting status of level %3u, cell %3u, offset %3u to %5f\n",
-                       index, level, cell, offset, STATUS_FLAG_DIG_DEEPER);
-                pointersToStatuses[level][cell + offset] = STATUS_FLAG_DIG_DEEPER; 
-            } else {
-                unsigned int numberOfTimesWeveWaited = 0;
-                while (pointersToStatuses[level][cell + offset] ==
-                       STATUS_FLAG_WORK_IN_PROGRESS) {
-                    ++numberOfTimesWeveWaited;
-                    if (numberOfTimesWeveWaited > 9000000) {
+                    printf("Index %3u is setting status of level %3u, cell %3u, offset %3u at address %p\n",
+                           index, level, cell, offset, &(pointersToStatuses[level][cell + offset]));
+                    atomicExch(&(pointersToStatuses[level][cell + offset]),
+                               STATUS_FLAG_DIG_DEEPER);
+                    thisThreadCanContinue = true;
+                } else {
+                    const float newStatus =
+                      pointersToStatuses[level][cell + offset];
+                    if (newStatus == STATUS_FLAG_DIG_DEEPER) {
+                        // we're ready to go!
+                        thisThreadCanContinue = true;
+                    }
+                    ++numberOfTimesWeveSpunOnWorkInProgress;
+                    if (numberOfTimesWeveSpunOnWorkInProgress > 1000000) {
                       printf("Index %2u is infinite looping "
-                             "on cell %2u, offset %2u at level %2u, seeing value %3f\n", index, cell, offset, level, pointersToStatuses[level][cell + offset]);
+                             "on cell %2u, offset %2u at level %2u\n",
+                             index, cell, offset, level);
                       atomicAdd(addressOfErrorField, unsigned(1));
                       return;
                     }
@@ -352,7 +367,7 @@ void repairVoxelTree(const float4 *result,
     }
     // TODO: Is amount to Reduce strength negative?
     atomicAdd(&pointersToStatuses[numLevels - 1][cell + offset], amountToReduceStrength);
-    return; 	
+    return;
 }
 
 __global__
