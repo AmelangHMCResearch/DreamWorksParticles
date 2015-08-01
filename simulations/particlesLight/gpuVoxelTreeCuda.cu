@@ -288,6 +288,9 @@ void repairVoxelTree(const float4 *result,
             //  in progress, then we know someone else is refining the cell
             //  and we just wait.
             // Check if work is happening already
+            const float secondStatusCheck =
+              atomicExch(&(pointersToStatuses[level][cell + offset]),
+                         STATUS_FLAG_WORK_IN_PROGRESS);
             bool thisThreadCanContinue = false;
             unsigned int numberOfTimesWeveSpunOnWorkInProgress = 0;
             while (thisThreadCanContinue == false) {
@@ -346,16 +349,23 @@ void repairVoxelTree(const float4 *result,
                     const float newStatus =
                       pointersToStatuses[level][cell + offset];
                     if (newStatus == STATUS_FLAG_DIG_DEEPER) {
+                        /*
+                        printf("Index %2u is done waiting on work in progress "
+                               "on cell %2u, offset %2u at level %2u ",
+                               "on iteration %5u\n", index,
+                               cell, offset, level,
+                               numberOfTimesWeveSpunOnWorkInProgress);
+                        */
                         // we're ready to go!
                         thisThreadCanContinue = true;
                     }
                     ++numberOfTimesWeveSpunOnWorkInProgress;
                     if (numberOfTimesWeveSpunOnWorkInProgress > 1000000) {
-                      printf("Index %2u is infinite looping "
-                             "on cell %2u, offset %2u at level %2u\n",
-                             index, cell, offset, level);
-                      atomicAdd(addressOfErrorField, unsigned(1));
-                      return;
+                        printf("Index %2u is infinite looping "
+                               "on cell %2u, offset %2u at level %2u\n",
+                               index, cell, offset, level);
+                        atomicAdd(addressOfErrorField, unsigned(1));
+                        return;
                     }
                 }
             }
