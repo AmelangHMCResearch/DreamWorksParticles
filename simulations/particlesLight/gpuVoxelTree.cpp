@@ -201,6 +201,8 @@ void VoxelTree::runCollisions(float *particlePos,
                          particleVel,
                          particleRadius,
                          numParticles,
+                         _dev_pointersToLevelStatuses,
+                         _dev_pointersToLevelDelimiters, 
                          _dev_numClaimedForLevel,
                          deltaTime); 
 }
@@ -218,6 +220,8 @@ void VoxelTree::renderVoxelTree(float modelView[16])
 
     generateMarchingCubes(dPos,
                           dNorm,
+                          _dev_pointersToLevelStatuses,
+                          _dev_pointersToLevelDelimiters,
                           _dev_triTable,
                           _dev_numVertsTable,
                           _dev_verticesInPosArray,

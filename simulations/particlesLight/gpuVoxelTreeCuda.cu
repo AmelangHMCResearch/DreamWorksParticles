@@ -14,8 +14,8 @@ __constant__ unsigned int numLevels;
 __constant__ BoundingBox  boundary;
 __constant__ unsigned int  numCellsPerSide[10];
 __constant__ float voxelSize;
-__constant__ float* pointersToStatuses[10];
-__constant__ unsigned int* pointersToDelimiters[10]; // Don't need delimiters for the lowest level
+//__constant__ float* pointersToStatuses[10];
+//__constant__ unsigned int* pointersToDelimiters[10]; // Don't need delimiters for the lowest level
 __constant__ unsigned int voxelsPerSide; 
 
 // textures for particle position and velocity
@@ -33,10 +33,10 @@ void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDealloca
                                     std::vector<void *> delimiterPointersToDeallocate,
                                     uint numLevels)
 {
-	checkCudaErrors(cudaMemcpyFromSymbol(&statusPointersToDeallocate[0], pointersToStatuses,
+	/*checkCudaErrors(cudaMemcpyFromSymbol(&statusPointersToDeallocate[0], pointersToStatuses,
                                          numLevels * sizeof(float *), 0, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpyFromSymbol(&delimiterPointersToDeallocate[0], pointersToDelimiters,
-                                         numLevels * sizeof(unsigned int *), 0, cudaMemcpyDeviceToHost));
+                                         numLevels * sizeof(unsigned int *), 0, cudaMemcpyDeviceToHost));*/
 }
 void copyDataToConstantMemory(unsigned int numberOfLevels,
                              BoundingBox BB, 
@@ -50,8 +50,8 @@ void copyDataToConstantMemory(unsigned int numberOfLevels,
 	checkCudaErrors(cudaMemcpyToSymbol(boundary, (void *) &BB, sizeof(BoundingBox)));
 	checkCudaErrors(cudaMemcpyToSymbol(numCellsPerSide, (void *) &numberOfCellsPerSide[0], numberOfLevels * sizeof(unsigned int)));
 	checkCudaErrors(cudaMemcpyToSymbol(voxelSize, (void *) &sizeOfVoxel, sizeof(float)));
-	checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &pointersToLevelStatuses[0], numberOfLevels * sizeof(float *)));
-	checkCudaErrors(cudaMemcpyToSymbol(pointersToDelimiters, (void *) &pointersToLevelDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
+	//checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &pointersToLevelStatuses[0], numberOfLevels * sizeof(float *)));
+	//checkCudaErrors(cudaMemcpyToSymbol(pointersToDelimiters, (void *) &pointersToLevelDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
     checkCudaErrors(cudaMemcpyToSymbol(voxelsPerSide, (void *) &numberOfVoxelsPerSide, sizeof(unsigned int)));
 }
 
@@ -158,7 +158,7 @@ BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, uint cu
 
 
 __device__
-unsigned int getStatus(float3 pos)
+unsigned int getStatus(float3 pos, float **pointersToStatuses, unsigned int **pointersToDelimiters)
 {
     // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
 	unsigned int currentLevel = 0;
@@ -192,6 +192,8 @@ void calculateNewVelocities(float4 *particlePos,
                             float4 *particleVel,
                             float particleRadius,
                             unsigned int numParticles,
+                            float **pointersToStatuses,
+                            unsigned int **pointersToDelimiters,
                             float deltaTime, 
                             float4 *result,
                             unsigned int *sizeOfResult,
@@ -216,7 +218,7 @@ void calculateNewVelocities(float4 *particlePos,
     	for (int y = loopStart; y <= loopEnd; ++y) {
     		for (int x = loopStart; x <= loopEnd; ++x) {
     			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
-    			float status = getStatus(position); 
+    			float status = getStatus(position, pointersToStatuses, pointersToDelimiters); 
     			if (status > 0) {
                     // Get data for average voxel position
     				++numNeighboringVoxels; 
@@ -253,6 +255,8 @@ void calculateNewVelocities(float4 *particlePos,
 
 __global__
 void repairVoxelTree(const float4 *result,
+                     float **pointersToStatuses,
+                     unsigned int **pointersToDelimiters,
                      const unsigned int numToRepair,
                      unsigned int *numClaimedInArrayAtLevel,
                      unsigned int *addressOfErrorField)
@@ -328,8 +332,8 @@ void repairVoxelTree(const float4 *result,
                     // Update chunk index
                     pointersToDelimiters[level][cell + offset] = nextLevelsClaimedChunkNumber; 
                 }
-                printf("Index %5u is setting status of level %3u, cell %3u, offset %3u to %5f\n",
-                       index, level, cell, offset, STATUS_FLAG_DIG_DEEPER);
+                printf("Index %3u is setting status of level %3u, cell %3u, offset %3u at address %p\n",
+                       index, level, cell, offset, &(pointersToStatuses[level][cell + offset]));
                 pointersToStatuses[level][cell + offset] = STATUS_FLAG_DIG_DEEPER; 
             } else {
                 unsigned int numberOfTimesWeveWaited = 0;
@@ -338,7 +342,7 @@ void repairVoxelTree(const float4 *result,
                     ++numberOfTimesWeveWaited;
                     if (numberOfTimesWeveWaited > 9000000) {
                       printf("Index %2u is infinite looping "
-                             "on cell %2u, offset %2u at level %2u, seeing value %3f\n", index, cell, offset, level, pointersToStatuses[level][cell + offset]);
+                             "on cell %2u, offset %2u at level %2u, at address %p\n", index, cell, offset, level, &(pointersToStatuses[level][cell + offset]));
                       atomicAdd(addressOfErrorField, unsigned(1));
                       return;
                     }
@@ -365,6 +369,8 @@ void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
+                          float **pointersToStatuses,
+                          unsigned int **pointersToDelimiters,
                           unsigned int *numClaimedInArrayAtLevel,
                           float deltaTime)
 {
@@ -380,6 +386,8 @@ void collideWithParticles(float *particlePos,
                                                     (float4 *) particleVel,
                                                     particleRadius,
                                                     numParticles,
+                                                    pointersToStatuses,
+                                                    pointersToDelimiters,
                                                     deltaTime,
                                                     (float4 *) result,
                                                     sizeOfResult, 
@@ -413,6 +421,8 @@ void collideWithParticles(float *particlePos,
                    numberOfResultsToProcess, numThreads, numBlocks);
         }
         repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
+                                                   pointersToStatuses,
+                                                   pointersToDelimiters,
                                                    numberOfResultsToProcess,
                                                    numClaimedInArrayAtLevel,
                                                    addressOfErrorField);
@@ -437,6 +447,8 @@ void collideWithParticles(float *particlePos,
 __global__
 void createMarchingCubesMeshD(float4 *vertexPos,
                               float4 *norm,
+                              float **pointersToStatuses,
+                              unsigned int **pointersToDelimiters,
                               uint  *tri,
                               uint  *numVerts,
                               uint  *numVerticesClaimed,
@@ -456,7 +468,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     int3 i = make_int3(-1, -1, -1);
     int3 toCheck = make_int3(gridPos) + i;
     cubeVertexPos[0] = calculateVoxelCenter(toCheck);
-    bool isActive = getStatus(cubeVertexPos[0]) > 0;
+    bool isActive = getStatus(cubeVertexPos[0], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 0); 
     field[0] = fieldFunc4(cubeVertexPos[0]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 0, lookupIndexForActiveVertices, cubeVertexPos[0].x, cubeVertexPos[0].y, cubeVertexPos[0].z);
@@ -465,7 +477,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(0,-1,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[1] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[1]) > 0;
+    isActive = getStatus(cubeVertexPos[1], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 1); 
     field[1] = fieldFunc4(cubeVertexPos[1]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 1, lookupIndexForActiveVertices, cubeVertexPos[1].x, cubeVertexPos[1].y, cubeVertexPos[1].z);
@@ -473,7 +485,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(0,0,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[2] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[2]) > 0;
+    isActive = getStatus(cubeVertexPos[2], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 2); 
     field[2] = fieldFunc4(cubeVertexPos[2]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 2, lookupIndexForActiveVertices, cubeVertexPos[2].x, cubeVertexPos[2].y, cubeVertexPos[2].z);
@@ -481,7 +493,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(-1,0,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[3] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[3]) > 0;
+    isActive = getStatus(cubeVertexPos[3], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 3); 
     field[3] = fieldFunc4(cubeVertexPos[3]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 3, lookupIndexForActiveVertices, cubeVertexPos[3].x, cubeVertexPos[3].y, cubeVertexPos[3].z);
@@ -489,7 +501,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(-1,-1,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[4] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[4]) > 0;
+    isActive = getStatus(cubeVertexPos[4], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 4); 
     field[4] = fieldFunc4(cubeVertexPos[4]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 4, lookupIndexForActiveVertices, cubeVertexPos[4].x, cubeVertexPos[4].y, cubeVertexPos[4].z);
@@ -497,7 +509,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(0,-1,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[5] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[5]) > 0;
+    isActive = getStatus(cubeVertexPos[5], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 5); 
     field[5] = fieldFunc4(cubeVertexPos[5]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 5, lookupIndexForActiveVertices, cubeVertexPos[5].x, cubeVertexPos[5].y, cubeVertexPos[5].z);
@@ -505,7 +517,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(0,0,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[6] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[6]) > 0;
+    isActive = getStatus(cubeVertexPos[6], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 6); 
     field[6] = fieldFunc4(cubeVertexPos[6]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 6, lookupIndexForActiveVertices, cubeVertexPos[6].x, cubeVertexPos[6].y, cubeVertexPos[6].z);
@@ -513,7 +525,7 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     i = make_int3(-1,0,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[7] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[7]) > 0;
+    isActive = getStatus(cubeVertexPos[7], pointersToStatuses, pointersToDelimiters) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 7); 
     field[7] = fieldFunc4(cubeVertexPos[7]);
     //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 7, lookupIndexForActiveVertices, cubeVertexPos[7].x, cubeVertexPos[7].y, cubeVertexPos[7].z);
@@ -555,6 +567,8 @@ void createMarchingCubesMeshD(float4 *vertexPos,
 
 void generateMarchingCubes(float *pos,
                            float *norm,
+                           float **pointersToStatuses,
+                           unsigned int **pointersToDelimiters,
                            unsigned int *tri,
                            unsigned int *numVerts,
                            unsigned int *verticesInPosArray,
@@ -574,6 +588,8 @@ void generateMarchingCubes(float *pos,
     //timer->startTimer(5, true);
     createMarchingCubesMeshD<<< numBlocks, numThreads >>>((float4 *) pos,
                                                           (float4 *) norm,
+                                                          pointersToStatuses,
+                                                          pointersToDelimiters,
                                                            tri,
                                                            numVerts,
                                                            verticesInPosArray,

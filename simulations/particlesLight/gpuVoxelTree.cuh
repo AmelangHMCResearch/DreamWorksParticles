@@ -14,6 +14,8 @@ void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
+                          float **pointersToStatuses,
+                          unsigned int **pointersToDelimiters,
                           unsigned int *numClaimedForLevel,
                           float deltaTime); 
 
@@ -23,6 +25,8 @@ void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDealloca
 
 void generateMarchingCubes(float *pos,
                            float *norm,
+                           float **pointersToStatuses,
+                           unsigned int **pointersToDelimiters,
                            unsigned int *tri,
                            unsigned int *numVerts,
                            unsigned int *verticesInPosArray,
