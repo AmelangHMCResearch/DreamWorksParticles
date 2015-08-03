@@ -308,7 +308,12 @@ void repairVoxelTree(const float4 *result,
             unsigned int numberOfTimesWeveSpunOnWorkInProgress = 0;
             while (thisThreadCanContinue == false) {
                 if (secondStatusCheck == STATUS_FLAG_DIG_DEEPER) {
-                  thisThreadCanContinue = true;
+                    // set the status
+                    atomicExch((float*)&(pointersToStatuses[level][cell + offset]),
+                               STATUS_FLAG_DIG_DEEPER);
+                    // make sure writes have happened
+                    //threadfence();
+                    thisThreadCanContinue = true;
                 } else if (secondStatusCheck == STATUS_FLAG_WORK_IN_PROGRESS) {
                     const float newStatus =
                       pointersToStatuses[level][cell + offset];
@@ -373,7 +378,7 @@ void repairVoxelTree(const float4 *result,
                         const unsigned int indexOfValue =
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
-                                   1);
+                                   100);
                         atomicExch((unsigned int*)&(pointersToDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
@@ -384,7 +389,7 @@ void repairVoxelTree(const float4 *result,
                     atomicExch((float*)&(pointersToStatuses[level][cell + offset]),
                                STATUS_FLAG_DIG_DEEPER);
                     // make sure writes have happened
-                    threadfence();
+                    //threadfence();
                     /*
                     printf("resultIndex %5u set status/offset of level %2u, cell %5u, offset %5u to %8f/%5u\n",
                            resultIndex, level, cell, offset,
@@ -459,9 +464,9 @@ void collideWithParticles(float *particlePos,
         checkCudaErrors(cudaMemcpy(addressOfErrorField, &zero,
                                    sizeof(unsigned int), cudaMemcpyHostToDevice));
         if (numberOfResultsToProcess > 0) {
-            printf("calling repairVoxelTree to process %4u results with "
+            /*printf("calling repairVoxelTree to process %4u results with "
                    "%4u threads and %4u blocks\n",
-                   numberOfResultsToProcess, numThreads, numBlocks);
+                   numberOfResultsToProcess, numThreads, numBlocks);*/
         }
         repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
                                                    numberOfResultsToProcess,
