@@ -2,23 +2,24 @@
 #define _GPUVOXELTREE_CUH_
 #include "gpuVoxelTree.h"
 
-void copyDataToConstantMemory(unsigned int numberOfLevels,
-                             BoundingBox BB, 
-                             std::vector<unsigned int> numberOfCellsPerSide,
-                             float sizeOfVoxel,
-                             std::vector<void *> pointersToLevelStatuses,
-                             std::vector<void *> pointersToLevelDelimiters,
-                             unsigned int numberOfVoxelsPerSide);
+void copyDataToConstantMemory(const unsigned int numberOfLevels,
+                              const BoundingBox BB,
+                              const std::vector<unsigned int> & numberOfCellsPerSide,
+                              const float sizeOfVoxel,
+                              const std::vector<void *> & pointersToLevelStatuses,
+                              const std::vector<void *> & pointersToLevelDelimiters,
+                              const unsigned int numberOfVoxelsPerSide);
 
 void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
+                          unsigned int *numClaimedForLevel,
                           float deltaTime); 
 
-void getPointersToDeallocateFromGPU(std::vector<void *> statusPointersToDeallocate, 
-                                    std::vector<void *> delimiterPointersToDeallocate,
-                                    uint numLevels);
+void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,
+                                    std::vector<void *> * statusPointersToDeallocate, 
+                                    std::vector<void *> * delimiterPointersToDeallocate);
 
 void generateMarchingCubes(float *pos,
                            float *norm,

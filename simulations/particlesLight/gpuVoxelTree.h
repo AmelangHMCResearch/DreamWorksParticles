@@ -31,6 +31,10 @@ enum Status {
     DIG_DEEPER
 };
 
+static const unsigned int INVALID_CHUNK_NUMBER = (unsigned)(-1);
+
+// TODO: adapt to GPU ??
+
 struct BoundingBox {
     float3 lowerBoundary;
     float3 upperBoundary;
@@ -97,7 +101,8 @@ class VoxelTree
         // data
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        float*  _dev_voxels; // TODO: global or texture memory      
+        float*  _dev_voxels; // TODO: global or texture memory  
+        unsigned int *_dev_numClaimedForLevel;     
 
         // Render Data: 
         uint *_dev_verticesInPosArray; 

@@ -63,7 +63,7 @@ VoxelTree::~VoxelTree()
     // only clear data if it has been allocated
     if (_isInitialized) {
         std::vector<void *> statusPointersToDeallocateOnGPU(_numberOfLevels);
-        std::vector<void *> delimeterPointersToDeallocateOnGPU(_numberOfLevels);
+        std::vector<void *> delimeterPointersToDeallocateOnGPU(_numberOfLevels - 1);
 
         checkCudaErrors(cudaMemcpy(&statusPointersToDeallocateOnGPU[0], _dev_pointersToLevelStatuses,
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
@@ -71,7 +71,7 @@ VoxelTree::~VoxelTree()
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
 
         for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
-            checkCudaErrors(cudaFree(statusPointersToDeallocateOnGPU[levelIndex]));            
+            checkCudaErrors(cudaFree(statusPointersToDeallocateOnGPU[levelIndex]));         
             checkCudaErrors(cudaFree(delimeterPointersToDeallocateOnGPU[levelIndex]));            
         }
 
@@ -134,11 +134,9 @@ void VoxelTree::initializeTree()
         printf("Initializing %d elements on level %d\n", numberOfEntriesInLevel, levelIndex);
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
         checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
-        if (levelIndex == _numberOfLevels - 1) {
-            _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
-            _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
-        }
     }
+    _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
+    _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
 
     // then, create the space and copy the pointers to that data to the GPU
     checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelStatuses, _numberOfLevels*sizeof(void *)));
@@ -154,7 +152,7 @@ void VoxelTree::initializeTree()
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
 
     // set the delimiters for the top level to point toward test cell
-    std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, -1);
+    std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
     checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
 
@@ -167,15 +165,18 @@ void VoxelTree::initializeTree()
         // firstLevel[index] = 1.0;
     }
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[1], &firstLevel[0], numberOfFirstLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
+    std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
+    checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
+    checkCudaErrors(cudaMemcpy(_dev_numClaimedForLevel, &numClaimedForLevel[0], _numberOfLevels * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
     copyDataToConstantMemory(_numberOfLevels,
-                            _boundary,
-                            _numberOfCellsPerSideForLevel,
-                            _voxelSize,
-                            pointersToStatusesOnGPU,
-                            pointersToDelimitersOnGPU,
-                            numberOfCellsPerSideInLevel);
+                             _boundary,
+                             _numberOfCellsPerSideForLevel,
+                             _voxelSize,
+                             pointersToStatusesOnGPU,
+                             pointersToDelimitersOnGPU,
+                             numberOfCellsPerSideInLevel);
 
     // More rendering stuff: 
 
@@ -220,6 +221,7 @@ void VoxelTree::runCollisions(float *particlePos,
                          particleVel,
                          particleRadius,
                          numParticles,
+                         _dev_numClaimedForLevel,
                          deltaTime); 
 }
 
