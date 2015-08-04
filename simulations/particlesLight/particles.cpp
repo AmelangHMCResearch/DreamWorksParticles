@@ -62,7 +62,7 @@ uint3 gridSize = {256, 256, 256};
 int numIterations = 3000; // run until exit
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;

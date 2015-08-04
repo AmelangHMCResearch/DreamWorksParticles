@@ -21,12 +21,7 @@ __constant__ unsigned int voxelsPerSide;
 // textures for particle position and velocity
 //texture<unsigned int, 1, cudaReadModeElementType> voxelStrengthTex;
 texture<unsigned int, 1, cudaReadModeElementType> triTex;
-texture<unsigned int, 1, cudaReadModeElementType> numVertsTex;
-
-// I don't like #defines, but we can't do static const variables because
-//  they have to be available to host and device.  grrr...
-#define STATUS_FLAG_WORK_IN_PROGRESS INFINITY
-#define STATUS_FLAG_DIG_DEEPER (-1.0 * INFINITY)       
+texture<unsigned int, 1, cudaReadModeElementType> numVertsTex;      
 
 // Utility Functions
 void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,
@@ -378,7 +373,7 @@ void repairVoxelTree(const float4 *result,
                         const unsigned int indexOfValue =
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
-                                   100);
+                                   1000000);
                         atomicExch((unsigned int*)&(pointersToDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }

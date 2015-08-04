@@ -16,6 +16,11 @@
 #ifndef GPUVOXELTREE_HAS_BEEN_INCLUDED
 #define GPUVOXELTREE_HAS_BEEN_INCLUDED
 
+ // I don't like #defines, but we can't do static const variables because
+//  they have to be available to host and device.  grrr...
+#define STATUS_FLAG_WORK_IN_PROGRESS INFINITY
+#define STATUS_FLAG_DIG_DEEPER (-1.0 * INFINITY) 
+
 
 // cuda
 #include <cuda_runtime.h>

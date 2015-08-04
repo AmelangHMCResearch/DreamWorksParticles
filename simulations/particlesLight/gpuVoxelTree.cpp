@@ -148,7 +148,7 @@ void VoxelTree::initializeTree()
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];    
     std::vector<float> topLevel(numberOfTopLevelEntries, 1.0);
     // decompose one cell of the cube
-    topLevel[numberOfTopLevelEntries - 1] = NAN;
+    topLevel[numberOfTopLevelEntries - 1] = STATUS_FLAG_DIG_DEEPER;
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
 
     // set the delimiters for the top level to point toward test cell
@@ -437,7 +437,7 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             glutWireCube(currentCellSize);
             // reset the matrix state
             glPopMatrix();
-        } else if (statuses[currentLevel][actualCellIndex] != statuses[currentLevel][actualCellIndex]) { // check for NaN 
+        } else if (statuses[currentLevel][actualCellIndex] == STATUS_FLAG_DIG_DEEPER) {
             printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
 
             unsigned int delimiterForNextCell = delimiters[currentLevel][actualCellIndex];
