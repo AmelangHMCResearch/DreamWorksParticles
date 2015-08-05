@@ -113,9 +113,9 @@ unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 	float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
     float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
     // Find which cell the position is in
-    unsigned int xCoord = (unsigned int) floor(relPos.x / sizeOfCell); 
-    unsigned int yCoord = (unsigned int) floor(relPos.y / sizeOfCell); 
-    unsigned int zCoord = (unsigned int) floor(relPos.z / sizeOfCell); 
+    unsigned int xCoord = min((unsigned int) max(floor(relPos.x / sizeOfCell), 0.0f), cubeSize - 1); 
+    unsigned int yCoord = min((unsigned int) max(floor(relPos.y / sizeOfCell), 0.0f), cubeSize - 1); 
+    unsigned int zCoord = min((unsigned int) max(floor(relPos.z / sizeOfCell), 0.0f), cubeSize - 1); 
     return zCoord * cubeSize * cubeSize + yCoord * cubeSize + xCoord; 
 }
 
@@ -138,15 +138,15 @@ BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, unsigne
     float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
     float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
     uint3 lowerIndex;
-    lowerIndex.x = (unsigned int) floor(offsetFromOrigin.x / sizeOfCell);
-    lowerIndex.y = (unsigned int) floor(offsetFromOrigin.y / sizeOfCell);
-    lowerIndex.z = (unsigned int) floor(offsetFromOrigin.z / sizeOfCell);
+    lowerIndex.x = (unsigned int) max(floor(offsetFromOrigin.x / sizeOfCell), 0.0f);
+    lowerIndex.y = (unsigned int) max(floor(offsetFromOrigin.y / sizeOfCell), 0.0f);
+    lowerIndex.z = (unsigned int) max(floor(offsetFromOrigin.z / sizeOfCell), 0.0f);
     // Calculate the new upper and lower boundaries based on the cell
     BoundingBox newBB; 
     newBB.lowerBoundary = boundingBox.lowerBoundary + make_float3(lowerIndex) * sizeOfCell; 
     newBB.upperBoundary = boundingBox.lowerBoundary + make_float3((lowerIndex + make_uint3(1,1,1))) * sizeOfCell; 
-    if (isOutsideBoundingBox(pos, boundingBox)) {
-        printf("Problem: Bounding box calculated incorrectly\n");
+    if (isOutsideBoundingBox(pos, boundingBox) && (offsetFromOrigin.x > 0) && (offsetFromOrigin.y > 0) && (offsetFromOrigin.z > 0)) {
+        printf("Problem: Bounding box calculated incorrectly.Pos: %f, %f, %f Box: (%f, %f, %f), (%f, %f, %f) \n", pos.x, pos.y, pos.z, newBB.lowerBoundary.x, newBB.lowerBoundary.y, newBB.lowerBoundary.z, newBB.upperBoundary.x, newBB.upperBoundary.y, newBB.upperBoundary.z);
     }
     return newBB; 
 }
@@ -176,7 +176,8 @@ unsigned int getStatus(float3 pos)
 			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
 			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
 			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel + 1]);
+			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel]);
+            ++currentLevel; 
 		}
 
 	}
@@ -223,13 +224,14 @@ void calculateNewVelocities(float4 *particlePos,
                     if (indexToAdd < maxResultSize) {
                         // Add position of voxel and amount to reduce strength to our output for later use
                         result[indexToAdd] = make_float4(position, amountToReduceStrength);  
-                    }  
+                    }
     			}
     		}
     	}
     }
 
     if (numNeighboringVoxels > 0) {
+        //printf("Index: %u NumNeighbors: %u\n", index, numNeighboringVoxels);
         // get the average position
         averagePosition.x = averagePosition.x / numNeighboringVoxels;
         averagePosition.y = averagePosition.y / numNeighboringVoxels;
@@ -238,7 +240,7 @@ void calculateNewVelocities(float4 *particlePos,
         // The particle reflects around the normal.  
         float3 normalVector = (currentParticlePos - averagePosition) / length(currentParticlePos - averagePosition);
         currentParticleVel -= 2 * dot(normalVector, currentParticleVel) * normalVector;
-        currentParticlePos = averagePosition + (2 * particleRadius * normalVector);
+        currentParticlePos = averagePosition + (2.0 * particleRadius * normalVector);
 
         // TODO: Figure out a way to remove particles
     }
@@ -278,7 +280,7 @@ void repairVoxelTree(const float4 *result,
         numCellsInThisLevel *= numCellsPerSide[level] *
           numCellsPerSide[level] * numCellsPerSide[level];
         if (cell + offset >= numCellsInThisLevel) {
-            printf("Problem1 at index %d\n", resultIndex);
+            printf("Problem1 at index %d. Pos: %f, %f, %f cellsPerSide: %u Cell: %u offset: %u level: %u\n", resultIndex, resultPosition.x, resultPosition.y, resultPosition.z, numCellsPerSide[level],cell, offset, level);
             atomicAdd(addressOfErrorField, unsigned(1));
             return;
         }
@@ -373,7 +375,7 @@ void repairVoxelTree(const float4 *result,
                         const unsigned int indexOfValue =
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
-                                   1000000);
+                                   0.1);
                         atomicExch((unsigned int*)&(pointersToDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
@@ -398,7 +400,7 @@ void repairVoxelTree(const float4 *result,
         const unsigned int delimiter = pointersToDelimiters[level][cell + offset];
         const unsigned int nextLevelCubeSize = numCellsPerSide[level + 1];
         offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-        currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level + 1]);
+        currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level]);
     }
     // TODO: Is amount to Reduce strength negative?
     atomicAdd((float*)&pointersToStatuses[numLevels - 1][cell + offset],
@@ -426,7 +428,8 @@ void collideWithParticles(float *particlePos,
     checkCudaErrors(cudaMalloc((void **) &result, maxResultSize * sizeof(float4))); 
     unsigned int *sizeOfResult; 
     checkCudaErrors(cudaMalloc((void **) &sizeOfResult, 1 * sizeof(unsigned int))); 
-    checkCudaErrors(cudaMemset(sizeOfResult, 0, sizeof(unsigned int))); 
+    unsigned int zero = 0;
+    checkCudaErrors(cudaMemcpy(sizeOfResult, &zero, sizeof(unsigned int), cudaMemcpyHostToDevice)); 
     calculateNewVelocities<<<numBlocks, numThreads>>>((float4 *) particlePos,
                                                     (float4 *) particleVel,
                                                     particleRadius,
@@ -453,12 +456,12 @@ void collideWithParticles(float *particlePos,
         const unsigned int numberOfResultsToProcess =
           std::min(numberOfResultsProduced, maxResultSize);
         unsigned int *addressOfErrorField;
-        unsigned int zero = 0; 
         checkCudaErrors(cudaMalloc((void **) &addressOfErrorField,
                                    1 * sizeof(unsigned int)));
         checkCudaErrors(cudaMemcpy(addressOfErrorField, &zero,
                                    sizeof(unsigned int), cudaMemcpyHostToDevice));
         if (numberOfResultsToProcess > 0) {
+            //printf("results = %u\n", numberOfResultsProduced);
             /*printf("calling repairVoxelTree to process %4u results with "
                    "%4u threads and %4u blocks\n",
                    numberOfResultsToProcess, numThreads, numBlocks);*/
@@ -471,12 +474,13 @@ void collideWithParticles(float *particlePos,
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
                    cudaMemcpyDeviceToHost);
         if (numberOfResultsToProcess > 0) {
-            fprintf(stderr, "found %u errors after call to repairVoxelTree "
+            /*fprintf(stderr, "found %u errors after call to repairVoxelTree "
                     "with %u results\n", numberOfErrors,
-                    numberOfResultsToProcess);
+                    numberOfResultsToProcess);*/
             //exit(1);
         }
         if (numberOfErrors > 0) {
+            printf("Exited with %u errors\n", numberOfErrors);
             exit(1);
         }
     }

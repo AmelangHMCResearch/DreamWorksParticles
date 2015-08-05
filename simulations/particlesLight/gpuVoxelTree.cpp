@@ -148,23 +148,23 @@ void VoxelTree::initializeTree()
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];    
     std::vector<float> topLevel(numberOfTopLevelEntries, 1.0);
     // decompose one cell of the cube
-    topLevel[numberOfTopLevelEntries - 1] = STATUS_FLAG_DIG_DEEPER;
+    //topLevel[numberOfTopLevelEntries - 1] = STATUS_FLAG_DIG_DEEPER;
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
 
     // set the delimiters for the top level to point toward test cell
     std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
-    topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
+    //topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
     checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
 
     // for the first level, only have active cells where the missing cell from the top level points to
-    const unsigned int numberOfFirstLevelEntriesPerCell = _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1];
-    const unsigned int numberOfFirstLevelEntries = numberOfTopLevelEntries * numberOfFirstLevelEntriesPerCell;
-    std::vector<float> firstLevel(numberOfFirstLevelEntries, 0.0);
-    for (unsigned int index = 0; index < numberOfFirstLevelEntriesPerCell; ++index) {
-        firstLevel[numberOfFirstLevelEntries - numberOfFirstLevelEntriesPerCell + index] = 1.0;
-        // firstLevel[index] = 1.0;
-    }
-    checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[1], &firstLevel[0], numberOfFirstLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
+    // const unsigned int numberOfFirstLevelEntriesPerCell = _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1];
+    // const unsigned int numberOfFirstLevelEntries = numberOfTopLevelEntries * numberOfFirstLevelEntriesPerCell;
+    // std::vector<float> firstLevel(numberOfFirstLevelEntries, 0.0);
+    // for (unsigned int index = 0; index < numberOfFirstLevelEntriesPerCell; ++index) {
+    //     firstLevel[numberOfFirstLevelEntries - numberOfFirstLevelEntriesPerCell + index] = 1.0;
+    //     // firstLevel[index] = 1.0;
+    // }
+    //checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[1], &firstLevel[0], numberOfFirstLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
     std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
     checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
@@ -342,9 +342,9 @@ void VoxelTree::debugDisplay() {
     
         const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];
 
-        printf("First four entries in top level of tree are:\n");
+        //printf("First four entries in top level of tree are:\n");
         // status
-        printf("Status:");
+        /*printf("Status:");
         for (unsigned int index = 0; index < numberOfTopLevelEntries; ++index) {
             printf(" %5.2f", statuses[1][index]);
         }
@@ -354,7 +354,7 @@ void VoxelTree::debugDisplay() {
         for (unsigned int index = 0; index < numberOfTopLevelEntries; ++index) {
             printf(" %u", delimiters[0][index]);
         }
-        printf("\n");
+        printf("\n");*/
 
         // make the first call to drawCell (called recursively to draw lower level cells)
         // TODO
@@ -438,7 +438,7 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             // reset the matrix state
             glPopMatrix();
         } else if (statuses[currentLevel][actualCellIndex] == STATUS_FLAG_DIG_DEEPER) {
-            printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
+            //printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
 
             unsigned int delimiterForNextCell = delimiters[currentLevel][actualCellIndex];
             // printf("NextDelimiter is %d\n", delimiterForNextCell);
@@ -449,9 +449,23 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             nextBoundary.upperBoundary = make_float3(xPos + halfCellSize, yPos + halfCellSize, zPos + halfCellSize);
 
             drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary);
-        } //else { 
+        } else { 
         //     printf("Got some other cell value: %f\n", statuses[currentLevel][actualCellIndex]);
-        // }
+            glPushMatrix();
+            // translate for this voxel
+            glTranslatef(xPos, yPos, zPos);
+                         
+            float color[3];
+            float t = currentLevel / (float) _numberOfLevels;
+            findColor(t, color);
+            // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+            // float color[3] = {1.0, 0, 0};
+            glColor3f(1, 1, 1);
+            // delete [] color;
+            glutSolidCube(currentCellSize);
+            // reset the matrix state
+            glPopMatrix();
+        }
     }
 }
 

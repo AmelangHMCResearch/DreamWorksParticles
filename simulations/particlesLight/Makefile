@@ -133,7 +133,8 @@ HOST_COMPILER ?= g++
 
 ifeq ($(HOST_NAME),treebeard)
 	NVCC          := /usr/local/cuda/bin/nvcc
-	NVCCFLAGS   := -O2 --compiler-bindir="/usr/bin" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
+	NVCCFLAGS   := -O2
+ -g --compiler-bindir="/usr/bin" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed"  -m${TARGET_SIZE}
 else
 	NVCC ?= /opt/cuda/bin/nvcc
 	NVCCFLAGS   ?= -O2 --compiler-bindir="/usr/x86_64-pc-linux-gnu/gcc-bin/4.8.4" --compiler-options="-O2 -pipe -march=native" --linker-options="-O1,--as-needed" -m${TARGET_SIZE}
