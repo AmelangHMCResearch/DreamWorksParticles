@@ -376,8 +376,8 @@ void display()
     {
         renderer->display(displayMode);
     }
-    // voxelTree->renderVoxelTree(modelView); 
-    voxelTree->debugDisplay();
+    voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+    //voxelTree->debugDisplay();
 
     /*
     if (displaySliders)

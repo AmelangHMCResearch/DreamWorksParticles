@@ -225,7 +225,7 @@ void VoxelTree::runCollisions(float *particlePos,
                          deltaTime); 
 }
 
-void VoxelTree::renderVoxelTree(float modelView[16])
+void VoxelTree::renderVoxelTree(float modelView[16], float particleRadius)
 {
     float *dPos;
     checkCudaErrors(cudaGraphicsMapResources(1, &_cuda_posvbo_resource, 0));
@@ -242,7 +242,8 @@ void VoxelTree::renderVoxelTree(float modelView[16])
                           _dev_numVertsTable,
                           _dev_verticesInPosArray,
                           _numVoxelsToDraw,
-                          _numMarchingCubes);
+                          _numMarchingCubes,
+                          particleRadius);
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_posvbo_resource, 0));
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_normvbo_resource, 0));
 
@@ -449,8 +450,7 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             nextBoundary.upperBoundary = make_float3(xPos + halfCellSize, yPos + halfCellSize, zPos + halfCellSize);
 
             drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary);
-        } else { 
-        //     printf("Got some other cell value: %f\n", statuses[currentLevel][actualCellIndex]);
+        } /*else { 
             glPushMatrix();
             // translate for this voxel
             glTranslatef(xPos, yPos, zPos);
@@ -465,7 +465,7 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             glutSolidCube(currentCellSize);
             // reset the matrix state
             glPopMatrix();
-        }
+        }*/
     }
 }
 
