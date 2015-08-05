@@ -210,6 +210,68 @@ void VoxelTree::initializeTree()
     printf("Completed initialization\n");
 }
 
+
+void VoxelTree::initializeShape() {
+    FILE *fp = fopen("BostonTeapot.raw", "rb");
+    if (fp == NULL) {
+        printf("Problem opening file\n");
+        exit(1);
+    }
+
+    /*unsigned short dataSize[3];
+    int result = fread((void*) &dataSize[0],sizeof(unsigned short), 3,fp);
+    if (result == 0) {
+        printf("Problem reading file 2\n");
+        exit(1); 
+    }*/
+    const unsigned short dataSize[3] = {256, 256, 178};
+    const unsigned int numberOfVoxelsInFile = dataSize[0] * dataSize[1] * dataSize[2];
+
+    std::vector<unsigned char> dataFromFile(numberOfVoxelsInFile);
+    unsigned int result = fread(&dataFromFile[0], sizeof(char), numberOfVoxelsInFile, fp);
+    if (result == 0 && (feof(fp) || ferror(fp))) {
+       printf("Problem reading file. Exiting...\n");
+       exit(1);
+    }
+    printf("Grabbed %d voxels of %d from the file.\n", result, numberOfVoxelsInFile);
+    
+
+
+    // build the tree from the voxels
+    std::vector<std::vector<float> > statuses;
+    std::vector<std::vector<unsigned int> > delimiters;
+
+    // for (unsigned int z = 0; z < dataSize[2]; z++)
+    // {
+    //     for (unsigned int y = 0; y < dataSize[1]; y++)
+    //     {
+    //         for (unsigned int x = 0; x < dataSize[0]; x++)
+    //         {
+    //             unsigned int i = (z*_objectParams._cubeSize.x * _objectParams._cubeSize.y) + (y * _objectParams._cubeSize.x) + x;
+    //             if (x < dataSize[0] && y < dataSize[1] && z < dataSize[2]) {
+    //                 unsigned short strength; 
+    //                 int result = fread(&strength, sizeof(char), 1, fp);
+    //                 if (result == 0 && (feof(fp) || ferror(fp))) {
+    //                    printf("Problem reading file at index %d\n", i);
+    //                    exit(1); 
+    //                 }
+    //                 if (strength < 60) {
+    //                     _voxelStrength[i] = 0; 
+    //                 } else {
+    //                     _voxelStrength[i] = _maxVoxelStrength; 
+    //                 }
+                    
+    //             } else {
+    //                 _voxelStrength[i] = 0; 
+    //             }
+    //         }
+    //     }
+    // }
+    fclose(fp); 
+}
+
+
+
 void VoxelTree::runCollisions(float *particlePos, 
                               float *particleVel, 
                               float  particleRadius,

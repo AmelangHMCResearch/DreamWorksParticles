@@ -180,12 +180,13 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     psystem->reset(ParticleSystem::CONFIG_GRID);
     psystem->startTimer(5);
 
-    unsigned int blah[4] = {3, 2, 4, 4};
+    unsigned int blah[4] = {4, 4, 4, 4};
     
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
 
     voxelTree = new VoxelTree(cellsPerSide);
     voxelTree->initializeTree();
+    voxelTree->initializeShape();
 
     size_t free_byte ;
 

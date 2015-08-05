@@ -50,6 +50,7 @@ class VoxelTree
         ~VoxelTree();
 
         void initializeTree(); // TODO: Needs arguments (input VDB?)
+        void initializeShape();
         unsigned int getNumberOfLevels();
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
         void runCollisions(float *particlePos, 
