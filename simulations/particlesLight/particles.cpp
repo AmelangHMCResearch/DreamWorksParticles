@@ -377,8 +377,8 @@ void display()
     {
         renderer->display(displayMode);
     }
-    // voxelTree->renderVoxelTree(modelView); 
-    voxelTree->debugDisplay();
+    voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+    //voxelTree->debugDisplay();
 
     /*
     if (displaySliders)
@@ -804,9 +804,10 @@ main(int argc, char **argv)
     initParams();
     
     initMenus();
-    
-    // TODO: Uncomment
-    //glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+
+#ifndef __APPLE__
+    glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+#endif
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);

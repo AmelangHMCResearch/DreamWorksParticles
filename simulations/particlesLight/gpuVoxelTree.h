@@ -16,6 +16,11 @@
 #ifndef GPUVOXELTREE_HAS_BEEN_INCLUDED
 #define GPUVOXELTREE_HAS_BEEN_INCLUDED
 
+ // I don't like #defines, but we can't do static const variables because
+//  they have to be available to host and device.  grrr...
+#define STATUS_FLAG_WORK_IN_PROGRESS INFINITY
+#define STATUS_FLAG_DIG_DEEPER (-1.0 * INFINITY) 
+
 
 // cuda
 #include <cuda_runtime.h>
@@ -30,6 +35,10 @@ enum Status {
     INACTIVE,
     DIG_DEEPER
 };
+
+static const unsigned int INVALID_CHUNK_NUMBER = (unsigned)(-1);
+
+// TODO: adapt to GPU ??
 
 struct BoundingBox {
     float3 lowerBoundary;
@@ -61,7 +70,7 @@ class VoxelTree
         std::vector<std::vector<float> > getStatuses(); // Only to be used for debugging
         std::vector<std::vector<unsigned int> > getDelimiters(); // Only to be used for debugging
         void debugDisplay();
-        void renderVoxelTree(float modelView[16]); 
+        void renderVoxelTree(float modelView[16], float particleRadius); 
 
         // TODO: Remove
         static void test();
@@ -98,7 +107,8 @@ class VoxelTree
         // data
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        float*  _dev_voxels; // TODO: global or texture memory      
+        float*  _dev_voxels; // TODO: global or texture memory  
+        unsigned int *_dev_numClaimedForLevel;     
 
         // Render Data: 
         uint *_dev_verticesInPosArray; 
