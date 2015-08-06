@@ -12,7 +12,6 @@
 #include "particleSystem.h"
 #include "particleSystem.cuh"
 #include "particles_kernel.cuh"
-#include "voxelObject.h" 
 #include "event_timer.h" 
 
 #include <cuda_runtime.h>
@@ -258,7 +257,7 @@ ParticleSystem::_finalize()
 void
 ParticleSystem::update(const float deltaTime,
                        const unsigned int timestepIndex,
-                       VoxelObject * voxelObject,
+                       VoxelTree *voxelTree,
                        bool pauseSpout,
                        bool moveSpout)
 {
@@ -279,13 +278,6 @@ ParticleSystem::update(const float deltaTime,
         dPos = (float *) mapGLBufferObject(&_cuda_posvbo_resource);
     }
 
-    float *voxelPos = NULL;
-    float *voxelStrength = NULL;
-    if (_params.usingObject) {
-        voxelPos = voxelObject->getPosArray();
-        voxelStrength = voxelObject->getVoxelStrength();
-    }
-
     // update constants
     setParameters(&_params);
 
@@ -296,8 +288,6 @@ ParticleSystem::update(const float deltaTime,
                     _dev_posAfterLastSort,
                     deltaTime,
                     _numActiveParticles,
-                    voxelPos,
-                    voxelStrength,
                     _posAfterLastSortIsValid,
                     _dev_pointHasMovedMoreThanThreshold,
                     _dev_numParticlesToRemove,
@@ -372,8 +362,6 @@ ParticleSystem::update(const float deltaTime,
     collide(dPos,
             _dev_vel,
             _dev_force,
-            voxelStrength,
-            voxelPos,
             _dev_cellIndex,
             _dev_cellStart,
             _dev_cellEnd,
@@ -394,9 +382,6 @@ ParticleSystem::update(const float deltaTime,
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/
 
     // note: do unmap at end here to avoid unnecessary graphics/CUDA context switch
-    if(_params.usingObject) {
-        voxelObject->unbindPosArray();
-    }
 
     if (_usingOpenGL)
     {

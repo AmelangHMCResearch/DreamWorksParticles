@@ -109,12 +109,6 @@ extern "C"
         checkCudaErrors(cudaMemcpyToSymbol(params, hostParams, sizeof(SimParams)));
     }
 
-    void setObjectParameters(ObjectParams *hostParams)
-    {
-        // copy parameters to constant memory
-        checkCudaErrors(cudaMemcpyToSymbol(objParams, hostParams, sizeof(ObjectParams)));
-    }
-
     //Round a / b to nearest higher integer value
     uint iDivUp(uint a, uint b)
     {
@@ -134,8 +128,6 @@ extern "C"
                          float *posAfterLastSort,
                          float deltaTime,
                          uint numParticles,
-                         float *voxelPos,
-                         float *voxelStrength,
                          bool posAfterLastSortIsValid,
                          bool *pointHasMovedMoreThanThreshold,
                          uint *numParticlesToRemove,
@@ -155,8 +147,6 @@ extern "C"
                                                       (float4 *) posAfterLastSort, 
                                                       deltaTime,
                                                       numParticles,
-                                                      (float4 *) voxelPos,
-                                                      voxelStrength,  
                                                       posAfterLastSortIsValid, 
                                                       pointHasMovedMoreThanThreshold,
                                                       numParticlesToRemove);
@@ -293,8 +283,6 @@ extern "C"
     void collide(float *pos,
                  float *vel,
                  float *force,
-                 float  *voxelStrength,
-                 float *voxelPos,
                  uint  *cellIndex,
                  uint  *cellStart,
                  uint  *cellEnd,
@@ -322,8 +310,6 @@ extern "C"
         collideD<<< numBlocks, numThreads >>>((float4 *)pos,
                                               (float4 *)vel,
                                               (float4 *)force,
-                                              voxelStrength,
-                                              (float4 *) voxelPos,
                                               cellIndex,
                                               cellStart,
                                               cellEnd,

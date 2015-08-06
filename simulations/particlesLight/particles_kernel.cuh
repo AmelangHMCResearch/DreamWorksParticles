@@ -12,8 +12,6 @@
 #ifndef PARTICLES_KERNEL_H
 #define PARTICLES_KERNEL_H
 
-#define USE_HARD_CUBE 1
-
 #define USE_TEX 1
 
 #if USE_TEX
@@ -58,14 +56,6 @@ struct SimParams
 
     float maxDistance;
     uint maxIterations;
-};
-
-struct ObjectParams
-{
-    float _voxelSize; 
-    uint3 _cubeSize;
-    uint _numVoxels;
-    float3 _origin;       
 };
 
 #endif

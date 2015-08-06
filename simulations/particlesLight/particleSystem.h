@@ -14,7 +14,6 @@
 
 #include <helper_functions.h>
 #include "particles_kernel.cuh"
-#include "voxelObject.h"
 #include "vector_functions.h"
 #include "event_timer.h" 
 #include "gpuVoxelTree.h"
@@ -42,7 +41,7 @@ class ParticleSystem
 
         void update(const float deltaTime,
                     const unsigned int timestepIndex,
-                    VoxelObject *voxelObject, 
+                    VoxelTree *voxelTree, 
                     bool pauseSpout,
                     bool moveSpout);
 

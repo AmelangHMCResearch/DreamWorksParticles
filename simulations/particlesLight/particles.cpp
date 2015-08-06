@@ -62,7 +62,6 @@
 #include <sys/time.h>
 
 #include "particleSystem.h"
-#include "voxelObject.h"
 #include "render_particles.h"
 #include "paramgl.h"
 #include "event_timer.h"
@@ -73,7 +72,7 @@
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 180424;
 uint3 gridSize = {256, 256, 256};
-int numIterations = 1000; // run until exit
+int numIterations = 10000000; // run until exit
 
 bool usingObject = false;
 bool usingSpout = false;
@@ -103,6 +102,7 @@ float camera_rot[]   = {-3.6, -73.4, 0};
 #else
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
+#endif
 const float inertia = 0.1f;
 //ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
 ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
@@ -205,7 +205,7 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
+    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight, usingObject);
     ParticleSystem::ParticleConfig config = ParticleSystem::CONFIG_GRID;
     if (usingSpout) {
         config = ParticleSystem::CONFIG_SPOUT;
@@ -217,9 +217,11 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
 
-    voxelTree = new VoxelTree(cellsPerSide);
-    voxelTree->initializeTree();
-    voxelTree->initializeShape();
+    if (usingObject) {
+        voxelTree = new VoxelTree(cellsPerSide);
+        voxelTree->initializeTree();
+        voxelTree->initializeShape();
+    }
 
     size_t free_byte ;
 
@@ -382,7 +384,7 @@ void display()
         psystem->setTranslation(camera_trans);
 
         const unsigned int timestepIndex = frameCount;
-        psystem->update(timestep, timestepIndex, voxelObject, pauseSpout, moveSpout);
+        psystem->update(timestep, timestepIndex, voxelTree, pauseSpout, moveSpout);
 
         if (renderer)
         {
@@ -404,12 +406,6 @@ void display()
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
         
-        
-        for (int c = 0; c < 3; ++c)
-        {
-            camera_trans_lag[c] += (camera_trans[c] - camera_trans_lag[c]) * inertia;
-            camera_rot_lag[c] += (camera_rot[c] - camera_rot_lag[c]) * inertia;
-        }
     
 #if 0
         glTranslatef(camera_trans_lag[0], camera_trans_lag[1], camera_trans_lag[2]);
@@ -451,8 +447,8 @@ void display()
     {
         renderer->display(displayMode);
     }
-    // voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
-    voxelTree->debugDisplay();
+    voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+    // voxelTree->debugDisplay();
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
@@ -468,16 +464,6 @@ void display()
             renderer->display(displayMode);
         }
 
-#if 0
-        if (renderer)
-          {
-            renderer->setColorBuffer(voxelObject->getColorBuffer());
-            renderer->setVertexBuffer(voxelObject->getCurrentReadBuffer(), voxelObject->getNumVoxels());
-            renderer->setParticleRadius(voxelObject->getVoxelSize());
-            renderer->setPointSize(50 * voxelObject->getVoxelSize());
-            renderer->display(displayMode);
-          }
-#endif
 
         /*
         if (displaySliders)

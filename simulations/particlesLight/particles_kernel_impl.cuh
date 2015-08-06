@@ -45,8 +45,6 @@ void integrateSystemD(float4 *pos,
                  float4 *posAfterLastSort, 
                  float deltaTime,
                  uint numParticles, 
-                 float4 * voxelPos, 
-                 float *voxelStrength,  
                  bool posAfterLastSortIsValid, 
                  bool *pointHasMovedMoreThanThreshold,
                  uint *numParticlesToRemove)
@@ -71,63 +69,6 @@ void integrateSystemD(float4 *pos,
     // Second part of verlet integration
     threadPos += threadVel * deltaTime + 0.5 * threadForce * deltaTime * deltaTime;
     threadVel += (threadForce * deltaTime / 2);
-
-#if USE_HARD_CUBE
-    if (params.usingObject) {
-        // Check that containing voxel is active
-        const int3 voxelGridPos = getVoxelGridPos(threadPos);
-        if (isActiveVoxel(voxelGridPos, voxelStrength)) {
-            // Do the collision
-            uint voxelIndex = getVoxelIndex(voxelGridPos);
-            const float3 currentVoxelPos = make_float3(voxelPos[voxelIndex]);
-            const float3 direction = findNearestFaceNew(voxelGridPos, threadPos, threadOldPos, currentVoxelPos, voxelStrength); 
-            //if (index %100 == 0) printf("Vel: %f, %f, %f Dir:%f, %f, %f\n", threadVel.x, threadVel.y, threadVel.z, direction.x, direction.y, direction.z);
-            //printf("%f, %f, %f\n", direction.x, direction.y, direction.z);
-            // Update strength of voxel post-collision
-#if 1
-            float strength = voxelStrength[voxelIndex];
-            if (strength > 0) {
-                // Faster particles do more damage
-                float amountToReduceStrength = abs(0.5 * (direction.x * threadVel.x * threadVel.x + direction.y * threadVel.y * threadVel.y + direction.z * threadVel.z * threadVel.z));
-                atomicAdd(&voxelStrength[voxelIndex], -1.0 * amountToReduceStrength);
-                /*float newStrength = max((float)(strength - (10 * (length(threadVel)/0.5))), 0.0f);
-                atomicMin(&voxelStrength[voxelIndex], newStrength);*/
-            } else {
-                printf("Problem?\n");
-            }
-#endif
-            
-            // If it's trying to move into an active particle, remove it
-            int3 neighborVoxelGridPos = voxelGridPos + make_int3(direction);
-            if (isActiveVoxel(neighborVoxelGridPos, voxelStrength)) {
-                iters = params.maxIterations * 2; 
-                atomicAdd(numParticlesToRemove, 1);
-                *pointHasMovedMoreThanThreshold = true;
-            }
-            // Calculate new position and velocity
-            float distanceToMove = objParams._voxelSize / 2.0 + 0.0001;
-            if (direction.x != 0.0) {
-                if (threadVel.x * direction.x < 0) {
-                    threadVel.x *= -1.0;
-                }
-                threadPos.x = currentVoxelPos.x + direction.x * distanceToMove;
-            }
-            else if (direction.y != 0.0) {
-                if (threadVel.y * direction.y < 0) {
-                    threadVel.y *= -1.0;
-                }
-                threadPos.y = currentVoxelPos.y + direction.y * distanceToMove;
-            }
-            else {
-                if (threadVel.z * direction.z < 0) {
-                    threadVel.z *= -1.0;
-                }
-                threadPos.z = currentVoxelPos.z + direction.z * distanceToMove;
-            }
-              
-        }
-    }
-#endif
 
     // set this to zero to disable collisions with cube sides
 #if 0
@@ -436,8 +377,6 @@ __global__
 void collideD(float4 *pos,               // input: position
               float4 *vel,               // input: velocity
               float4 *force,             // output: forces
-              float   *voxelStrength,
-              float4 *voxelPos,
               uint   *cellIndex,    
               uint   *cellStart,
               uint   *cellEnd,
@@ -478,16 +417,6 @@ void collideD(float4 *pos,               // input: position
             }
         }
     }
-
-#if !USE_HARD_CUBE
-    if (params.usingObject) {
-        // Check for collisions with voxel object
-        int3 voxelGridPos = getVoxelGridPos(particlePos);
-
-        float3 forceFromObject = calcForceFromVoxel(voxelGridPos, voxelPos, voxelStrength, particlePos, particleVel, particleForce);
-        particleForce += forceFromObject;
-    }
-#endif
 
     // collide with cursor sphere
     particleForce += collideSpheres(particlePos, params.colliderPos, particleVel, 
