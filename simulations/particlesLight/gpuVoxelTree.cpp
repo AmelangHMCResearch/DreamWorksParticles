@@ -242,8 +242,7 @@ void VoxelTree::renderVoxelTree(float modelView[16], float particleRadius)
                           _dev_numVertsTable,
                           _dev_verticesInPosArray,
                           _numVoxelsToDraw,
-                          _numMarchingCubes,
-                          particleRadius);
+                          _numMarchingCubes);
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_posvbo_resource, 0));
     checkCudaErrors(cudaGraphicsUnmapResources(1, &_cuda_normvbo_resource, 0));
 

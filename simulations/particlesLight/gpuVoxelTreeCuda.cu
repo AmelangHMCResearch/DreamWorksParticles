@@ -120,19 +120,19 @@ unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 }
 
 __device__
-bool isOutsideBoundingBox(float3 pos, BoundingBox BB, float particleRadius)
+bool isOutsideBoundingBox(float3 pos, BoundingBox BB)
 {
-    if (pos.x + particleRadius < BB.lowerBoundary.x || pos.y + particleRadius < BB.lowerBoundary.y || pos.z + particleRadius < BB.lowerBoundary.z) {
+    if (pos.x < BB.lowerBoundary.x || pos.y < BB.lowerBoundary.y || pos.z < BB.lowerBoundary.z) {
         return true; 
     }
-    if (pos.x - particleRadius > BB.upperBoundary.x || pos.y - particleRadius > BB.upperBoundary.y || pos.z - particleRadius > BB.upperBoundary.z) {
+    if (pos.x > BB.upperBoundary.x || pos.y > BB.upperBoundary.y || pos.z > BB.upperBoundary.z) {
         return true;
     }
     return false; 
 }
 
 __device__
-BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, unsigned int cubeSize, float particleRadius)
+BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 {
     // Find which cell of the old bounding box the pos is in
     float3 offsetFromOrigin = pos + (-1.0f * boundingBox.lowerBoundary);
@@ -145,7 +145,7 @@ BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, unsigne
     BoundingBox newBB; 
     newBB.lowerBoundary = boundingBox.lowerBoundary + make_float3(lowerIndex) * sizeOfCell; 
     newBB.upperBoundary = boundingBox.lowerBoundary + make_float3((lowerIndex + make_uint3(1,1,1))) * sizeOfCell; 
-    if (isOutsideBoundingBox(pos, boundingBox, particleRadius) && (offsetFromOrigin.x > 0) && (offsetFromOrigin.y > 0) && (offsetFromOrigin.z > 0)) {
+    if (isOutsideBoundingBox(pos, boundingBox) && (offsetFromOrigin.x > 0) && (offsetFromOrigin.y > 0) && (offsetFromOrigin.z > 0)) {
         printf("Problem: Bounding box calculated incorrectly.Pos: %f, %f, %f Box: (%f, %f, %f), (%f, %f, %f) \n", pos.x, pos.y, pos.z, newBB.lowerBoundary.x, newBB.lowerBoundary.y, newBB.lowerBoundary.z, newBB.upperBoundary.x, newBB.upperBoundary.y, newBB.upperBoundary.z);
     }
     return newBB; 
@@ -153,13 +153,13 @@ BoundingBox calculateNewBoundingBox(float3 pos, BoundingBox boundingBox, unsigne
 
 
 __device__
-float getStatus(float3 pos, float particleRadius)
+float getStatus(float3 pos)
 {
     // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
 	unsigned int currentLevel = 0;
 	BoundingBox currentBB = boundary;
 	unsigned int offset = 0; 
-    if (isOutsideBoundingBox(pos, currentBB, particleRadius)) {
+    if (isOutsideBoundingBox(pos, currentBB)) {
         // If outside the bounding box, the voxel is inactive
         return 0.0; 
     }
@@ -177,7 +177,7 @@ float getStatus(float3 pos, float particleRadius)
 			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
 			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
 			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel], particleRadius);
+			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel]);
             ++currentLevel; 
 		}
 
@@ -213,7 +213,7 @@ void calculateNewVelocities(float4 *particlePos,
     	for (int y = loopStart; y <= loopEnd; ++y) {
     		for (int x = loopStart; x <= loopEnd; ++x) {
     			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
-    			float status = getStatus(position, particleRadius); 
+    			float status = getStatus(position); 
     			if (status > 0.0f) {
                     // Get data for average voxel position
     				++numNeighboringVoxels; 
@@ -254,8 +254,7 @@ __global__
 void repairVoxelTree(const float4 *result,
                      const unsigned int numberOfResults,
                      unsigned int *numClaimedInArrayAtLevel,
-                     unsigned int *addressOfErrorField,
-                     float particleRadius)
+                     unsigned int *addressOfErrorField)
 {
     const unsigned int resultIndex = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
     if (resultIndex >= numberOfResults) return;
@@ -399,7 +398,7 @@ void repairVoxelTree(const float4 *result,
         const unsigned int delimiter = pointersToDelimiters[level][cell + offset];
         const unsigned int nextLevelCubeSize = numCellsPerSide[level + 1];
         offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-        currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level], particleRadius);
+        currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level]);
     }
     // TODO: Is amount to Reduce strength negative?
     cell = getCell(resultPosition, currentBB, numCellsPerSide[numLevels - 1]);
@@ -469,8 +468,7 @@ void collideWithParticles(float *particlePos,
         repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
                                                    numberOfResultsToProcess,
                                                    numClaimedInArrayAtLevel,
-                                                   addressOfErrorField,
-                                                   particleRadius);
+                                                   addressOfErrorField);
         unsigned int numberOfErrors;
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
                    cudaMemcpyDeviceToHost);
@@ -500,14 +498,12 @@ void createMarchingCubesMeshD(float4 *vertexPos,
                               unsigned int  *tri,
                               unsigned int  *numVerts,
                               unsigned int  *numVerticesClaimed,
-                              unsigned int   numVoxelsToDraw,
-                              float particleRadius)
+                              unsigned int   numVoxelsToDraw)
 {
     unsigned int index = __mul24(blockIdx.x,blockDim.x) + threadIdx.x;
 
     // Get gridPos of our grid cube - starts as lower left corner as (0,0,0)
     uint3 gridPos = calculateCoordsFromIndex(index);
-    //printf("GridPos: %d, %d, %d numCells: %d voxelSize: %f\n", gridPos.x, gridPos.y, gridPos.z, voxelsPerSide, voxelSize);
     
     // Check if voxels on corner of gridcube are 
     int lookupIndexForActiveVertices = 0;
@@ -517,67 +513,59 @@ void createMarchingCubesMeshD(float4 *vertexPos,
     int3 i = make_int3(-1, -1, -1);
     int3 toCheck = make_int3(gridPos) + i;
     cubeVertexPos[0] = calculateVoxelCenter(toCheck);
-    bool isActive = getStatus(cubeVertexPos[0], particleRadius) > 0;
+    bool isActive = getStatus(cubeVertexPos[0]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 0); 
     field[0] = fieldFunc4(cubeVertexPos[0]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 0, lookupIndexForActiveVertices, cubeVertexPos[0].x, cubeVertexPos[0].y, cubeVertexPos[0].z);
 
     
     i = make_int3(0,-1,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[1] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[1], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[1]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 1); 
     field[1] = fieldFunc4(cubeVertexPos[1]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 1, lookupIndexForActiveVertices, cubeVertexPos[1].x, cubeVertexPos[1].y, cubeVertexPos[1].z);
 
     i = make_int3(0,0,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[2] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[2], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[2]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 2); 
     field[2] = fieldFunc4(cubeVertexPos[2]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 2, lookupIndexForActiveVertices, cubeVertexPos[2].x, cubeVertexPos[2].y, cubeVertexPos[2].z);
 
     i = make_int3(-1,0,-1);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[3] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[3], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[3]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 3); 
     field[3] = fieldFunc4(cubeVertexPos[3]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 3, lookupIndexForActiveVertices, cubeVertexPos[3].x, cubeVertexPos[3].y, cubeVertexPos[3].z);
 
     i = make_int3(-1,-1,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[4] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[4], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[4]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 4); 
     field[4] = fieldFunc4(cubeVertexPos[4]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 4, lookupIndexForActiveVertices, cubeVertexPos[4].x, cubeVertexPos[4].y, cubeVertexPos[4].z);
 
     i = make_int3(0,-1,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[5] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[5], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[5]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 5); 
     field[5] = fieldFunc4(cubeVertexPos[5]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 5, lookupIndexForActiveVertices, cubeVertexPos[5].x, cubeVertexPos[5].y, cubeVertexPos[5].z);
 
     i = make_int3(0,0,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[6] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[6], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[6]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 6); 
     field[6] = fieldFunc4(cubeVertexPos[6]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 6, lookupIndexForActiveVertices, cubeVertexPos[6].x, cubeVertexPos[6].y, cubeVertexPos[6].z);
 
     i = make_int3(-1,0,0);
     toCheck = make_int3(gridPos) + i;
     cubeVertexPos[7] = calculateVoxelCenter(toCheck);
-    isActive = getStatus(cubeVertexPos[7], particleRadius) > 0;
+    isActive = getStatus(cubeVertexPos[7]) > 0;
     lookupIndexForActiveVertices = lookupIndexForActiveVertices | (isActive << 7); 
     field[7] = fieldFunc4(cubeVertexPos[7]);
-    //printf("Num: %d Lookup: %d Pos: %f, %f, %f\n", 7, lookupIndexForActiveVertices, cubeVertexPos[7].x, cubeVertexPos[7].y, cubeVertexPos[7].z);
     
     float3 vertlist[12];
     float3 normList[12];
@@ -620,8 +608,7 @@ void generateMarchingCubes(float *pos,
                            unsigned int *numVerts,
                            unsigned int *verticesInPosArray,
                            unsigned int numVoxelsToDraw,
-                           unsigned int numMarchingCubes,
-                           float particleRadius)
+                           unsigned int numMarchingCubes)
 {
     checkCudaErrors(cudaBindTexture(0, triTex, tri, sizeof(unsigned int) * 256 * 16));
     checkCudaErrors(cudaBindTexture(0, numVertsTex, numVerts, sizeof(unsigned int) * 256));
@@ -630,18 +617,16 @@ void generateMarchingCubes(float *pos,
     unsigned int numThreads, numBlocks;
     numThreads = 256;
     numBlocks = ceil((float) numMarchingCubes / (float) numThreads);
-    cudaMemset(verticesInPosArray, 0, sizeof(unsigned int));
+    unsigned int zero = 0; 
+    cudaMemcpy(verticesInPosArray, &zero, sizeof(unsigned int), cudaMemcpyHostToDevice);
 
     // execute the kernel
-    //timer->startTimer(5, true);
     createMarchingCubesMeshD<<< numBlocks, numThreads >>>((float4 *) pos,
                                                           (float4 *) norm,
                                                            tri,
                                                            numVerts,
                                                            verticesInPosArray,
-                                                           numVoxelsToDraw,
-                                                           particleRadius);
-    //timer->stopTimer(5, true);
+                                                           numVoxelsToDraw);
 
     // check if kernel invocation generated an error
     getLastCudaError("Kernel execution failed");

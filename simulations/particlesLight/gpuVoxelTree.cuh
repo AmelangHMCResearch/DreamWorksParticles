@@ -27,7 +27,6 @@ void generateMarchingCubes(float *pos,
                            unsigned int *numVerts,
                            unsigned int *verticesInPosArray,
                            unsigned int numVoxelsToDraw,
-                           unsigned int numMarchingCubes,
-                           float particleRadius);
+                           unsigned int numMarchingCubes);
 
 #endif
