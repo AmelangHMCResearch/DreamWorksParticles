@@ -250,6 +250,9 @@ void calculateNewVelocities(float4 *particlePos,
     particleVel[index] = make_float4(currentParticleVel, iters);
 }
 
+
+
+
 __global__
 void repairVoxelTree(const float4 *result,
                      const unsigned int numberOfResults,
@@ -407,6 +410,22 @@ void repairVoxelTree(const float4 *result,
               amountToReduceStrength);
     return;
 }
+
+void createShape(const float *result,
+                 const unsigned int numberOfResults,
+                 unsigned int *numClaimedInArrayAtLevel,
+                 unsigned int *addressOfErrorField,
+                 float particleRadius)
+{
+    unsigned int numThreads = 256; 
+    unsigned int numBlocks = ceil((float) numberOfResults / numThreads);
+    repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
+                                                   numberOfResults,
+                                                   numClaimedInArrayAtLevel,
+                                                   addressOfErrorField,
+                                                   particleRadius);
+}
+
 
 __global__
 void coarsenVoxelTree(float4 *result)

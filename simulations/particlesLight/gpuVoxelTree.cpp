@@ -146,7 +146,7 @@ void VoxelTree::initializeTree()
 
     // set the top level of the tree to active to represent the cube.
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];    
-    std::vector<float> topLevel(numberOfTopLevelEntries, 1.0);
+    std::vector<float> topLevel(numberOfTopLevelEntries, 0.0001);
     // decompose one cell of the cube
     //topLevel[numberOfTopLevelEntries - 1] = STATUS_FLAG_DIG_DEEPER;
     checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[0], &topLevel[0], numberOfTopLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
@@ -226,6 +226,9 @@ void VoxelTree::initializeShape() {
         exit(1); 
     }*/
     const unsigned short dataSize[3] = {256, 256, 178};
+    const unsigned int xWidth = dataSize[0];
+    const unsigned int yWidth = dataSize[1];
+    const unsigned int zWidth = dataSize[2];
     const unsigned int numberOfVoxelsInFile = dataSize[0] * dataSize[1] * dataSize[2];
 
     std::vector<unsigned char> dataFromFile(numberOfVoxelsInFile);
@@ -237,10 +240,58 @@ void VoxelTree::initializeShape() {
     printf("Grabbed %d voxels of %d from the file.\n", result, numberOfVoxelsInFile);
     
 
+    // convert the voxels to an array of positions
+    const unsigned int strengthThreshold = 60;
+    const unsigned int overallCubeWidthInVoxels = 256;
+    const float voxelSize = 2.0 / 256.0;
+    const float initialHardness = 10;
+    BoundingBox overallBoundary;
+    overallBoundary.lowerBoundary = make_float3(-1.0, -1.0, -1.0);
+    overallBoundary.upperBoundary = make_float3(1.0, 1.0, 1.0);
 
-    // build the tree from the voxels
-    std::vector<std::vector<float> > statuses;
-    std::vector<std::vector<unsigned int> > delimiters;
+
+    std::vector<float> shapeToRepair;
+
+    for (unsigned int zIndex = 0; zIndex < overallCubeWidthInVoxels; ++zIndex) {
+        for (unsigned int yIndex = 0; yIndex < overallCubeWidthInVoxels; ++yIndex) {
+            for (unsigned int xIndex = 0; xIndex < overallCubeWidthInVoxels; ++xIndex) {
+                const unsigned int cellIndex = (xWidth * yWidth * zIndex) + (xWidth * yIndex) + xIndex;
+    
+                if (cellIndex < numberOfVoxelsInFile) {
+                    const unsigned char strength = dataFromFile[cellIndex];
+                    if (strength > strengthThreshold) {
+                        const float xPos = overallBoundary.lowerBoundary.x + xIndex * voxelSize;
+                        const float yPos = -1.0 * (overallBoundary.lowerBoundary.y + yIndex * voxelSize);
+                        const float zPos = overallBoundary.lowerBoundary.z + zIndex * voxelSize;
+                        // const float4 voxelPos = make_float4(xPos, yPos, zPos, -initialHardness);
+                        shapeToRepair.push_back(xPos);
+                        shapeToRepair.push_back(yPos);
+                        shapeToRepair.push_back(zPos);
+                        shapeToRepair.push_back(-initialHardness);
+                    }
+                }
+            }
+        }
+    }
+
+    // make repair do all the work for us!
+    void* dev_shapeToRepair;
+    const unsigned int numberOfVoxelsToMake = shapeToRepair.size();
+    checkCudaErrors(cudaMalloc((void**) &dev_shapeToRepair, numberOfVoxelsToMake*sizeof(float4)));
+    checkCudaErrors(cudaMemcpy(dev_shapeToRepair, &shapeToRepair[0], numberOfVoxelsToMake*sizeof(float), cudaMemcpyHostToDevice));
+    
+    createShape((float *) dev_shapeToRepair,
+                numberOfVoxelsToMake,
+                _dev_numClaimedForLevel,
+                NULL,
+                0.0000001);    
+
+
+
+
+    // // build the tree from the voxels
+    // std::vector<std::vector<float> > statuses;
+    // std::vector<std::vector<unsigned int> > delimiters;
 
     // for (unsigned int z = 0; z < dataSize[2]; z++)
     // {
