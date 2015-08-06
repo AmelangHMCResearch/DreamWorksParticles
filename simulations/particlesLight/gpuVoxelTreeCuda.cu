@@ -413,16 +413,14 @@ void repairVoxelTree(const float4 *result,
 void createShape(const float *result,
                  const unsigned int numberOfResults,
                  unsigned int *numClaimedInArrayAtLevel,
-                 unsigned int *addressOfErrorField,
-                 float particleRadius)
+                 unsigned int *addressOfErrorField)
 {
     unsigned int numThreads = 256; 
     unsigned int numBlocks = ceil((float) numberOfResults / numThreads);
     repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
                                                    numberOfResults,
                                                    numClaimedInArrayAtLevel,
-                                                   addressOfErrorField,
-                                                   particleRadius);
+                                                   addressOfErrorField);
 }
 
 

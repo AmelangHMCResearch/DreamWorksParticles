@@ -283,8 +283,7 @@ void VoxelTree::initializeShape() {
     createShape((float *) dev_shapeToRepair,
                 numberOfVoxelsToMake,
                 _dev_numClaimedForLevel,
-                NULL,
-                0.0000001);    
+                NULL);    
 
 
 

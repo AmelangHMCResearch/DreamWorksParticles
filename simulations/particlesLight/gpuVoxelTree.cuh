@@ -32,7 +32,6 @@ void generateMarchingCubes(float *pos,
 void createShape(const float *result,
                  const unsigned int numberOfResults,
                  unsigned int *numClaimedInArrayAtLevel,
-                 unsigned int *addressOfErrorField,
-                 float particleRadius);
+                 unsigned int *addressOfErrorField);
 
 #endif
