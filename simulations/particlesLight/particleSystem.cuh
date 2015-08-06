@@ -8,6 +8,8 @@
  * is strictly prohibited.
  *
  */
+#ifndef _PARTICLESYSTEM_CUH_
+#define _PARTICLESYSTEM_CUH_
 
  #include "event_timer.h"
 
@@ -89,3 +91,4 @@ extern "C"
     bool checkForResort(bool *pointHasMovedMoreThanThreshold);
 
 }
+#endif

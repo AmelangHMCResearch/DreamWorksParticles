@@ -67,6 +67,9 @@
 #include "paramgl.h"
 #include "event_timer.h"
 
+// TODO: remove
+#include "gpuVoxelTree.h"
+
 // Parameters you might be interested in changing (also command line)
 uint numParticles = 180424;
 uint3 gridSize = {256, 256, 256};
@@ -78,7 +81,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.5f;
+float timestep = 0.1f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -100,9 +103,6 @@ float camera_rot[]   = {-3.6, -73.4, 0};
 #else
 float camera_trans[] = {0, 0, -15};
 float camera_rot[]   = {0, 0, 0};
-#endif
-float camera_trans_lag[] = {0, 0, -3};
-float camera_rot_lag[] = {0, 0, 0};
 const float inertia = 0.1f;
 //ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_POINTS;
 ParticleRenderer::DisplayMode displayMode = ParticleRenderer::PARTICLE_SPHERES;
@@ -125,8 +125,7 @@ struct timeval timeOfLastRender;
 enum { M_VIEW = 0, M_MOVE };
 
 ParticleSystem *psystem = 0;
-
-VoxelObject *voxelObject = 0;
+VoxelTree *voxelTree = 0; 
 
 ParticleRenderer *renderer = 0;
 
@@ -206,20 +205,39 @@ writeNeighbors(const uint* neighbors,
 // initialize particle system
 void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
 {
-    if (usingObject) {
-        float voxelSize = 1.0f/8.0f; // Voxel size arbitrarily chose to be multiple of particle radius
-        uint3 cubeSize = make_uint3(64, 16, 64);    // Dimension of each side of the cube
-        float3 origin = make_float3(0.0, -3.0, 0.0);
-        voxelObject = new VoxelObject(VoxelObject::VOXEL_GEOLOGY, voxelSize, cubeSize, origin);
-    }
-
-    psystem = new ParticleSystem(numParticles, gridSize, camera_rot, camera_trans, bUseOpenGL, usingSpout, limitLifeByTime, limitLifeByHeight, usingObject);
+    psystem = new ParticleSystem(numParticles, gridSize, bUseOpenGL);
     ParticleSystem::ParticleConfig config = ParticleSystem::CONFIG_GRID;
     if (usingSpout) {
         config = ParticleSystem::CONFIG_SPOUT;
     }
     psystem->reset(config);
     psystem->startTimer(5);
+
+    unsigned int blah[4] = {4, 4, 4, 4};
+    
+    std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
+
+    voxelTree = new VoxelTree(cellsPerSide);
+    voxelTree->initializeTree();
+    voxelTree->initializeShape();
+
+    size_t free_byte ;
+
+    size_t total_byte ;
+
+    checkCudaErrors(cudaMemGetInfo( &free_byte, &total_byte )) ;
+
+
+
+    double free_db = (double)free_byte ;
+
+    double total_db = (double)total_byte ;
+
+    double used_db = total_db - free_db ;
+
+    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+
+    used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);
 
     if (bUseOpenGL)
     {
@@ -230,6 +248,32 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     gettimeofday(&timeOfLastPhysics, 0);
     gettimeofday(&timeOfLastRender, 0);
 
+}
+
+static const char *shader_code =
+    "!!ARBfp1.0\n"
+    "TEX result.color, fragment.texcoord, texture[0], 2D; \n"
+    "END";
+
+GLuint compileASMShader(GLenum program_type, const char *code)
+{
+    GLuint program_id;
+    glGenProgramsARB(1, &program_id);
+    glBindProgramARB(program_type, program_id);
+    glProgramStringARB(program_type, GL_PROGRAM_FORMAT_ASCII_ARB, (GLsizei) strlen(code), (GLubyte *) code);
+
+    GLint error_pos;
+    glGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &error_pos);
+
+    if (error_pos != -1)
+    {
+        const GLubyte *error_string;
+        error_string = glGetString(GL_PROGRAM_ERROR_STRING_ARB);
+        fprintf(stderr, "Program error at position: %d\n%s\n", (int)error_pos, error_string);
+        return 0;
+    }
+
+    return program_id;
 }
 
 // initialize OpenGL
@@ -261,8 +305,33 @@ void initGL(int *argc, char **argv)
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 
+    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
     glEnable(GL_DEPTH_TEST);
-    glClearColor(0.25, 0.25, 0.25, 1.0);
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // good old-fashioned fixed function lighting
+    float black[]    = { 0.0f, 0.0f, 0.0f, 1.0f };
+    float white[]    = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float ambient[]  = { 0.1f, 0.1f, 0.1f, 1.0f };
+    float diffuse[]  = { 0.7f, 0.7f, 0.7f, 1.0f };
+    float lightPos[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, ambient);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, diffuse);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, black);
+
+    glLightfv(GL_LIGHT0, GL_AMBIENT, white);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, white);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, black);
+
+    glEnable(GL_LIGHT0);
+    glEnable(GL_NORMALIZE);
+
+    GLint gl_Shader = compileASMShader(GL_FRAGMENT_PROGRAM_ARB, shader_code);
 
     glutReportErrors();
 }
@@ -321,6 +390,7 @@ void display()
         }
     }
     
+
     // Do the rendering
     gettimeofday(&currentTime, 0);
     timeDiff = (double)(1000.0 * (currentTime.tv_sec - timeOfLastRender.tv_sec)
@@ -359,48 +429,37 @@ void display()
            camera_rot[1]);
 #endif
 
-        glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+    // cube
+    glColor3f(1.0, 1.0, 1.0);
+    glutWireCube(8.0);
 
-        // cube
-        glColor3f(1.0, 1.0, 1.0);
-        glutWireCube(8.0);
 
-        // now, to draw the voxels.
-        // for each voxel
-        if (voxelObject) {
-          const unsigned int numberOfVoxels = voxelObject->getNumVoxels();
-          const float * voxelPositionArray = voxelObject->getCpuPosArray();
-          const float * voxelStrength = voxelObject->getVoxelStrengthFromGPU();
-          const float voxelSize = voxelObject->getVoxelSize();
-          for (unsigned int voxelIndex = 0;
-               voxelIndex < numberOfVoxels; ++voxelIndex) {
-            if (voxelStrength[voxelIndex] > 0.0f) {
-                // save the matrix state
-                glPushMatrix();
-                // translate for this voxel
-                glTranslatef(voxelPositionArray[voxelIndex * 4 + 0],
-                             voxelPositionArray[voxelIndex * 4 + 1],
-                             voxelPositionArray[voxelIndex * 4 + 2]);
-                float* color = new float[3];
-                getColor(voxelStrength[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-                glColor3f(color[0], color[1], color[2]);
-                delete [] color;
-                glutSolidCube(voxelSize);
-                // reset the matrix state
-                glPopMatrix();
-            }
-          }
-        }
+    // TODO: Remove
+    // testing the VoxelTree
+    // VoxelTree::test();
 
-        // collider
-        /*
-        glPushMatrix();
-        float3 p = psystem->getColliderPos();
-        glTranslatef(p.x, p.y, p.z);
-        glColor3f(1.0, 0.0, 0.0);
-        glutSolidSphere(psystem->getColliderRadius(), 20, 10);
-        glPopMatrix();
-        */
+    // collider
+    /*
+    glPushMatrix();
+    float3 p = psystem->getColliderPos();
+    glTranslatef(p.x, p.y, p.z);
+    glColor3f(1.0, 0.0, 0.0);
+    glutSolidSphere(psystem->getColliderRadius(), 20, 10);
+    glPopMatrix();
+    */
+    if (renderer && displayEnabled)
+    {
+        renderer->display(displayMode);
+    }
+    // voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+    voxelTree->debugDisplay();
+
+    glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
+
+    // cube
+    glColor3f(1.0, 1.0, 1.0);
+    glutWireCube(8.0);
+
         if (renderer && displayEnabled)
         {
             renderer->setColorBuffer(psystem->getColorBuffer());
@@ -642,9 +701,10 @@ void key(unsigned char key, int /*x*/, int /*y*/)
     {
         /*case ' ':
             bPause = !bPause;
-            break; */
-        /*case 13:
-            psystem->update(timestep, voxelObject);
+            break;
+
+        case 13:
+            psystem->update(timestep, voxelTree);
 
             if (renderer)
             {
@@ -870,14 +930,16 @@ main(int argc, char **argv)
     initParams();
     
     initMenus();
-    
+
+#ifndef __APPLE__
     glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+#endif
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
     glutMotionFunc(motion);
     glutKeyboardFunc(key);
-    // glutSpecialFunc(special);
+    glutSpecialFunc(special);
     glutIdleFunc(idle);
 
     //glutCloseFunc(cleanup);

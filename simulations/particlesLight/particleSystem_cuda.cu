@@ -161,7 +161,7 @@ extern "C"
                                                       pointHasMovedMoreThanThreshold,
                                                       numParticlesToRemove);
         timer->stopTimer(0, false);
-
+        getLastCudaError("Kernel execution failed");
     }
 
     void calcCellIndices(uint  *cellIndex,
@@ -227,6 +227,7 @@ extern "C"
             (float4 *)tempVel,
             numParticles);
         timer->stopTimer(3, true);
+        getLastCudaError("Kernel execution failed");
 
 #if USE_TEX
         checkCudaErrors(cudaUnbindTexture(posTex));

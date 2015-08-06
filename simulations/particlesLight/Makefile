@@ -100,7 +100,7 @@ ifeq ($(TARGET_OS),darwin)
     ifeq ($(shell expr `xcodebuild -version | grep -i xcode | awk '{print $$2}' | cut -d'.' -f1` \>= 5),1)
         HOST_COMPILER ?= clang++
         NVCC ?= /Developer/NVIDIA/CUDA-7.0/bin/nvcc -ccbin $(HOST_COMPILER)
-        NVCCFLAGS ?= -m${TARGET_SIZE} --compiler-options "-framework OpenGL"
+        NVCCFLAGS ?= -m${TARGET_SIZE} --compiler-options ""
     endif
 else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
@@ -265,9 +265,6 @@ endif
 particleSystem.o:particleSystem.cpp particleSystem.h particleSystem.cuh particles_kernel.cuh
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-voxelObject.o: voxelObject.cpp voxelObject.h
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
-
 event_timer.o: event_timer.cpp event_timer.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
@@ -284,8 +281,14 @@ render_particles.o:render_particles.cpp render_particles.h shaders.h shaders.cpp
 shaders.o:shaders.cpp shaders.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
+gpuVoxelTree.o:gpuVoxelTree.cpp gpuVoxelTree.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+gpuVoxelTreeCuda.o: gpuVoxelTreeCuda.cu gpuVoxelTree.cuh
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
 particles: particleSystem.o particleSystem_cuda.o particles.o render_particles.o \
-	shaders.o event_timer.o voxelObject.o
+	shaders.o event_timer.o gpuVoxelTree.o gpuVoxelTreeCuda.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
@@ -294,7 +297,7 @@ run: build
 	$(EXEC) ./particles
 
 clean:
-	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o
+	rm -f particles particleSystem.o particleSystem_cuda.o particles.o render_particles.o shaders.o event_timer.o gpuVoxelTree.o
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/particles
 
 clobber: clean

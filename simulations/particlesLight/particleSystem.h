@@ -17,6 +17,7 @@
 #include "voxelObject.h"
 #include "vector_functions.h"
 #include "event_timer.h" 
+#include "gpuVoxelTree.h"
 
 // Particle system class
 class ParticleSystem
