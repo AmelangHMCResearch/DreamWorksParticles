@@ -349,10 +349,8 @@ void repairVoxelTree(const float4 *result,
                     const unsigned int chunkNumber =
                       pointersToDelimiters[level][cell + offset];
                     if (chunkNumber != INVALID_CHUNK_NUMBER) {
-                        printf("error, resultIndex %5u found a status of %8f which is "
-                               "active, but the chunk number of %5u was valid, "
-                               "which shouldn't happen.\n",
-                               resultIndex, secondStatusCheck, chunkNumber);
+                        printf("error, resultIndex %5u found a status of %8f which is active, but the chunk number of %5u was valid, which shouldn't happen.\n",resultIndex, secondStatusCheck, chunkNumber);
+                        atomicAdd(addressOfErrorField, unsigned(1));
                         return;
                     }
                     // By now, the chunkNumber must be INVALID_CHUNK_NUMBER.
@@ -385,6 +383,9 @@ void repairVoxelTree(const float4 *result,
                     // Update chunk index
                     atomicExch((unsigned int*)&(pointersToDelimiters[level][cell + offset]),
                                nextLevelsClaimedChunkNumber);
+
+                    threadfence();
+
                     // set the status
                     atomicExch((float*)&(pointersToStatuses[level][cell + offset]),
                                STATUS_FLAG_DIG_DEEPER);
@@ -403,6 +404,7 @@ void repairVoxelTree(const float4 *result,
         offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
         currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level]);
     }
+    //if (*addressOfErrorField > 0) printf("Num errors: %u\n", *addressOfErrorField);
     // TODO: Is amount to Reduce strength negative?
     cell = getCell(resultPosition, currentBB, numCellsPerSide[numLevels - 1]);
     atomicAdd((float*)&pointersToStatuses[numLevels - 1][cell + offset],
@@ -418,9 +420,10 @@ void createShape(const float *result,
     unsigned int numThreads = 256; 
     unsigned int numBlocks = ceil((float) numberOfResults / numThreads);
     repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
-                                                   numberOfResults,
-                                                   numClaimedInArrayAtLevel,
-                                                   addressOfErrorField);
+                                                numberOfResults,
+                                                numClaimedInArrayAtLevel,
+                                                addressOfErrorField);
+    getLastCudaError("Kernel execution failed");
 }
 
 

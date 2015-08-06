@@ -242,48 +242,57 @@ void VoxelTree::initializeShape() {
 
     // convert the voxels to an array of positions
     const unsigned int strengthThreshold = 60;
-    const unsigned int overallCubeWidthInVoxels = 256;
     const float voxelSize = 2.0 / 256.0;
     const float initialHardness = 10;
-    BoundingBox overallBoundary;
-    overallBoundary.lowerBoundary = make_float3(-1.0, -1.0, -1.0);
-    overallBoundary.upperBoundary = make_float3(1.0, 1.0, 1.0);
+    BoundingBox overallBoundary = _boundary; 
 
 
     std::vector<float> shapeToRepair;
 
-    for (unsigned int zIndex = 0; zIndex < overallCubeWidthInVoxels; ++zIndex) {
-        for (unsigned int yIndex = 0; yIndex < overallCubeWidthInVoxels; ++yIndex) {
-            for (unsigned int xIndex = 0; xIndex < overallCubeWidthInVoxels; ++xIndex) {
+    for (unsigned int zIndex = 0; zIndex < zWidth; ++zIndex) {
+        for (unsigned int yIndex = 0; yIndex < xWidth; ++yIndex) {
+            for (unsigned int xIndex = 0; xIndex < yWidth; ++xIndex) {
                 const unsigned int cellIndex = (xWidth * yWidth * zIndex) + (xWidth * yIndex) + xIndex;
-    
-                if (cellIndex < numberOfVoxelsInFile) {
-                    const unsigned char strength = dataFromFile[cellIndex];
-                    if (strength > strengthThreshold) {
-                        const float xPos = overallBoundary.lowerBoundary.x + xIndex * voxelSize;
-                        const float yPos = -1.0 * (overallBoundary.lowerBoundary.y + yIndex * voxelSize);
-                        const float zPos = overallBoundary.lowerBoundary.z + zIndex * voxelSize;
-                        // const float4 voxelPos = make_float4(xPos, yPos, zPos, -initialHardness);
-                        shapeToRepair.push_back(xPos);
-                        shapeToRepair.push_back(yPos);
-                        shapeToRepair.push_back(zPos);
-                        shapeToRepair.push_back(-initialHardness);
-                    }
+                const unsigned char strength = dataFromFile[cellIndex];
+                if (strength > strengthThreshold) {
+                    const float xPos = overallBoundary.lowerBoundary.x + xIndex * voxelSize;
+                    const float yPos = -1.0 * (overallBoundary.lowerBoundary.y + yIndex * voxelSize);
+                    const float zPos = overallBoundary.lowerBoundary.z + zIndex * voxelSize;
+                    // const float4 voxelPos = make_float4(xPos, yPos, zPos, -initialHardness);
+                    shapeToRepair.push_back(xPos);
+                    shapeToRepair.push_back(yPos);
+                    shapeToRepair.push_back(zPos);
+                    shapeToRepair.push_back(initialHardness);
                 }
             }
         }
     }
 
     // make repair do all the work for us!
-    void* dev_shapeToRepair;
-    const unsigned int numberOfVoxelsToMake = shapeToRepair.size();
-    checkCudaErrors(cudaMalloc((void**) &dev_shapeToRepair, numberOfVoxelsToMake*sizeof(float4)));
-    checkCudaErrors(cudaMemcpy(dev_shapeToRepair, &shapeToRepair[0], numberOfVoxelsToMake*sizeof(float), cudaMemcpyHostToDevice));
+    float* dev_shapeToRepair;
+    const unsigned int numberOfFloatsToSend = shapeToRepair.size();
+    checkCudaErrors(cudaMalloc((void**) &dev_shapeToRepair, numberOfFloatsToSend*sizeof(float)));
+    checkCudaErrors(cudaMemcpy(dev_shapeToRepair, &shapeToRepair[0], numberOfFloatsToSend*sizeof(float), cudaMemcpyHostToDevice));
+
+    unsigned int *dev_numErrors; 
+    checkCudaErrors(cudaMalloc((void **)&dev_numErrors, sizeof(unsigned int))); 
     
-    createShape((float *) dev_shapeToRepair,
-                numberOfVoxelsToMake,
-                _dev_numClaimedForLevel,
-                NULL);    
+
+    const unsigned int numberOfVoxelToSend = numberOfFloatsToSend / 4;
+    const unsigned int numberOfSendingRounds = 1;
+    const unsigned int numberOfVoxelToSendPerBatch = numberOfVoxelToSend / numberOfSendingRounds;
+
+    printf("Sending %u voxels in %u rounds for total of %u of %u\n", numberOfVoxelToSendPerBatch, numberOfSendingRounds, numberOfSendingRounds*numberOfVoxelToSendPerBatch, numberOfVoxelToSend);
+
+    for (unsigned int currentRound = 0; currentRound < numberOfSendingRounds; ++currentRound) {
+        createShape((float *) dev_shapeToRepair + currentRound*numberOfVoxelToSendPerBatch,
+                    numberOfVoxelToSendPerBatch,
+                    _dev_numClaimedForLevel,
+                    dev_numErrors);
+    }
+
+    checkCudaErrors(cudaFree(dev_shapeToRepair)); 
+    checkCudaErrors(cudaFree(dev_numErrors)); 
 
 
 
