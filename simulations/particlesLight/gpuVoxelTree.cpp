@@ -63,21 +63,25 @@ VoxelTree::~VoxelTree()
     // only clear data if it has been allocated
     if (_isInitialized) {
         std::vector<void *> statusPointersToDeallocateOnGPU(_numberOfLevels);
-        std::vector<void *> delimeterPointersToDeallocateOnGPU(_numberOfLevels - 1);
+        std::vector<void *> downDelimeterPointersToDeallocateOnGPU(_numberOfLevels);
+        std::vector<void *> upDelimeterPointersToDeallocateOnGPU(_numberOfLevels);
 
         checkCudaErrors(cudaMemcpy(&statusPointersToDeallocateOnGPU[0], _dev_pointersToLevelStatuses,
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
-        checkCudaErrors(cudaMemcpy(&delimeterPointersToDeallocateOnGPU[0], _dev_pointersToLevelDelimiters,
+        checkCudaErrors(cudaMemcpy(&upDelimeterPointersToDeallocateOnGPU[0], _dev_pointersToLevelDownDelimiters,
+                                   _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(&downDelimeterPointersToDeallocateOnGPU[0], _dev_pointersToLevelUpDelimiters,
                                    _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
 
         for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
             checkCudaErrors(cudaFree(statusPointersToDeallocateOnGPU[levelIndex]));         
-            checkCudaErrors(cudaFree(delimeterPointersToDeallocateOnGPU[levelIndex]));            
+            checkCudaErrors(cudaFree(upDelimeterPointersToDeallocateOnGPU[levelIndex])); 
+            checkCudaErrors(cudaFree(downDelimeterPointersToDeallocateOnGPU[levelIndex]));            
         }
 
         checkCudaErrors(cudaFree(_dev_boundary));
         checkCudaErrors(cudaFree(_dev_pointersToLevelStatuses));
-        checkCudaErrors(cudaFree(_dev_pointersToLevelDelimiters));
+        checkCudaErrors(cudaFree(_dev_pointersToLevelDownDelimiters));
         // checkCudaErrors(cudaFree(_dev_voxels));
     }
 
@@ -121,7 +125,8 @@ void VoxelTree::initializeTree()
 
     // to hold the pointers that will be copied to the GPU data members
     std::vector<void *> pointersToStatusesOnGPU(_numberOfLevels);
-    std::vector<void *> pointersToDelimitersOnGPU(_numberOfLevels);
+    std::vector<void *> pointersToDownDelimitersOnGPU(_numberOfLevels);
+    std::vector<void *> pointersToUpDelimitersOnGPU(_numberOfLevels);
 
     // allocate space for all levels of tree
 
@@ -129,20 +134,24 @@ void VoxelTree::initializeTree()
     unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
     unsigned int numberOfCellsPerSideInLevel = 1; 
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
+        // number of chunks in level = number of entries in prev level
+        checkCudaErrors(cudaMalloc((void **) &pointersToUpDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
         numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
         numberOfCellsPerSideInLevel *= _numberOfCellsPerSideForLevel[levelIndex];
         printf("Initializing %d elements on level %d\n", numberOfEntriesInLevel, levelIndex);
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
-        checkCudaErrors(cudaMalloc((void **) &pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+        checkCudaErrors(cudaMalloc((void **) &pointersToDownDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
     }
     _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
     _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
 
     // then, create the space and copy the pointers to that data to the GPU
     checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelStatuses, _numberOfLevels*sizeof(void *)));
-    checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelDelimiters, _numberOfLevels*sizeof(void *)));
+    checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelDownDelimiters, _numberOfLevels*sizeof(void *)));
+    checkCudaErrors(cudaMalloc((void **) &_dev_pointersToLevelUpDelimiters, _numberOfLevels*sizeof(void *)));
     checkCudaErrors(cudaMemcpy(_dev_pointersToLevelStatuses, &pointersToStatusesOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(_dev_pointersToLevelDelimiters, &pointersToDelimitersOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(_dev_pointersToLevelDownDelimiters, &pointersToDownDelimitersOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(_dev_pointersToLevelUpDelimiters, &pointersToUpDelimitersOnGPU[0], _numberOfLevels*sizeof(void *), cudaMemcpyHostToDevice));
 
     // set the top level of the tree to active to represent the cube.
     const unsigned int numberOfTopLevelEntries = _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0] * _numberOfCellsPerSideForLevel[0];    
@@ -154,17 +163,8 @@ void VoxelTree::initializeTree()
     // set the delimiters for the top level to point toward test cell
     std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     //topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
-    checkCudaErrors(cudaMemcpy(pointersToDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(pointersToDownDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-    // for the first level, only have active cells where the missing cell from the top level points to
-    // const unsigned int numberOfFirstLevelEntriesPerCell = _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1] * _numberOfCellsPerSideForLevel[1];
-    // const unsigned int numberOfFirstLevelEntries = numberOfTopLevelEntries * numberOfFirstLevelEntriesPerCell;
-    // std::vector<float> firstLevel(numberOfFirstLevelEntries, 0.0);
-    // for (unsigned int index = 0; index < numberOfFirstLevelEntriesPerCell; ++index) {
-    //     firstLevel[numberOfFirstLevelEntries - numberOfFirstLevelEntriesPerCell + index] = 1.0;
-    //     // firstLevel[index] = 1.0;
-    // }
-    //checkCudaErrors(cudaMemcpy(pointersToStatusesOnGPU[1], &firstLevel[0], numberOfFirstLevelEntries*sizeof(float), cudaMemcpyHostToDevice));
     std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
     checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
@@ -175,7 +175,8 @@ void VoxelTree::initializeTree()
                              _numberOfCellsPerSideForLevel,
                              _voxelSize,
                              pointersToStatusesOnGPU,
-                             pointersToDelimitersOnGPU,
+                             pointersToDownDelimitersOnGPU,
+                             pointersToUpDelimitersOnGPU,
                              numberOfCellsPerSideInLevel);
 
     // More rendering stuff: 
@@ -343,6 +344,7 @@ void VoxelTree::runCollisions(float *particlePos,
                          particleRadius,
                          numParticles,
                          _dev_numClaimedForLevel,
+                         _numberOfLevels,
                          deltaTime); 
 }
 
@@ -435,7 +437,7 @@ std::vector<std::vector<float> > VoxelTree::getStatuses() {
 std::vector<std::vector<unsigned int> > VoxelTree::getDelimiters() {
     // copy over the pointers to the delimiter data
     std::vector<void *> pointersToDelimitersOnGPU(_numberOfLevels);
-    checkCudaErrors(cudaMemcpy(&pointersToDelimitersOnGPU[0], _dev_pointersToLevelDelimiters, _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(&pointersToDelimitersOnGPU[0], _dev_pointersToLevelDownDelimiters, _numberOfLevels*sizeof(void *), cudaMemcpyDeviceToHost));
 
     // space to hold the delimiters on CPU
     std::vector<std::vector<unsigned int> > delimiters(_numberOfLevels);

@@ -8,6 +8,7 @@ void copyDataToConstantMemory(const unsigned int numberOfLevels,
                               const float sizeOfVoxel,
                               const std::vector<void *> & pointersToLevelStatuses,
                               const std::vector<void *> & pointersToLevelDelimiters,
+                              const std::vector<void *> & pointersToLevelUpDelimiters,
                               const unsigned int numberOfVoxelsPerSide);
 
 void collideWithParticles(float *particlePos,
@@ -15,6 +16,7 @@ void collideWithParticles(float *particlePos,
                           float  particleRadius,
                           unsigned int numParticles,
                           unsigned int *numClaimedForLevel,
+                          unsigned int numberOfLevels,
                           float deltaTime); 
 
 void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,

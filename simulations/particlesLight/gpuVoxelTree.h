@@ -30,15 +30,7 @@
 #include <stdlib.h>
 #include <vector>
 
-enum Status {
-    ACTIVE,
-    INACTIVE,
-    DIG_DEEPER
-};
-
 static const unsigned int INVALID_CHUNK_NUMBER = (unsigned)(-1);
-
-// TODO: adapt to GPU ??
 
 struct BoundingBox {
     float3 lowerBoundary;
@@ -106,7 +98,8 @@ class VoxelTree
 
         // data
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
-        unsigned int** _dev_pointersToLevelDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
+        unsigned int** _dev_pointersToLevelDownDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
+        unsigned int** _dev_pointersToLevelUpDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
         float*  _dev_voxels; // TODO: global or texture memory  
         unsigned int *_dev_numClaimedForLevel;     
 

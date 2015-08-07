@@ -15,7 +15,8 @@ __constant__ BoundingBox  boundary;
 __constant__ unsigned int  numCellsPerSide[10];
 __constant__ float voxelSize;
 __constant__ volatile float* pointersToStatuses[10];
-__constant__ volatile unsigned int* pointersToDelimiters[10]; // Don't need delimiters for the lowest level
+__constant__ volatile unsigned int* pointersToDownDelimiters[10]; // Don't need delimiters for the lowest level
+__constant__ volatile unsigned int* pointersToUpDelimiters[10];
 __constant__ unsigned int voxelsPerSide; 
 
 // textures for particle position and velocity
@@ -30,7 +31,7 @@ void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,
 {
     checkCudaErrors(cudaMemcpyFromSymbol(&statusPointersToDeallocate->at(0), pointersToStatuses,
                                          numberOfLevels * sizeof(float *), 0, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpyFromSymbol(&delimiterPointersToDeallocate->at(0), pointersToDelimiters,
+    checkCudaErrors(cudaMemcpyFromSymbol(&delimiterPointersToDeallocate->at(0), pointersToDownDelimiters,
                                          numberOfLevels * sizeof(unsigned int *), 0, cudaMemcpyDeviceToHost));
 }
 void copyDataToConstantMemory(const unsigned int numberOfLevels,
@@ -38,7 +39,8 @@ void copyDataToConstantMemory(const unsigned int numberOfLevels,
                               const std::vector<unsigned int> & numberOfCellsPerSide,
                               const float sizeOfVoxel,
                               const std::vector<void *> & pointersToLevelStatuses,
-                              const std::vector<void *> & pointersToLevelDelimiters,
+                              const std::vector<void *> & pointersToLevelDownDelimiters,
+                              const std::vector<void *> & pointersToLevelUpDelimiters,
                               const unsigned int numberOfVoxelsPerSide)
 {
     checkCudaErrors(cudaMemcpyToSymbol(numLevels, (void *) &numberOfLevels, sizeof(unsigned int)));
@@ -46,7 +48,8 @@ void copyDataToConstantMemory(const unsigned int numberOfLevels,
     checkCudaErrors(cudaMemcpyToSymbol(numCellsPerSide, (void *) &numberOfCellsPerSide[0], numberOfLevels * sizeof(unsigned int)));
     checkCudaErrors(cudaMemcpyToSymbol(voxelSize, (void *) &sizeOfVoxel, sizeof(float)));
     checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &pointersToLevelStatuses[0], numberOfLevels * sizeof(float *)));
-    checkCudaErrors(cudaMemcpyToSymbol(pointersToDelimiters, (void *) &pointersToLevelDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
+    checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) &pointersToLevelDownDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
+    checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) &pointersToLevelUpDelimiters[0], numberOfLevels * sizeof(unsigned int *)));
     checkCudaErrors(cudaMemcpyToSymbol(voxelsPerSide, (void *) &numberOfVoxelsPerSide, sizeof(unsigned int)));
 }
 
@@ -174,7 +177,7 @@ float getStatus(float3 pos)
 			return status;
 		} else {
             // Otherwise, find our new offset and bounding box, and loop
-			unsigned int delimiter = pointersToDelimiters[currentLevel][cell + offset];
+			unsigned int delimiter = pointersToDownDelimiters[currentLevel][cell + offset];
 			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
 			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
 			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel]);
@@ -347,7 +350,7 @@ void repairVoxelTree(const float4 *result,
                            "%5u is %8f (active)\n", resultIndex, level, cell, offset, secondStatusCheck);
                     */
                     const unsigned int chunkNumber =
-                      pointersToDelimiters[level][cell + offset];
+                      pointersToDownDelimiters[level][cell + offset];
                     if (chunkNumber != INVALID_CHUNK_NUMBER) {
                         printf("error, resultIndex %5u found a status of %8f which is active, but the chunk number of %5u was valid, which shouldn't happen.\n",resultIndex, secondStatusCheck, chunkNumber);
                         atomicAdd(addressOfErrorField, unsigned(1));
@@ -377,11 +380,11 @@ void repairVoxelTree(const float4 *result,
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
                                    0.0001);
-                        atomicExch((unsigned int*)&(pointersToDelimiters[level + 1][indexOfValue]),
+                        atomicExch((unsigned int*)&(pointersToDownDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
                     // Update chunk index
-                    atomicExch((unsigned int*)&(pointersToDelimiters[level][cell + offset]),
+                    atomicExch((unsigned int*)&(pointersToDownDelimiters[level][cell + offset]),
                                nextLevelsClaimedChunkNumber);
 
                     threadfence();
@@ -393,13 +396,13 @@ void repairVoxelTree(const float4 *result,
                     printf("resultIndex %5u set status/offset of level %2u, cell %5u, offset %5u to %8f/%5u\n",
                            resultIndex, level, cell, offset,
                            pointersToStatuses[level][cell + offset],
-                           pointersToDelimiters[level][cell + offset]);
+                           pointersToDownDelimiters[level][cell + offset]);
                     */
                     thisThreadCanContinue = true;
                 }
             }
         }
-        const unsigned int delimiter = pointersToDelimiters[level][cell + offset];
+        const unsigned int delimiter = pointersToDownDelimiters[level][cell + offset];
         const unsigned int nextLevelCubeSize = numCellsPerSide[level + 1];
         offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
         currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level]);
@@ -428,9 +431,36 @@ void createShape(const float *result,
 
 
 __global__
-void coarsenVoxelTree(float4 *result)
+void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
 {
-	return; 
+	unsigned int delimiter = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    if (delimiter >= numVoxelsAtLowestLevel) return;
+
+    unsigned int level = numLevels - 1; 
+    while (level > 0) {
+        // Check that the chunk is still valid
+        const unsigned int upIndex = pointersToUpDelimiters[level][delimiter];
+        if (upIndex != INVALID_CHUNK_NUMBER) {
+            const unsigned int numCellsInChunk = numCellsPerSide[level] * numCellsPerSide[level] * numCellsPerSide[level];
+            // Loop over every cell in chunk, and only continue if all are inactive
+            for (unsigned int i = 0; i < numCellsInChunk; ++i) {
+                float status = pointersToStatuses[level][delimiter * numCellsInChunk + i];
+                if (status > 0 || status == STATUS_FLAG_DIG_DEEPER) {
+                    return; 
+                }
+            }
+            pointersToStatuses[level - 1][upIndex] = 0.0; 
+            pointersToDownDelimiters[level - 1][upIndex] = INVALID_CHUNK_NUMBER; 
+            pointersToUpDelimiters[level][delimiter] = INVALID_CHUNK_NUMBER; 
+        } else {
+            // Up chunk is invalid = no need to continue processing
+            return; 
+        }
+        // Find which entry to process in the next highest level by ???
+        const unsigned int numCellsInHigherChunk = numCellsPerSide[level - 1] * numCellsPerSide[level - 1] * numCellsPerSide[level - 1];
+        delimiter = upIndex / numCellsInHigherChunk;
+        --level;  
+    }
 }
 
 void collideWithParticles(float *particlePos,
@@ -438,6 +468,7 @@ void collideWithParticles(float *particlePos,
                           float  particleRadius,
                           unsigned int numParticles,
                           unsigned int *numClaimedInArrayAtLevel,
+                          unsigned int numberOfLevels,
                           float deltaTime)
 {
 	unsigned int numThreads = 256; 
@@ -504,8 +535,14 @@ void collideWithParticles(float *particlePos,
         }
     }
     getLastCudaError("Kernel execution failed");
+    
+    // Bring over how many are in the lowest level of the tree
+    unsigned int numVoxelsAtLowestLevel;
+    cudaMemcpy((void *) &numVoxelsAtLowestLevel, &numClaimedInArrayAtLevel[numberOfLevels - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
-    //coarsenVoxelTree<<<numBlocks, numThreads>>>((float4 *) result);
+    numThreads = min(numVoxelsAtLowestLevel, 256); 
+    numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
+    findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel);
 
     cudaFree(result);
     cudaFree(sizeOfResult); 

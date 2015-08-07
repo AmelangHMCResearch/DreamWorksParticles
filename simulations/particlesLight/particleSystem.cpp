@@ -371,12 +371,13 @@ ParticleSystem::update(const float deltaTime,
             _timer);
     
 
-
-    voxelTree->runCollisions(dPos, 
-                             _dev_vel, 
-                             _params.particleRadius,
-                             deltaTime, 
-                             _numParticles);
+    if (_params.usingObject) {
+        voxelTree->runCollisions(dPos, 
+                                 _dev_vel, 
+                                 _params.particleRadius,
+                                 deltaTime, 
+                                 _numParticles);
+    }
 
     /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 
                                (_numParticles + 1)*sizeof(uint), cudaMemcpyDeviceToHost));*/

@@ -447,8 +447,10 @@ void display()
     {
         renderer->display(displayMode);
     }
-    voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
-    // voxelTree->debugDisplay();
+    if (usingObject) {
+        voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+        // voxelTree->debugDisplay();
+    }
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
