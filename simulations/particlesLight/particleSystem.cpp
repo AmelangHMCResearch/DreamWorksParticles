@@ -483,7 +483,7 @@ ParticleSystem::initGrid(uint *size, float spacing, float jitter, uint numPartic
                 if (i < numParticles)
                 {
                     _pos[i*4] = (spacing * x) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
-                    _pos[i*4+1] = 3.0 + (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
+                    _pos[i*4+1] = 2.0 + (spacing * y) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
                     _pos[i*4+2] = (spacing * z) + _params.particleRadius - 1.0f + (frand()*2.0f-1.0f)*jitter;
                     _pos[i*4+3] = 1.0f;
                     _vel[i*4] = 0.0f;

@@ -134,8 +134,10 @@ void VoxelTree::initializeTree()
     unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
     unsigned int numberOfCellsPerSideInLevel = 1; 
     for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
+        // First handle upchunk array - create vector holding entries, and copy them over. 
         // number of chunks in level = number of entries in prev level
         checkCudaErrors(cudaMalloc((void **) &pointersToUpDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+
         numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
         numberOfCellsPerSideInLevel *= _numberOfCellsPerSideForLevel[levelIndex];
         printf("Initializing %d elements on level %d\n", numberOfEntriesInLevel, levelIndex);
@@ -164,6 +166,13 @@ void VoxelTree::initializeTree()
     std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     //topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
     checkCudaErrors(cudaMemcpy(pointersToDownDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
+    // Then, set all up delimiters to invalid to begin with
+    unsigned int numberOfChunksInLevel = 1; 
+    for (int i = 0; i < _numberOfLevels; ++i) {
+        std::vector<unsigned int> delimiters(numberOfChunksInLevel, INVALID_CHUNK_NUMBER);
+        checkCudaErrors(cudaMemcpy(pointersToUpDelimitersOnGPU[i], &delimiters[0], delimiters.size() * sizeof(unsigned int), cudaMemcpyHostToDevice));
+        numberOfChunksInLevel *= _numberOfCellsPerSideForLevel[i] * _numberOfCellsPerSideForLevel[i] * _numberOfCellsPerSideForLevel[i];
+    }
 
     std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
@@ -572,22 +581,24 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             nextBoundary.upperBoundary = make_float3(xPos + halfCellSize, yPos + halfCellSize, zPos + halfCellSize);
 
             drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary);
-        } /*else { 
-            glPushMatrix();
-            // translate for this voxel
-            glTranslatef(xPos, yPos, zPos);
-                         
-            float color[3];
-            float t = currentLevel / (float) _numberOfLevels;
-            findColor(t, color);
-            // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-            // float color[3] = {1.0, 0, 0};
-            glColor3f(1, 1, 1);
-            // delete [] color;
-            glutSolidCube(currentCellSize);
-            // reset the matrix state
-            glPopMatrix();
-        }*/
+        } else { 
+            if (currentLevel != _numberOfLevels - 1) {
+                glPushMatrix();
+                // translate for this voxel
+                glTranslatef(xPos, yPos, zPos);
+                             
+                float color[3];
+                float t = currentLevel / (float) _numberOfLevels;
+                findColor(t, color);
+                // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
+                // float color[3] = {1.0, 0, 0};
+                glColor3f(1, 1, 1);
+                // delete [] color;
+                glutSolidCube(currentCellSize);
+                // reset the matrix state
+                glPopMatrix();
+            }
+        }
     }
 }
 

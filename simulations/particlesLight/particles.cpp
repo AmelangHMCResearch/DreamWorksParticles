@@ -80,7 +80,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.1f;
+float timestep = 0.5f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;
@@ -448,8 +448,8 @@ void display()
         renderer->display(displayMode);
     }
     if (usingObject) {
-        voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
-        // voxelTree->debugDisplay();
+        //voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+        voxelTree->debugDisplay();
     }
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);

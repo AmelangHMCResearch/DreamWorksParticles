@@ -321,16 +321,6 @@ void repairVoxelTree(const float4 *result,
                     const float newStatus =
                       pointersToStatuses[level][cell + offset];
                     if (newStatus == STATUS_FLAG_DIG_DEEPER) {
-                        /*
-                          // the results of this printf seem to be so
-                          //  wrong; i don't know what's wrong.
-                        printf("resultIndex %5u/%5u is done waiting on work in progress "
-                               "at level %2u/%2u, offset %5u, cell %5u, ",
-                               "iteration %5u\n",
-                               resultIndex, numberOfResults, level,
-                               numLevels, offset, cell,
-                               numberOfTimesWeveSpunOnWorkInProgress);
-                        */
                         // we're ready to go!
                         thisThreadCanContinue = true;
                     }
@@ -345,10 +335,6 @@ void repairVoxelTree(const float4 *result,
                     }
                 } else {
                     // It must be active
-                    /*
-                    printf("Status seen by resultIndex %5u at level %2u, cell %5u offset "
-                           "%5u is %8f (active)\n", resultIndex, level, cell, offset, secondStatusCheck);
-                    */
                     const unsigned int chunkNumber =
                       pointersToDownDelimiters[level][cell + offset];
                     if (chunkNumber != INVALID_CHUNK_NUMBER) {
@@ -383,10 +369,12 @@ void repairVoxelTree(const float4 *result,
                         atomicExch((unsigned int*)&(pointersToDownDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
-                    // Update chunk index
+                    // Update chunk index, and up chunk index of next level
+                    const unsigned int delimiter = cell + offset; 
+                    atomicExch((float*) &pointersToUpDelimiters[level + 1][nextLevelsClaimedChunkNumber], delimiter);  
+                    
                     atomicExch((unsigned int*)&(pointersToDownDelimiters[level][cell + offset]),
                                nextLevelsClaimedChunkNumber);
-
                     threadfence();
 
                     // set the status
@@ -456,9 +444,9 @@ void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
             // Up chunk is invalid = no need to continue processing
             return; 
         }
-        // Find which entry to process in the next highest level by ???
-        const unsigned int numCellsInHigherChunk = numCellsPerSide[level - 1] * numCellsPerSide[level - 1] * numCellsPerSide[level - 1];
-        delimiter = upIndex / numCellsInHigherChunk;
+        // Find which entry to process in the next highest level by dividing by size of chunk
+        const unsigned int sizeOfChunkAtHigherLevel = numCellsPerSide[level - 1] * numCellsPerSide[level - 1] * numCellsPerSide[level - 1];
+        delimiter = upIndex / sizeOfChunkAtHigherLevel;
         --level;  
     }
 }
@@ -536,13 +524,15 @@ void collideWithParticles(float *particlePos,
     }
     getLastCudaError("Kernel execution failed");
     
-    // Bring over how many are in the lowest level of the tree
-    unsigned int numVoxelsAtLowestLevel;
-    cudaMemcpy((void *) &numVoxelsAtLowestLevel, &numClaimedInArrayAtLevel[numberOfLevels - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    if (numberOfResultsProduced > 0) {
+        // Bring over how many are in the lowest level of the tree
+        unsigned int numVoxelsAtLowestLevel;
+        cudaMemcpy((void *) &numVoxelsAtLowestLevel, &numClaimedInArrayAtLevel[numberOfLevels - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
-    numThreads = min(numVoxelsAtLowestLevel, 256); 
-    numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
-    findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel);
+        numThreads = min(numVoxelsAtLowestLevel, 256); 
+        numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
+        findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel);
+    }
 
     cudaFree(result);
     cudaFree(sizeOfResult); 
