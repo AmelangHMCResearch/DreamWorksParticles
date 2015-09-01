@@ -112,7 +112,7 @@ bool displayEnabled = true;
 bool pauseSpout = false;
 bool moveSpout = true;
 bool displaySliders = false;
-bool wireframe = false;
+bool displayWireframe = false;
 bool demoMode = false;
 int idleCounter = 0;
 int demoCounter = 0;
@@ -447,8 +447,13 @@ void display()
     {
         renderer->display(displayMode);
     }
-    voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
-    // voxelTree->debugDisplay();
+
+    // Draw the voxelTree 
+    if (displayWireframe) {
+        voxelTree->debugDisplay();
+    } else {
+        voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+    }
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
 
@@ -718,6 +723,10 @@ void key(unsigned char key, int /*x*/, int /*y*/)
         case 'd':
             displayMode = (ParticleRenderer::DisplayMode)
                           ((displayMode + 1) % ParticleRenderer::PARTICLE_NUM_MODES);
+            break;
+
+        case 'w':
+            displayWireframe = !displayWireframe;
             break;
 
         /*case 'd':
