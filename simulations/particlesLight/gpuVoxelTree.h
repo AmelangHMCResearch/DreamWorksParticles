@@ -69,7 +69,7 @@ class VoxelTree
                            unsigned int numParticles);
         std::vector<std::vector<float> > getStatuses(); // Only to be used for debugging
         std::vector<std::vector<unsigned int> > getDelimiters(); // Only to be used for debugging
-        void debugDisplay();
+        void debugDisplay(bool drawInactiveVoxels);
         void renderVoxelTree(float modelView[16], float particleRadius); 
 
         // TODO: Remove
@@ -85,7 +85,8 @@ class VoxelTree
                       std::vector<std::vector<unsigned int> > & delimiters,
                       unsigned int cellIndexOffset,
                       unsigned int currentLevel,
-                      BoundingBox currentBoundary);
+                      BoundingBox currentBoundary,
+                      bool drawInactiveVoxels);
     
     protected:
         // CPU values

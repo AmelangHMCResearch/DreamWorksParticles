@@ -456,7 +456,7 @@ std::vector<std::vector<unsigned int> > VoxelTree::getDelimiters() {
 }
 
 
-void VoxelTree::debugDisplay() {
+void VoxelTree::debugDisplay(bool drawInactiveVoxels) {
     if (_isInitialized) {
         std::vector<std::vector<float> > statuses = getStatuses();
         std::vector<std::vector<unsigned int> > delimiters = getDelimiters();
@@ -479,7 +479,7 @@ void VoxelTree::debugDisplay() {
 
         // make the first call to drawCell (called recursively to draw lower level cells)
         // TODO
-        drawCell(statuses, delimiters, 0, 0, _boundary);   
+        drawCell(statuses, delimiters, 0, 0, _boundary, drawInactiveVoxels);   
     }
 }
 
@@ -518,7 +518,8 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
                          std::vector<std::vector<unsigned int> > & delimiters,
                          unsigned int delimiterForCurrentCell,
                          unsigned int currentLevel,
-                         BoundingBox currentBoundary) {
+                         BoundingBox currentBoundary,
+                         bool drawInactiveVoxels) {
     
     const unsigned int currentNumberOfCellsPerSide = _numberOfCellsPerSideForLevel[currentLevel];
     const unsigned int currentSquaredCellsPerSide  = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide; 
@@ -569,23 +570,16 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             nextBoundary.lowerBoundary = make_float3(xPos - halfCellSize, yPos - halfCellSize, zPos - halfCellSize);
             nextBoundary.upperBoundary = make_float3(xPos + halfCellSize, yPos + halfCellSize, zPos + halfCellSize);
 
-            drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary);
-        } /*else { 
+            drawCell(statuses, delimiters, delimiterForNextCell, nextLevel, nextBoundary, drawInactiveVoxels);
+        } else if (drawInactiveVoxels) { 
             glPushMatrix();
             // translate for this voxel
             glTranslatef(xPos, yPos, zPos);
-                         
-            float color[3];
-            float t = currentLevel / (float) _numberOfLevels;
-            findColor(t, color);
-            // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
-            // float color[3] = {1.0, 0, 0};
             glColor3f(1, 1, 1);
-            // delete [] color;
             glutSolidCube(currentCellSize);
             // reset the matrix state
             glPopMatrix();
-        }*/
+        }
     }
 }
 
@@ -602,7 +596,7 @@ void VoxelTree::test()
 
     VoxelTree tree(cellsPerSide);
     tree.initializeTree();
-    tree.debugDisplay();
+    tree.debugDisplay(false);
 }
 
 

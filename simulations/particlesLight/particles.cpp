@@ -114,6 +114,7 @@ bool moveSpout = true;
 bool displaySliders = false;
 bool displayWireframe = false;
 bool demoMode = false;
+bool drawInactiveVoxels = false;
 int idleCounter = 0;
 int demoCounter = 0;
 const int idleDelay = 2000;
@@ -450,7 +451,7 @@ void display()
 
     // Draw the voxelTree 
     if (displayWireframe) {
-        voxelTree->debugDisplay();
+        voxelTree->debugDisplay(drawInactiveVoxels);
     } else {
         voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
     }
@@ -727,6 +728,10 @@ void key(unsigned char key, int /*x*/, int /*y*/)
 
         case 'w':
             displayWireframe = !displayWireframe;
+            break;
+
+        case 'i':
+            drawInactiveVoxels = !drawInactiveVoxels;
             break;
 
         /*case 'd':
