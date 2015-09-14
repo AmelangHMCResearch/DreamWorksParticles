@@ -80,7 +80,7 @@ bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
 
 // simulation parameters
-float timestep = 0.1f;
+float timestep = 0.5f;
 float damping = 1.0f;
 float gravity = 0.0003f;
 int ballr = 10;

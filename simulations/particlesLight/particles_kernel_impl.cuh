@@ -82,11 +82,11 @@ void integrateSystemD(float4 *pos,
         threadPos.x = -4.0f + params.particleRadius;
         threadVel.x *= params.boundaryDamping;
     }
-    if (threadPos.y > 4.0f - params.particleRadius)
-    {
-        threadPos.y = 4.0f - params.particleRadius;
-        threadVel.y *= params.boundaryDamping;
-    }
+    // if (threadPos.y > 4.0f - params.particleRadius)
+    // {
+    //     threadPos.y = 4.0f - params.particleRadius;
+    //     threadVel.y *= params.boundaryDamping;
+    // }
     if (threadPos.z > 4.0f - params.particleRadius)
     {
         threadPos.z = 4.0f - params.particleRadius;
