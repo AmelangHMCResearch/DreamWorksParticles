@@ -297,6 +297,7 @@ void repairVoxelTree(const float4 *result,
         //  go ahead and dig deeper.
         const float firstStatusCheck =
           pointersToStatuses[level][cell + offset];
+ 
         if (firstStatusCheck != STATUS_FLAG_DIG_DEEPER) {
             // Now we know that the we weren't dig deeper when we first tried.
             // That means we could be active, work in progress, or maybe someone
@@ -371,7 +372,7 @@ void repairVoxelTree(const float4 *result,
                     }
                     // Update chunk index, and up chunk index of next level
                     const unsigned int delimiter = cell + offset; 
-                    atomicExch((float*) &pointersToUpDelimiters[level + 1][nextLevelsClaimedChunkNumber], delimiter);  
+                    atomicExch((unsigned int*) &pointersToUpDelimiters[level + 1][nextLevelsClaimedChunkNumber], delimiter); 
                     
                     atomicExch((unsigned int*)&(pointersToDownDelimiters[level][cell + offset]),
                                nextLevelsClaimedChunkNumber);

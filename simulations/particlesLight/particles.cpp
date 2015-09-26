@@ -220,7 +220,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     if (usingObject) {
         voxelTree = new VoxelTree(cellsPerSide);
         voxelTree->initializeTree();
-        voxelTree->initializeShape();
+        //voxelTree->initializeShape();
     }
 
     size_t free_byte ;
@@ -448,8 +448,11 @@ void display()
         renderer->display(displayMode);
     }
     if (usingObject) {
-        //voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
-        voxelTree->debugDisplay();
+        if (wireframe) {
+            voxelTree->debugDisplay();
+        } else {
+            voxelTree->renderVoxelTree(modelView, psystem->getParticleRadius()); 
+        }
     }
 
     glGetFloatv(GL_MODELVIEW_MATRIX, modelView);
@@ -720,6 +723,10 @@ void key(unsigned char key, int /*x*/, int /*y*/)
         case 'd':
             displayMode = (ParticleRenderer::DisplayMode)
                           ((displayMode + 1) % ParticleRenderer::PARTICLE_NUM_MODES);
+            break;
+
+        case 'w':
+            wireframe = !wireframe; 
             break;
 
         /*case 'd':

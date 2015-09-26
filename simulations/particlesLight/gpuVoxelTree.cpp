@@ -166,13 +166,13 @@ void VoxelTree::initializeTree()
     std::vector<unsigned int> topLevelDelimiters(numberOfTopLevelEntries, INVALID_CHUNK_NUMBER);
     //topLevelDelimiters[numberOfTopLevelEntries - 1] = numberOfTopLevelEntries - 1;
     checkCudaErrors(cudaMemcpy(pointersToDownDelimitersOnGPU[0], &topLevelDelimiters[0], numberOfTopLevelEntries*sizeof(unsigned int), cudaMemcpyHostToDevice));
-    // Then, set all up delimiters to invalid to begin with
+    /*// Then, set all up delimiters to invalid to begin with
     unsigned int numberOfChunksInLevel = 1; 
     for (int i = 0; i < _numberOfLevels; ++i) {
         std::vector<unsigned int> delimiters(numberOfChunksInLevel, INVALID_CHUNK_NUMBER);
         checkCudaErrors(cudaMemcpy(pointersToUpDelimitersOnGPU[i], &delimiters[0], delimiters.size() * sizeof(unsigned int), cudaMemcpyHostToDevice));
         numberOfChunksInLevel *= _numberOfCellsPerSideForLevel[i] * _numberOfCellsPerSideForLevel[i] * _numberOfCellsPerSideForLevel[i];
-    }
+    }*/
 
     std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
 
@@ -551,7 +551,8 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
         // actual index in status/delimiter arrays
         unsigned int actualCellIndex = cellIndex + delimiterForCurrentCell * numberOfEntriesInCell;
 
-        if (statuses[currentLevel][actualCellIndex] > 0.0f) {
+        float currentStatus = statuses[currentLevel][actualCellIndex];
+        if (currentStatus != STATUS_FLAG_DIG_DEEPER && (currentLevel != _numberOfLevels - 1 || currentStatus > 0.0f)) {
             // printf("statuses[currentLevel][actualCellIndex] is %f\n", statuses[currentLevel][actualCellIndex]);
             // printf("Drawing cell at (%5.8f, %5.8f, %5.8f) of size %5.8f\n", xPos, yPos, zPos, currentCellSize);
             // save the matrix state
@@ -566,10 +567,14 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             // float color[3] = {1.0, 0, 0};
             glColor3f(color[0], color[1], color[2]);
             // delete [] color;
-            glutWireCube(currentCellSize);
+            if (currentStatus > 0.0f) {
+                glutWireCube(currentCellSize);
+            } else {
+                glutSolidCube(currentCellSize);
+            }
             // reset the matrix state
             glPopMatrix();
-        } else if (statuses[currentLevel][actualCellIndex] == STATUS_FLAG_DIG_DEEPER) {
+        } else if (currentStatus == STATUS_FLAG_DIG_DEEPER) {
             //printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
 
             unsigned int delimiterForNextCell = delimiters[currentLevel][actualCellIndex];
@@ -592,9 +597,9 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
                 findColor(t, color);
                 // getColor(statuses[voxelIndex]/(float)MAX_ROCK_STRENGTH, color);
                 // float color[3] = {1.0, 0, 0};
-                glColor3f(1, 1, 1);
+                //glColor3f(1, 1, 1);
                 // delete [] color;
-                glutSolidCube(currentCellSize);
+                //glutSolidCube(currentCellSize);
                 // reset the matrix state
                 glPopMatrix();
             }
