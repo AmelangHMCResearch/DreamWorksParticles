@@ -178,6 +178,9 @@ void VoxelTree::initializeTree()
 
     checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
     checkCudaErrors(cudaMemcpy(_dev_numClaimedForLevel, &numClaimedForLevel[0], _numberOfLevels * sizeof(unsigned int), cudaMemcpyHostToDevice));
+    // I'm lazy, so the number inactive per level (0) will be pull from the num claimed
+    checkCudaErrors(cudaMalloc((void**) &_dev_numInactiveForLevel, _numberOfLevels * sizeof(unsigned int))); 
+    checkCudaErrors(cudaMemcpy(_dev_numInactiveForLevel, &numClaimedForLevel[0], _numberOfLevels * sizeof(unsigned int), cudaMemcpyHostToDevice));
 
     copyDataToConstantMemory(_numberOfLevels,
                              _boundary,
@@ -353,6 +356,7 @@ void VoxelTree::runCollisions(float *particlePos,
                          particleRadius,
                          numParticles,
                          _dev_numClaimedForLevel,
+                         _dev_numInactiveForLevel,
                          _numberOfLevels,
                          deltaTime); 
 }

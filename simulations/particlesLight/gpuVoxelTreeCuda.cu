@@ -396,8 +396,6 @@ void repairVoxelTree(const float4 *result,
         offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
         currentBB = calculateNewBoundingBox(resultPosition, currentBB, numCellsPerSide[level]);
     }
-    //if (*addressOfErrorField > 0) printf("Num errors: %u\n", *addressOfErrorField);
-    // TODO: Is amount to Reduce strength negative?
     cell = getCell(resultPosition, currentBB, numCellsPerSide[numLevels - 1]);
     atomicAdd((float*)&pointersToStatuses[numLevels - 1][cell + offset],
               amountToReduceStrength);
@@ -420,7 +418,8 @@ void createShape(const float *result,
 
 
 __global__
-void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
+void findInactiveChunks(unsigned int numVoxelsAtLowestLevel,
+                        unsigned int *numInactiveInArrayAtLevel,)
 {
 	unsigned int delimiter = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
     if (delimiter >= numVoxelsAtLowestLevel) return;
@@ -439,6 +438,7 @@ void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
                 }
             }
             pointersToStatuses[level - 1][upIndex] = 0.0; 
+            atomicAdd(&(numInactiveInArrayAtLevel[level - 1]), 1);
             pointersToDownDelimiters[level - 1][upIndex] = INVALID_CHUNK_NUMBER; 
             pointersToUpDelimiters[level][delimiter] = INVALID_CHUNK_NUMBER; 
         } else {
@@ -457,6 +457,7 @@ void collideWithParticles(float *particlePos,
                           float  particleRadius,
                           unsigned int numParticles,
                           unsigned int *numClaimedInArrayAtLevel,
+                          unsigned int *numInactiveInArrayAtLevel,
                           unsigned int numberOfLevels,
                           float deltaTime)
 {
@@ -512,12 +513,6 @@ void collideWithParticles(float *particlePos,
         unsigned int numberOfErrors;
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
                    cudaMemcpyDeviceToHost);
-        if (numberOfResultsToProcess > 0) {
-            /*fprintf(stderr, "found %u errors after call to repairVoxelTree "
-                    "with %u results\n", numberOfErrors,
-                    numberOfResultsToProcess);*/
-            //exit(1);
-        }
         if (numberOfErrors > 0) {
             printf("Exited with %u errors\n", numberOfErrors);
             exit(1);
@@ -525,6 +520,7 @@ void collideWithParticles(float *particlePos,
     }
     getLastCudaError("Kernel execution failed");
     
+    // Find inactive chunks - called all rounds when erosion has occurred
     if (numberOfResultsProduced > 0) {
         // Bring over how many are in the lowest level of the tree
         unsigned int numVoxelsAtLowestLevel;
@@ -532,8 +528,42 @@ void collideWithParticles(float *particlePos,
 
         numThreads = min(numVoxelsAtLowestLevel, 256); 
         numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
-        findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel);
+        findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel,
+                                                      numInactiveInArrayAtLevel);
     }
+
+    // Copy a level into a new one if: 1) it's > 50% inactive chunks (subject to change)
+    // or if it seems like it might overflow on next refining
+    for (int level = 0; level < numLevels; ++level) {
+        unsigned int numVoxelsAtLevel;
+        cudaMemcpy((void *) &numVoxelsAtLevel, &numClaimedInArrayAtLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost);
+        unsigned int numInactiveAtLevel;
+        cudaMemcpy((void *) &numInactiveAtLevel, &numInactiveInArrayAtLevel[level - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
+        unsigned int sizeOfChunkAtLevel; 
+        // Multiple size of chunk by numInactive to get total inactive
+        unsigned int inactiveVoxels;
+        unsigned int newNumAllocated = 0; 
+        if (2 * numVoxelsAtLevel >= numAllocatedAtLevel[level]) {
+            newNumAllocated = 2 * numAllocatedAtLevel;
+            newNumAllocated = (newNumAllocated > maxNumAllocated[level]) ? maxNumAllocated[level] : newNumAllocated; 
+        } else if (numVoxelsAtLevel <= inactiveVoxels) {
+            newNumAllocated = numAllocatedAtLevel; 
+        }
+
+        // Numthreads = cells in chunk, numBlocks = num chunks
+
+        // Bring old pointers over from GPU
+
+        // Allocate new storage of proper size
+
+        // Run kernel
+
+        // free old pointers
+
+        // memcpy to symbol new ones
+
+    }
+
 
     cudaFree(result);
     cudaFree(sizeOfResult); 

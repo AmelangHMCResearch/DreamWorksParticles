@@ -16,6 +16,7 @@ void collideWithParticles(float *particlePos,
                           float  particleRadius,
                           unsigned int numParticles,
                           unsigned int *numClaimedForLevel,
+                          unsigned int *numInactiveforLevel,
                           unsigned int numberOfLevels,
                           float deltaTime); 
 
