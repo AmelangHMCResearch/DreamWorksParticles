@@ -419,7 +419,7 @@ void createShape(const float *result,
 
 __global__
 void findInactiveChunks(unsigned int numVoxelsAtLowestLevel,
-                        unsigned int *numInactiveInArrayAtLevel,)
+                        unsigned int *numInactiveInArrayAtLevel)
 {
 	unsigned int delimiter = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
     if (delimiter >= numVoxelsAtLowestLevel) return;
@@ -449,6 +449,37 @@ void findInactiveChunks(unsigned int numVoxelsAtLowestLevel,
         const unsigned int sizeOfChunkAtHigherLevel = numCellsPerSide[level - 1] * numCellsPerSide[level - 1] * numCellsPerSide[level - 1];
         delimiter = upIndex / sizeOfChunkAtHigherLevel;
         --level;  
+    }
+}
+
+__global__
+void removeInactiveChunks(float *newStatusPointer,
+                          unsigned int *newDownIndexPointer,
+                          unsigned int *newUpIndexPointer,
+                          unsigned int numVoxels,
+                          unsigned int level,
+                          unsigned int *numClaimedInArrayAtLevel)
+{
+    __shared__ unsigned int newChunkNum; 
+    unsigned int index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    unsigned int chunkNum = blockIdx.x;
+    unsigned int threadInChunk = threadIdx.x;
+    if (index >= numVoxels) return;
+
+    if (threadInChunk == 0) {
+        if (pointersToUpDelimiters[chunkNum] != INVALID_CHUNK_NUMBER) {
+            newChunkNum = atomicAdd(&numClaimedInArrayAtLevel[level], 1);
+            pointersToDownDelimiters[pointersToUpDelimiters[chunkNum]] = newChunkNum; 
+            newUpIndexPointer[newChunkNum] = pointersToUpDelimiters[chunkNum];
+        }
+        
+    }
+    __syncthreads();
+
+    if (pointersToUpDelimiters[chunkNum] == INVALID_CHUNK_NUMBER) {
+        return;
+    } else {
+        newStatusPointer[]
     }
 }
 
@@ -556,11 +587,20 @@ void collideWithParticles(float *particlePos,
 
         // Allocate new storage of proper size
 
+        // Reset numClaimedAtLevel to 0
+
         // Run kernel
+        numThreads = min(numCellsInChunk, 1024); 
+        numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
+        removeInactiveChunks<<<numBlocks, numThreads>>>(newStatusPointer,
+                                                                                  newDownIndexPointer,
+                                                                                  newUpIndexPointer);
 
         // free old pointers
 
         // memcpy to symbol new ones
+
+        // Also set new dev ones
 
     }
 
