@@ -87,10 +87,11 @@ class VoxelTree
         unsigned int _numVoxelsToDraw;  
         BoundingBox _boundary; 
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
-        float _voxelSize;
+        std::vector<unsigned int> _memAllocatedAtLevel;
+        std::vector<unsigned int> _maxMemNeededForLevel; 
 
         // scalar values
-        unsigned int* _dev_numberOfLevels; // TODO: allocate in constant memory
+        unsigned int* _dev_numberOfLevels;
         BoundingBox*  _dev_boundary; // TODO: allocate in constant memory
 
         // configuration data
@@ -99,8 +100,7 @@ class VoxelTree
         // data
         float** _dev_pointersToLevelStatuses; // TODO: store pointers to global (texture?) memory in constant memory
         unsigned int** _dev_pointersToLevelDownDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        unsigned int** _dev_pointersToLevelUpDelimiters; // TODO: store pointers to global (texture?) memory in constant memory
-        float*  _dev_voxels; // TODO: global or texture memory  
+        unsigned int** _dev_pointersToLevelUpDelimiters; // TODO: store pointers to global (texture?) memory in constant memory 
         unsigned int *_dev_numClaimedForLevel;     
         unsigned int *_dev_numInactiveForLevel;
 

@@ -15,14 +15,16 @@ void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
-                          unsigned int *numClaimedForLevel,
-                          unsigned int *numInactiveforLevel,
+                          float **dev_statuses,
+                          unsigned int **dev_upIndices,
+                          unsigned int **dev_downIndices,
+                          unsigned int *dev_numClaimedForLevel,
+                          unsigned int *dev_numInactiveforLevel,
+                          std::vector<unsigned int> & memAllocatedAtLevel,
+                          const std::vector<unsigned int> & maxMemAtLevel,
+                          const std::vector<unsigned int> & numberOfCellsPerSideAtLevel,
                           unsigned int numberOfLevels,
                           float deltaTime); 
-
-void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,
-                                    std::vector<void *> * statusPointersToDeallocate, 
-                                    std::vector<void *> * delimiterPointersToDeallocate);
 
 void generateMarchingCubes(float *pos,
                            float *norm,

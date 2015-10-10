@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <cuda_runtime.h>
 #include "vector_types.h"
@@ -25,15 +26,6 @@ texture<unsigned int, 1, cudaReadModeElementType> triTex;
 texture<unsigned int, 1, cudaReadModeElementType> numVertsTex;      
 
 // Utility Functions
-void getPointersToDeallocateFromGPU(const unsigned int numberOfLevels,
-                                    std::vector<void *> * statusPointersToDeallocate, 
-                                    std::vector<void *> * delimiterPointersToDeallocate)
-{
-    checkCudaErrors(cudaMemcpyFromSymbol(&statusPointersToDeallocate->at(0), pointersToStatuses,
-                                         numberOfLevels * sizeof(float *), 0, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpyFromSymbol(&delimiterPointersToDeallocate->at(0), pointersToDownDelimiters,
-                                         numberOfLevels * sizeof(unsigned int *), 0, cudaMemcpyDeviceToHost));
-}
 void copyDataToConstantMemory(const unsigned int numberOfLevels,
                               const BoundingBox BB,
                               const std::vector<unsigned int> & numberOfCellsPerSide,
@@ -458,6 +450,7 @@ void removeInactiveChunks(float *newStatusPointer,
                           unsigned int *newUpIndexPointer,
                           unsigned int numVoxels,
                           unsigned int level,
+                          unsigned int chunkSize,
                           unsigned int *numClaimedInArrayAtLevel)
 {
     __shared__ unsigned int newChunkNum; 
@@ -479,7 +472,12 @@ void removeInactiveChunks(float *newStatusPointer,
     if (pointersToUpDelimiters[chunkNum] == INVALID_CHUNK_NUMBER) {
         return;
     } else {
-        newStatusPointer[]
+        unsigned int newThreadIndex = newChunkNum * chunkSize + threadInChunk;
+        newStatusPointer[newThreadIndex] = pointersToStatuses[index];
+        newDownIndexPointer[newThreadIndex] pointersToDownDelimiters[index];
+        if (level != numLevels) {
+            pointersToUpDelimiters[level + 1][pointersToDownDelimiters[level][index]] = newThreadIndex; 
+        }
     }
 }
 
@@ -487,8 +485,14 @@ void collideWithParticles(float *particlePos,
                           float *particleVel,
                           float  particleRadius,
                           unsigned int numParticles,
-                          unsigned int *numClaimedInArrayAtLevel,
-                          unsigned int *numInactiveInArrayAtLevel,
+                          float **dev_statuses,
+                          unsigned int **dev_upIndices,
+                          unsigned int **dev_downIndices,
+                          unsigned int *dev_numClaimedInArrayAtLevel,
+                          unsigned int *dev_numInactiveInArrayAtLevel,
+                          std::vector<unsigned int> & memAllocatedAtLevel,
+                          const std::vector<unsigned int> & maxMemAtLevel,
+                          const std::vector<unsigned int> & numberOfCellsPerSideAtLevel,
                           unsigned int numberOfLevels,
                           float deltaTime)
 {
@@ -539,7 +543,7 @@ void collideWithParticles(float *particlePos,
         }
         repairVoxelTree<<<numBlocks, numThreads>>>((float4 *) result,
                                                    numberOfResultsToProcess,
-                                                   numClaimedInArrayAtLevel,
+                                                   dev_numClaimedInArrayAtLevel,
                                                    addressOfErrorField);
         unsigned int numberOfErrors;
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
@@ -555,52 +559,83 @@ void collideWithParticles(float *particlePos,
     if (numberOfResultsProduced > 0) {
         // Bring over how many are in the lowest level of the tree
         unsigned int numVoxelsAtLowestLevel;
-        cudaMemcpy((void *) &numVoxelsAtLowestLevel, &numClaimedInArrayAtLevel[numberOfLevels - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
+        cudaMemcpy((void *) &numVoxelsAtLowestLevel, &dev_numClaimedInArrayAtLevel[numberOfLevels - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
         numThreads = min(numVoxelsAtLowestLevel, 256); 
         numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
         findInactiveChunks<<<numBlocks, numThreads>>>(numVoxelsAtLowestLevel,
-                                                      numInactiveInArrayAtLevel);
+                                                      dev_numInactiveInArrayAtLevel);
     }
 
     // Copy a level into a new one if: 1) it's > 50% inactive chunks (subject to change)
     // or if it seems like it might overflow on next refining
     for (int level = 0; level < numLevels; ++level) {
-        unsigned int numVoxelsAtLevel;
-        cudaMemcpy((void *) &numVoxelsAtLevel, &numClaimedInArrayAtLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost);
-        unsigned int numInactiveAtLevel;
-        cudaMemcpy((void *) &numInactiveAtLevel, &numInactiveInArrayAtLevel[level - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost);
-        unsigned int sizeOfChunkAtLevel; 
-        // Multiple size of chunk by numInactive to get total inactive
-        unsigned int inactiveVoxels;
-        unsigned int newNumAllocated = 0; 
-        if (2 * numVoxelsAtLevel >= numAllocatedAtLevel[level]) {
-            newNumAllocated = 2 * numAllocatedAtLevel;
-            newNumAllocated = (newNumAllocated > maxNumAllocated[level]) ? maxNumAllocated[level] : newNumAllocated; 
-        } else if (numVoxelsAtLevel <= inactiveVoxels) {
-            newNumAllocated = numAllocatedAtLevel; 
-        }
 
-        // Numthreads = cells in chunk, numBlocks = num chunks
+        // Grab number of voxels from GPU
+        unsigned int numVoxelsAtLevel;
+        unsigned int numInactiveAtLevel;
+        checkCudaErrors(cudaMemcpy((void *) &numVoxelsAtLevel, &dev_numClaimedInArrayAtLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy((void *) &numInactiveAtLevel, &dev_numInactiveInArrayAtLevel[level - 1], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        
+        // Calculate size of chunk at level
+        unsigned int sizeOfChunkAtLevel = numberOfCellsPerSideAtLevel[level-1] * numberOfCellsPerSideAtLevel[level-1] * numberOfCellsPerSideAtLevel[level-1]; 
+       
+        // Calculate amount of memory to allocate (TODO: CHECK THIS NUMBER) 
+        unsigned int newNumAllocated = 2 * (numVoxelsAtLevel - numInactiveAtLevel); 
+        if (newNumAllocated > maxMemAtLevel[level]) {
+            newNumAllocated = maxMemAtLevel[level];
+        } 
+        memAllocatedAtLevel[level] = newNumAllocated; 
+
 
         // Bring old pointers over from GPU
+        float *dev_oldStatuses;
+        unsigned int *dev_oldUpIndices;
+        unsigned int *dev_oldDownIndices;
+        checkCudaErrors(cudaMemcpyFromSymbol((void *)dev_oldStatuses), pointersToStatuses, sizeof(float *), level * sizeof(float *), cudaMemcpyDeviceToHost);
+        checkCudaErrors(cudaMemcpyFromSymbol((void *)dev_oldUpIndices), pointersToUpDelimiters, sizeof(unsigned int *), level * sizeof(unsigned int *), cudaMemcpyDeviceToHost);
+        checkCudaErrors(cudaMemcpyFromSymbol((void *)dev_oldDownIndices), pointersToDownDelimiters, sizeof(unsigned int *), level * sizeof(unsigned int *), cudaMemcpyDeviceToHost);
 
         // Allocate new storage of proper size
+        float *dev_newStatuses;
+        unsigned int *dev_newUpIndices;
+        unsigned int *dev_newDownIndices;
+        checkCudaErrors(cudaMalloc((void *) dev_newStatuses, newNumAllocated * sizeof(float *))); 
+        checkCudaErrors(cudaMalloc((void *) dev_newUpIndices, (newNumAllocated / sizeOfChunkAtLevel)  * sizeof(unsigned int *))); 
+        checkCudaErrors(cudaMalloc((void *) dev_newDownIndices, newNumAllocated * sizeof(unsigned int *))); 
 
         // Reset numClaimedAtLevel to 0
+        unsigned int newNumClaimed = 0; 
+        checkCudaErrors(cudaMemcpy(&dev_numClaimedInArrayAtLevel[level], &newNumClaimed, sizeof(unsigned int), cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy(&dev_numInactiveInArrayAtLevel[level], &newNumClaimed, sizeof(unsigned int), cudaMemcpyHostToDevice));
 
         // Run kernel
-        numThreads = min(numCellsInChunk, 1024); 
+        assert(sizeOfChunkAtLevel < 1024); // Simplifying assumption
+        // TODO: Make work for >1 chunk per block
+        numThreads = sizeOfChunkAtLevel; 
         numBlocks = ceil(numVoxelsAtLowestLevel / (float) numThreads); 
-        removeInactiveChunks<<<numBlocks, numThreads>>>(newStatusPointer,
-                                                                                  newDownIndexPointer,
-                                                                                  newUpIndexPointer);
+        removeInactiveChunks<<<numBlocks, numThreads>>>(dev_newStatuses,
+                                                        dev_newUpIndices,
+                                                        dev_newDownIndices,
+                                                        numVoxelsAtLevel,
+                                                        level,
+                                                        sizeOfChunkAtLevel,
+                                                        dev_numClaimedInArrayAtLevel);
 
         // free old pointers
+        checkCudaErrors(cudaFree(dev_oldStatuses));
+        checkCudaErrors(cudaFree(dev_oldDownIndices));
+        checkCudaErrors(cudaFree(dev_oldUpIndices));
 
         // memcpy to symbol new ones
+        checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) dev_newStatuses, level * sizeof(float *), sizeof(float *), cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) dev_newDownIndices, level * sizeof(unsigned int *), sizeof(unsigned int *), cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) dev_newUpIndices, level * sizeof(unsigned int *), sizeof(unsigned int *), cudaMemcpyHostToDevice));
 
         // Also set new dev ones
+        dev_statuses[level] = dev_newStatuses;
+        dev_upIndices[level] = dev_newUpIndices;
+        dev_downIndices[level] = dev_newDownIndices; 
 
     }
 

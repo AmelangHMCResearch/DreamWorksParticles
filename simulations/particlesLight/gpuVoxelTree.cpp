@@ -44,14 +44,14 @@ VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
 {   
     _numberOfCellsPerSideForLevel = numberOfCellsPerSideForLevel;
     _numberOfLevels = numberOfCellsPerSideForLevel.size();
+    _memAllocatedAtLevel(_numberOfLevels);
+    _maxMemNeededForLevel(_numberOfLevels); 
 
     // allocate space for the configuration values
-    checkCudaErrors(cudaMalloc((void **) &_dev_numberOfLevels, 1*sizeof(unsigned int)));
     checkCudaErrors(cudaMalloc((void **) &_dev_numberOfCellsPerSideForLevel, _numberOfLevels*sizeof(unsigned int)));
 
 
     // set values on GPU to given configuration
-    checkCudaErrors(cudaMemcpy(_dev_numberOfLevels, &_numberOfLevels, 1*sizeof(unsigned int), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(_dev_numberOfCellsPerSideForLevel, &numberOfCellsPerSideForLevel[0], 
                                _numberOfLevels*sizeof(unsigned int), cudaMemcpyHostToDevice));
 
@@ -82,11 +82,9 @@ VoxelTree::~VoxelTree()
         checkCudaErrors(cudaFree(_dev_boundary));
         checkCudaErrors(cudaFree(_dev_pointersToLevelStatuses));
         checkCudaErrors(cudaFree(_dev_pointersToLevelDownDelimiters));
-        // checkCudaErrors(cudaFree(_dev_voxels));
     }
 
     // always free configuration data
-    checkCudaErrors(cudaFree(_dev_numberOfLevels));
     checkCudaErrors(cudaFree(_dev_numberOfCellsPerSideForLevel));
 
     checkCudaErrors(cudaFree(_dev_triTable));
@@ -143,6 +141,8 @@ void VoxelTree::initializeTree()
         printf("Initializing %d elements on level %d\n", numberOfEntriesInLevel, levelIndex);
         checkCudaErrors(cudaMalloc((void **) &pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float)));
         checkCudaErrors(cudaMalloc((void **) &pointersToDownDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int)));
+        _memAllocatedAtLevel[levelIndex] = numberOfEntriesInLevel;
+        _maxMemNeededForLevel[levelIndex] = numberOfEntriesInLevel; 
     }
     _voxelSize = (_boundary.upperBoundary.x - _boundary.lowerBoundary.x) / numberOfCellsPerSideInLevel;
     _numMarchingCubes = (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1) * (numberOfCellsPerSideInLevel + 1);
@@ -355,8 +355,14 @@ void VoxelTree::runCollisions(float *particlePos,
                          particleVel,
                          particleRadius,
                          numParticles,
+                         _dev_pointersToLevelStatuses,
+                         _dev_pointersToLevelUpDelimiters,
+                         _dev_pointersToLevelDownDelimiters,
                          _dev_numClaimedForLevel,
                          _dev_numInactiveForLevel,
+                         _memAllocatedAtLevel,
+                         _maxMemNeededForLevel,
+                         _numberOfCellsPerSideForLevel,
                          _numberOfLevels,
                          deltaTime); 
 }
