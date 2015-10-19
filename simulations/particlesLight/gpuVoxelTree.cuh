@@ -20,9 +20,9 @@ void collideWithParticles(float *particlePos,
                           unsigned int **dev_downIndices,
                           unsigned int *dev_numClaimedForLevel,
                           unsigned int *dev_numInactiveforLevel,
-                          std::vector<unsigned int> & memAllocatedAtLevel,
-                          const std::vector<unsigned int> & maxMemAtLevel,
-                          const std::vector<unsigned int> & numberOfCellsPerSideAtLevel,
+                          unsigned int *memAllocatedAtLevel,
+                          const unsigned int *maxMemAtLevel,
+                          const unsigned int *numberOfCellsPerSideAtLevel,
                           unsigned int numberOfLevels,
                           float deltaTime); 
 

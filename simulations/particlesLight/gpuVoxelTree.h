@@ -85,6 +85,7 @@ class VoxelTree
         unsigned int _numberOfLevels;
         unsigned int _numMarchingCubes;
         unsigned int _numVoxelsToDraw;  
+        float _voxelSize; 
         BoundingBox _boundary; 
         std::vector<unsigned int> _numberOfCellsPerSideForLevel;
         std::vector<unsigned int> _memAllocatedAtLevel;

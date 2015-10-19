@@ -44,8 +44,11 @@ VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
 {   
     _numberOfCellsPerSideForLevel = numberOfCellsPerSideForLevel;
     _numberOfLevels = numberOfCellsPerSideForLevel.size();
-    _memAllocatedAtLevel(_numberOfLevels);
-    _maxMemNeededForLevel(_numberOfLevels); 
+    for (int i = 0; i < _numberOfLevels; ++i) {
+        printf("Number fo cells per side: %u\n", _numberOfCellsPerSideForLevel[i]);
+    }
+    _memAllocatedAtLevel.reserve(_numberOfLevels);
+    _maxMemNeededForLevel.reserve(_numberOfLevels);
 
     // allocate space for the configuration values
     checkCudaErrors(cudaMalloc((void **) &_dev_numberOfCellsPerSideForLevel, _numberOfLevels*sizeof(unsigned int)));
@@ -351,6 +354,9 @@ void VoxelTree::runCollisions(float *particlePos,
                               float deltaTime,
                               unsigned int numParticles)
 {
+    for (int i = 0; i < _numberOfLevels; ++i) {
+        printf("Cells per side: %u\n", _numberOfCellsPerSideForLevel[i]); 
+    }
     collideWithParticles(particlePos,
                          particleVel,
                          particleRadius,
@@ -360,9 +366,9 @@ void VoxelTree::runCollisions(float *particlePos,
                          _dev_pointersToLevelDownDelimiters,
                          _dev_numClaimedForLevel,
                          _dev_numInactiveForLevel,
-                         _memAllocatedAtLevel,
-                         _maxMemNeededForLevel,
-                         _numberOfCellsPerSideForLevel,
+                         &_memAllocatedAtLevel[0],
+                         &_maxMemNeededForLevel[0],
+                         &_numberOfCellsPerSideForLevel[0],
                          _numberOfLevels,
                          deltaTime); 
 }
