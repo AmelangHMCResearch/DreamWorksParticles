@@ -354,9 +354,6 @@ void VoxelTree::runCollisions(float *particlePos,
                               float deltaTime,
                               unsigned int numParticles)
 {
-    for (int i = 0; i < _numberOfLevels; ++i) {
-        printf("Cells per side: %u\n", _numberOfCellsPerSideForLevel[i]); 
-    }
     collideWithParticles(particlePos,
                          particleVel,
                          particleRadius,
