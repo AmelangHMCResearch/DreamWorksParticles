@@ -213,7 +213,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     psystem->reset(config);
     psystem->startTimer(5);
 
-    unsigned int blah[4] = {4, 4, 4, 4};
+    unsigned int blah[4] = {2, 3, 4, 4};
     
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
 
