@@ -213,7 +213,7 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     psystem->reset(config);
     psystem->startTimer(5);
 
-    unsigned int blah[4] = {2, 3, 4, 4};
+    unsigned int blah[5] = {2, 2, 2, 2,2};
     
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
 
@@ -222,24 +222,6 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
         voxelTree->initializeTree();
         //voxelTree->initializeShape();
     }
-
-    size_t free_byte ;
-
-    size_t total_byte ;
-
-    checkCudaErrors(cudaMemGetInfo( &free_byte, &total_byte )) ;
-
-
-
-    double free_db = (double)free_byte ;
-
-    double total_db = (double)total_byte ;
-
-    double used_db = total_db - free_db ;
-
-    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
-
-    used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);
 
     if (bUseOpenGL)
     {
@@ -391,6 +373,19 @@ void display()
             renderer->setVertexBuffer(psystem->getCurrentReadBuffer(), psystem->getNumActiveParticles());
         }
     }
+    /*size_t free_byte;
+
+    size_t total_byte;
+
+    checkCudaErrors(cudaMemGetInfo( &free_byte, &total_byte ));
+
+    double free_db = (double)free_byte;
+    double total_db = (double)total_byte;
+    double used_db = total_db - free_db;
+
+    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+
+    used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);*/
     
 
     // Do the rendering

@@ -438,15 +438,17 @@ std::vector<std::vector<float> > VoxelTree::getStatuses() {
     std::vector<std::vector<float> > statuses(_numberOfLevels);
 
     // copy over all the allocated data, whether or not it is valid
-    unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
-    for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
-        numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
+    for (unsigned int level = 0; level < _numberOfLevels; ++level) {
+        unsigned int numberOfChunksInLevel; 
+        checkCudaErrors(cudaMemcpy((void *) &numberOfChunksInLevel, &_dev_numClaimedForLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        unsigned int sizeOfChunkAtLevel = _numberOfCellsPerSideForLevel[level] * _numberOfCellsPerSideForLevel[level] * _numberOfCellsPerSideForLevel[level]; 
+        unsigned int numVoxelsAtLevel = numberOfChunksInLevel * sizeOfChunkAtLevel; 
 
         // make enough room for the data to be copied
-        statuses[levelIndex].reserve(numberOfEntriesInLevel);
+        statuses[level].reserve(numVoxelsAtLevel);
 
         // copy the data over to CPU
-        checkCudaErrors(cudaMemcpy(&statuses[levelIndex][0], pointersToStatusesOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(float), cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(&statuses[level][0], pointersToStatusesOnGPU[level], numVoxelsAtLevel*sizeof(float), cudaMemcpyDeviceToHost));
     }
 
     // printf("Status of first four entries in top level of tree are:\n");
@@ -465,15 +467,16 @@ std::vector<std::vector<unsigned int> > VoxelTree::getDelimiters() {
     std::vector<std::vector<unsigned int> > delimiters(_numberOfLevels);
 
     // copy over all the allocated data, whether or not it is valid
-    unsigned int numberOfEntriesInLevel = 1; // based on number of cells per side TODO
-    for (unsigned int levelIndex = 0; levelIndex < _numberOfLevels; ++levelIndex) {
-        numberOfEntriesInLevel *= _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex] * _numberOfCellsPerSideForLevel[levelIndex];
-
+    for (unsigned int level = 0; level < _numberOfLevels; ++level) {
+        unsigned int numberOfChunksInLevel; 
+        checkCudaErrors(cudaMemcpy((void *) &numberOfChunksInLevel, &_dev_numClaimedForLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        unsigned int sizeOfChunkAtLevel = _numberOfCellsPerSideForLevel[level] * _numberOfCellsPerSideForLevel[level] * _numberOfCellsPerSideForLevel[level]; 
+        unsigned int numVoxelsAtLevel = numberOfChunksInLevel * sizeOfChunkAtLevel; 
         // make enough room for the data to be copied
-        delimiters[levelIndex].reserve(numberOfEntriesInLevel);
+        delimiters[level].reserve(numVoxelsAtLevel);
 
         // copy the data over to CPU
-        checkCudaErrors(cudaMemcpy(&delimiters[levelIndex][0], pointersToDelimitersOnGPU[levelIndex], numberOfEntriesInLevel*sizeof(unsigned int), cudaMemcpyDeviceToHost));
+        checkCudaErrors(cudaMemcpy(&delimiters[level][0], pointersToDelimitersOnGPU[level], numVoxelsAtLevel*sizeof(unsigned int), cudaMemcpyDeviceToHost));
     }
 
     return delimiters;
@@ -549,8 +552,11 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
     const float currentCellSize = (currentBoundary.upperBoundary.x - currentBoundary.lowerBoundary.x) / currentNumberOfCellsPerSide;
     // printf("VoxelSize is %3.2f\n", currentCellSize);
 
-    const unsigned int numberOfEntriesInCell = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
-
+    //const unsigned int numberOfEntriesInCell = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
+    unsigned int numberOfChunksInLevel; 
+    checkCudaErrors(cudaMemcpy((void *) &numberOfChunksInLevel, &_dev_numClaimedForLevel[currentLevel], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+    unsigned int sizeOfChunkAtLevel = _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel]; 
+    unsigned int numberOfEntriesInCell = numberOfChunksInLevel * sizeOfChunkAtLevel;
     for (unsigned int cellIndex = 0; cellIndex < numberOfEntriesInCell; ++cellIndex) {
         
         unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;

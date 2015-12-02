@@ -91,8 +91,23 @@ float4 fieldFunc4(float3 p)
 }
 
 __device__
+float fSample3(float3 f)
+{
+    float fHeight = 20.0 * (sqrt((0.5 - f.x) * (0.5 - f.x) + (0.5 - f.y) * (0.5 - f.y))); 
+    fHeight = 100 + 0.1 * (sin(fHeight) + cos(fHeight)); 
+    float result = (fHeight - f.z) * 50.0;
+    return result; 
+}
+
+__device__
 void vertexInterp2(float isolevel, float3 p0, float3 p1, float4 f0, float4 f1, float3 &p, float3 &n)
 {
+    //float t = (isolevel - f0.w) / (f1.w - f0.w);
+    /*p = lerp(p0, p1, 0.5);
+    n.x = fSample3(make_float3(p.x-0.01,p.y,p.z)) - fSample3(make_float3(p.x+0.01,p.y,p.z));
+    n.y = fSample3(make_float3(p.x,p.y-0.01,p.z)) - fSample3(make_float3(p.x,p.y+0.01,p.z));
+    n.z = fSample3(make_float3(p.x,p.y,p.z-0.01)) - fSample3(make_float3(p.x,p.y,p.z+0.01));
+    n = normalize(n);*/
     float t = (isolevel - f0.w) / (f1.w - f0.w);
     p = lerp(p0, p1, 0.5);
     n.x = lerp(f0.x, f1.x, t);
@@ -358,7 +373,7 @@ void repairVoxelTree(const float4 *result,
                         const unsigned int indexOfValue =
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
-                                   0.0001);
+                                   10.0);
                         atomicExch((unsigned int*)&(pointersToDownDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
@@ -444,8 +459,8 @@ void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
 
 __global__
 void removeInactiveChunks(float *newStatusPointer,
-                          unsigned int *newDownIndexPointer,
                           unsigned int *newUpIndexPointer,
+                          unsigned int *newDownIndexPointer,
                           unsigned int numVoxels,
                           unsigned int level,
                           unsigned int chunkSize,
@@ -458,7 +473,9 @@ void removeInactiveChunks(float *newStatusPointer,
     if (index >= numVoxels) return;
 
     if (threadInChunk == 0) {
+        //printf("here as thread %u at level %u\n", index, level);
         if (pointersToUpDelimiters[level][chunkNum] != INVALID_CHUNK_NUMBER) {
+            //printf("Up: %u\n", pointersToUpDelimiters[level][chunkNum]);
             newChunkNum = atomicAdd(&numClaimedInArrayAtLevel[level], 1);
             pointersToDownDelimiters[level - 1][pointersToUpDelimiters[level][chunkNum]] = newChunkNum; 
             newUpIndexPointer[newChunkNum] = pointersToUpDelimiters[level][chunkNum];
@@ -471,6 +488,7 @@ void removeInactiveChunks(float *newStatusPointer,
         return;
     } else {
         unsigned int newThreadIndex = newChunkNum * chunkSize + threadInChunk;
+        //printf("New Index: %u Old Index: %u Chunk size: %u, Status: %f, Down: %u\n", newThreadIndex, index, chunkSize, pointersToStatuses[level][index], pointersToDownDelimiters[level][index]);
         newStatusPointer[newThreadIndex] = pointersToStatuses[level][index];
         newDownIndexPointer[newThreadIndex] = pointersToDownDelimiters[level][index];
         if (pointersToDownDelimiters[level][index] != INVALID_CHUNK_NUMBER && level != numLevels) {
@@ -543,7 +561,6 @@ void collideWithParticles(float *particlePos,
                                                    numberOfResultsToProcess,
                                                    dev_numClaimedInArrayAtLevel,
                                                    addressOfErrorField);
-        printf("have done a repair\n");
         getLastCudaError("Kernel execution failed");
         unsigned int numberOfErrors;
         cudaMemcpy(&numberOfErrors, addressOfErrorField, sizeof(unsigned int),
@@ -574,13 +591,11 @@ void collideWithParticles(float *particlePos,
         // Grab number of voxels from GPU
         unsigned int numChunksAtLevel;
         checkCudaErrors(cudaMemcpy((void *) &numChunksAtLevel, &dev_numClaimedInArrayAtLevel[level], sizeof(unsigned int), cudaMemcpyDeviceToHost));
-        
         // For now, just always reallocate + copy for testing purposes :/
         if (numChunksAtLevel > 0) {
         
             // Calculate size of chunk at level
             unsigned int sizeOfChunkAtLevel = numberOfCellsPerSideAtLevel[level] * numberOfCellsPerSideAtLevel[level] * numberOfCellsPerSideAtLevel[level]; 
-            printf("cells Per side: %u\n", numberOfCellsPerSideAtLevel[level]);
             unsigned int numVoxelsAtLevel = numChunksAtLevel * sizeOfChunkAtLevel; 
            
             // Calculate amount of memory to allocate (TODO: CHECK THIS NUMBER) 
@@ -589,29 +604,22 @@ void collideWithParticles(float *particlePos,
                 newNumAllocated = maxMemAtLevel[level];
             } 
             memAllocatedAtLevel[level] = newNumAllocated; 
-            
-            printf("Here 1, level %u\n", level);
-
 
             // Bring old pointers over from GPU
-            // Why is this so hard ;__;
             float *dev_oldStatuses;
             checkCudaErrors(cudaMemcpy(&dev_oldStatuses, dev_statuses + level, sizeof(float *), cudaMemcpyDeviceToHost));
             unsigned int *dev_oldUpIndices;
             checkCudaErrors(cudaMemcpy(&dev_oldUpIndices, dev_upIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
             unsigned int *dev_oldDownIndices;
             checkCudaErrors(cudaMemcpy(&dev_oldDownIndices, dev_downIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
-            printf("Here 2\n");
 
             // Allocate new storage of proper size
             float *dev_newStatuses;
             unsigned int *dev_newUpIndices;
             unsigned int *dev_newDownIndices;
-            checkCudaErrors(cudaMalloc((void **) &dev_newStatuses, newNumAllocated * sizeof(float *))); 
-            checkCudaErrors(cudaMalloc((void **) &dev_newUpIndices, (newNumAllocated / sizeOfChunkAtLevel)  * sizeof(unsigned int *))); 
-            checkCudaErrors(cudaMalloc((void **) &dev_newDownIndices, newNumAllocated * sizeof(unsigned int *))); 
-
-            printf("Here 3\n");
+            checkCudaErrors(cudaMalloc((void **) &dev_newStatuses, newNumAllocated * sizeof(float))); 
+            checkCudaErrors(cudaMalloc((void **) &dev_newUpIndices, (newNumAllocated / sizeOfChunkAtLevel)  * sizeof(unsigned int))); 
+            checkCudaErrors(cudaMalloc((void **) &dev_newDownIndices, newNumAllocated * sizeof(unsigned int))); 
 
             // Reset numClaimedAtLevel to 0
             unsigned int newNumClaimed = 0; 
@@ -622,7 +630,6 @@ void collideWithParticles(float *particlePos,
             // TODO: Make work for >1 chunk per block
             numThreads = sizeOfChunkAtLevel; 
             numBlocks = numChunksAtLevel; 
-            printf("Num Voxels: %u NumThreads: %u NumBlocks: %u\n", numVoxelsAtLevel, numThreads, numBlocks);
             removeInactiveChunks<<<numBlocks, numThreads>>>(dev_newStatuses,
                                                             dev_newUpIndices,
                                                             dev_newDownIndices,
@@ -631,26 +638,22 @@ void collideWithParticles(float *particlePos,
                                                             sizeOfChunkAtLevel,
                                                             dev_numClaimedInArrayAtLevel);
             getLastCudaError("Kernel execution failed");
-            printf("Here 4\n");
+            checkCudaErrors(cudaDeviceSynchronize()); 
 
             // free old pointers
             checkCudaErrors(cudaFree(dev_oldStatuses));
             checkCudaErrors(cudaFree(dev_oldDownIndices));
             checkCudaErrors(cudaFree(dev_oldUpIndices));
 
-            printf("Here 5\n");
-
             // memcpy to symbol new ones
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) dev_newStatuses, level * sizeof(float *), sizeof(float *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) dev_newDownIndices, level * sizeof(unsigned int *), sizeof(unsigned int *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) dev_newUpIndices, level * sizeof(unsigned int *), sizeof(unsigned int *), cudaMemcpyHostToDevice));
-
-            printf("Here 6\n");
+            checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &dev_newStatuses, sizeof(float *), level * sizeof(float *), cudaMemcpyHostToDevice));
+            checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) &dev_newDownIndices, sizeof(unsigned int *), level * sizeof(unsigned int *), cudaMemcpyHostToDevice));
+            checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) &dev_newUpIndices, sizeof(unsigned int *), level * sizeof(unsigned int *),  cudaMemcpyHostToDevice));
 
             // Also set new dev ones
-            checkCudaErrors(cudaMemcpy(dev_statuses + level, &dev_oldStatuses, sizeof(float *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpy(dev_upIndices + level, &dev_oldUpIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpy(dev_downIndices + level, &dev_oldDownIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
+            checkCudaErrors(cudaMemcpy(dev_statuses + level, &dev_newStatuses, sizeof(float *), cudaMemcpyHostToDevice));
+            checkCudaErrors(cudaMemcpy(dev_upIndices + level, &dev_newUpIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
+            checkCudaErrors(cudaMemcpy(dev_downIndices + level, &dev_newDownIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
         }
 
     }
