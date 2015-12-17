@@ -13,8 +13,8 @@ void copyDataToConstantMemory(const unsigned int numberOfLevels,
 
 void collideWithParticles(float *particlePos,
                           float *particleVel,
-                          float  particleRadius,
-                          unsigned int numParticles,
+                          const float  particleRadius,
+                          const unsigned int numParticles,
                           float **dev_statuses,
                           unsigned int **dev_upIndices,
                           unsigned int **dev_downIndices,
@@ -24,7 +24,9 @@ void collideWithParticles(float *particlePos,
                           const unsigned int *maxMemAtLevel,
                           const unsigned int *numberOfCellsPerSideAtLevel,
                           unsigned int numberOfLevels,
-                          float deltaTime); 
+                          const float deltaTime,
+                          const unsigned int timestepIndex,
+                          bool usingCoarsen); 
 
 void generateMarchingCubes(float *pos,
                            float *norm,

@@ -75,6 +75,7 @@ uint3 gridSize = {256, 256, 256};
 int numIterations = 10000000; // run until exit
 
 bool usingObject = false;
+bool usingCoarsen = false; 
 bool usingSpout = false;
 bool limitLifeByHeight = false;
 bool limitLifeByTime = false;
@@ -213,12 +214,12 @@ void initParticleSystem(int numParticles, uint3 gridSize, bool bUseOpenGL)
     psystem->reset(config);
     psystem->startTimer(5);
 
-    unsigned int blah[5] = {2, 2, 2, 2,2};
+    unsigned int blah[4] = {4, 4, 4, 2};
     
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
 
     if (usingObject) {
-        voxelTree = new VoxelTree(cellsPerSide);
+        voxelTree = new VoxelTree(cellsPerSide, usingCoarsen);
         voxelTree->initializeTree();
         //voxelTree->initializeShape();
     }
@@ -383,7 +384,7 @@ void display()
     double total_db = (double)total_byte;
     double used_db = total_db - free_db;
 
-    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+    printf("GPU memory usage: used = %5.3f, free = %5.3f MB, total = %5.3f MB\n",
 
     used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);*/
     
@@ -889,6 +890,10 @@ main(int argc, char **argv)
         if (checkCmdLineFlag(argc, (const char **) argv, "-o"))
         {
             usingObject = true;
+        }
+        if (checkCmdLineFlag(argc, (const char **) argv, "-c"))
+        {
+            usingCoarsen = true;
         }
         if (checkCmdLineFlag(argc, (const char **) argv, "-s"))
         {

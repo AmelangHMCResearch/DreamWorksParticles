@@ -46,7 +46,7 @@ struct BoundingBox {
 class VoxelTree
 {
     public: 
-        VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel);
+        VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForEachLevel, bool usingCoarsen);
 
         ~VoxelTree();
 
@@ -56,9 +56,10 @@ class VoxelTree
         std::vector<unsigned int> getNumberOfCellsPerSideForLevel();
         void runCollisions(float *particlePos, 
                            float *particleVel, 
-                           float  particleRadius,
-                           float deltaTime, 
-                           unsigned int numParticles);
+                           const float  particleRadius,
+                           const float deltaTime, 
+                           const unsigned int numParticles,
+                           const unsigned int timestepIndex);
         std::vector<std::vector<float> > getStatuses(); // Only to be used for debugging
         std::vector<std::vector<unsigned int> > getDelimiters(); // Only to be used for debugging
         void debugDisplay();
@@ -82,6 +83,7 @@ class VoxelTree
     protected:
         // CPU values
         bool _isInitialized;
+        bool _usingCoarsen; 
         unsigned int _numberOfLevels;
         unsigned int _numMarchingCubes;
         unsigned int _numVoxelsToDraw;  

@@ -376,7 +376,8 @@ ParticleSystem::update(const float deltaTime,
                                  _dev_vel, 
                                  _params.particleRadius,
                                  deltaTime, 
-                                 _numParticles);
+                                 _numParticles,
+                                 timestepIndex);
     }
 
     /*checkCudaErrors(cudaMemcpy(_numNeighbors, _dev_numNeighbors, 

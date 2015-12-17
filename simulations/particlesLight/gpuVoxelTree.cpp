@@ -39,8 +39,9 @@
 
 
 // takes in a vector that determines the branching of the tree
-VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel) :
-    _isInitialized(false)
+VoxelTree::VoxelTree(std::vector<unsigned int> numberOfCellsPerSideForLevel, bool usingCoarsen) :
+    _isInitialized(false),
+    _usingCoarsen(usingCoarsen)
 {   
     _numberOfCellsPerSideForLevel = numberOfCellsPerSideForLevel;
     _numberOfLevels = numberOfCellsPerSideForLevel.size();
@@ -178,6 +179,7 @@ void VoxelTree::initializeTree()
     }*/
 
     std::vector<unsigned int> numClaimedForLevel(_numberOfLevels, 0); 
+    numClaimedForLevel[0] = 1;
 
     checkCudaErrors(cudaMalloc((void**) &_dev_numClaimedForLevel, _numberOfLevels * sizeof(unsigned int))); 
     checkCudaErrors(cudaMemcpy(_dev_numClaimedForLevel, &numClaimedForLevel[0], _numberOfLevels * sizeof(unsigned int), cudaMemcpyHostToDevice));
@@ -350,9 +352,10 @@ void VoxelTree::initializeShape() {
 
 void VoxelTree::runCollisions(float *particlePos, 
                               float *particleVel, 
-                              float  particleRadius,
-                              float deltaTime,
-                              unsigned int numParticles)
+                              const float  particleRadius,
+                              const float deltaTime,
+                              const unsigned int numParticles,
+                              const unsigned int timestepIndex)
 {
     collideWithParticles(particlePos,
                          particleVel,
@@ -367,7 +370,9 @@ void VoxelTree::runCollisions(float *particlePos,
                          &_maxMemNeededForLevel[0],
                          &_numberOfCellsPerSideForLevel[0],
                          _numberOfLevels,
-                         deltaTime); 
+                         deltaTime,
+                         timestepIndex,
+                         _usingCoarsen); 
 }
 
 void VoxelTree::renderVoxelTree(float modelView[16], float particleRadius)
@@ -554,9 +559,8 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
 
     //const unsigned int numberOfEntriesInCell = currentNumberOfCellsPerSide * currentNumberOfCellsPerSide * currentNumberOfCellsPerSide;
     unsigned int numberOfChunksInLevel; 
-    checkCudaErrors(cudaMemcpy((void *) &numberOfChunksInLevel, &_dev_numClaimedForLevel[currentLevel], sizeof(unsigned int), cudaMemcpyDeviceToHost));
-    unsigned int sizeOfChunkAtLevel = _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel]; 
-    unsigned int numberOfEntriesInCell = numberOfChunksInLevel * sizeOfChunkAtLevel;
+    checkCudaErrors(cudaMemcpy((void *) &numberOfChunksInLevel, &_dev_numClaimedForLevel[currentLevel], sizeof(unsigned int), cudaMemcpyDeviceToHost)); 
+    unsigned int numberOfEntriesInCell = _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel] * _numberOfCellsPerSideForLevel[currentLevel];
     for (unsigned int cellIndex = 0; cellIndex < numberOfEntriesInCell; ++cellIndex) {
         
         unsigned int xIndex = cellIndex % currentNumberOfCellsPerSide;
@@ -597,7 +601,6 @@ void VoxelTree::drawCell(std::vector<std::vector<float> > & statuses,
             //printf("Need to dig deeper for cell %d on level %d\n", cellIndex, currentLevel);
 
             unsigned int delimiterForNextCell = delimiters[currentLevel][actualCellIndex];
-            // printf("NextDelimiter is %d\n", delimiterForNextCell);
             unsigned int nextLevel = currentLevel + 1;
             float halfCellSize = 0.5 * currentCellSize;
             BoundingBox nextBoundary;
@@ -637,7 +640,7 @@ void VoxelTree::test()
     std::vector<unsigned int> cellsPerSide(blah, blah + sizeof(blah) / sizeof(blah[0]));
     // printf("size of cellsPerSide is %lu\n", cellsPerSide.size());
 
-    VoxelTree tree(cellsPerSide);
+    VoxelTree tree(cellsPerSide, true);
     tree.initializeTree();
     tree.debugDisplay();
 }

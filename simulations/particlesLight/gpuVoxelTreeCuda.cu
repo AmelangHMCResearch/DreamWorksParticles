@@ -120,7 +120,7 @@ __device__
 unsigned int getCell(float3 pos, BoundingBox boundingBox, unsigned int cubeSize)
 {
     // "origin" of box is at the lower boundary
-	float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
+    float3 relPos = pos + -1.0 * boundingBox.lowerBoundary; 
     float sizeOfCell = (boundingBox.upperBoundary.x - boundingBox.lowerBoundary.x) / (float) cubeSize; 
     // Find which cell the position is in
     unsigned int xCoord = min((unsigned int) max(floor(relPos.x / sizeOfCell), 0.0f), cubeSize - 1); 
@@ -166,32 +166,33 @@ __device__
 float getStatus(float3 pos)
 {
     // Start at level 0, offset into cell 0, and the bounding box for the whole gdb
-	unsigned int currentLevel = 0;
-	BoundingBox currentBB = boundary;
-	unsigned int offset = 0; 
+    unsigned int currentLevel = 0;
+    BoundingBox currentBB = boundary;
+    unsigned int offset = 0; 
     if (isOutsideBoundingBox(pos, currentBB)) {
         // If outside the bounding box, the voxel is inactive
         return 0.0; 
     }
-	while (1) {
+    while (1) {
         // Otherwise, get the status of the cell we're in
-		unsigned int cell = getCell(pos, currentBB, numCellsPerSide[currentLevel]);
-		float status = pointersToStatuses[currentLevel][cell + offset];
-		// Dig deeper = INF
-		if (status != STATUS_FLAG_DIG_DEEPER) {
-            //printf("Found status %f position %f, %f, %f\n", status, pos.x, pos.y, pos.z);
+        unsigned int cell = getCell(pos, currentBB, numCellsPerSide[currentLevel]);
+        float status = pointersToStatuses[currentLevel][cell + offset];
+        // Dig deeper = INF
+        if (status != STATUS_FLAG_DIG_DEEPER) {
+            if (status != status) 
+                printf("Found status %f position %f, %f, %f\n", status, pos.x, pos.y, pos.z);
             // If it is active or inactive, return the status
-			return status;
-		} else {
+            return status;
+        } else {
             // Otherwise, find our new offset and bounding box, and loop
-			unsigned int delimiter = pointersToDownDelimiters[currentLevel][cell + offset];
-			unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
-			offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
-			currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel]);
+            unsigned int delimiter = pointersToDownDelimiters[currentLevel][cell + offset];
+            unsigned int nextLevelCubeSize = numCellsPerSide[currentLevel + 1];
+            offset = delimiter * nextLevelCubeSize * nextLevelCubeSize * nextLevelCubeSize; 
+            currentBB = calculateNewBoundingBox(pos, currentBB, numCellsPerSide[currentLevel]);
             ++currentLevel; 
-		}
+        }
 
-	}
+    }
 }
 
 __global__
@@ -204,7 +205,7 @@ void calculateNewVelocities(float4 *particlePos,
                             unsigned int *sizeOfResult,
                             unsigned int maxResultSize)
 {
-	unsigned int index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    unsigned int index = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
 
     if (index >= numParticles) return;
 
@@ -220,13 +221,13 @@ void calculateNewVelocities(float4 *particlePos,
     unsigned int numNeighboringVoxels = 0; 
 
     for (int z = loopStart; z <= loopEnd; ++z) {
-    	for (int y = loopStart; y <= loopEnd; ++y) {
-    		for (int x = loopStart; x <= loopEnd; ++x) {
-    			float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
-    			float status = getStatus(position); 
-    			if (status > 0.0f) {
+        for (int y = loopStart; y <= loopEnd; ++y) {
+            for (int x = loopStart; x <= loopEnd; ++x) {
+                float3 position = currentParticlePos + voxelSize * make_float3(x, y, z); 
+                float status = getStatus(position); 
+                if (status > 0.0f) {
                     // Get data for average voxel position
-    				++numNeighboringVoxels; 
+                    ++numNeighboringVoxels; 
                     averagePosition += position;
                     // Reduce the strength (do so more for glancing blows) 
                     float t_c = 0.1; 
@@ -237,9 +238,9 @@ void calculateNewVelocities(float4 *particlePos,
                         // Add position of voxel and amount to reduce strength to our output for later use
                         result[indexToAdd] = make_float4(position, amountToReduceStrength);  
                     }
-    			}
-    		}
-    	}
+                }
+            }
+        }
     }
 
     if (numNeighboringVoxels > 0) {
@@ -373,7 +374,7 @@ void repairVoxelTree(const float4 *result,
                         const unsigned int indexOfValue =
                           nextLevelsClaimedChunkNumber * numCellsInChunkAtNextLevel + i;
                         atomicExch((float*)&(pointersToStatuses[level + 1][indexOfValue]),
-                                   10.0);
+                                   0.01);
                         atomicExch((unsigned int*)&(pointersToDownDelimiters[level + 1][indexOfValue]),
                                    INVALID_CHUNK_NUMBER);
                     }
@@ -427,7 +428,7 @@ void createShape(const float *result,
 __global__
 void findInactiveChunks(unsigned int numVoxelsAtLowestLevel)
 {
-	unsigned int delimiter = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
+    unsigned int delimiter = __umul24(blockIdx.x, blockDim.x) + threadIdx.x;
     if (delimiter >= numVoxelsAtLowestLevel) return;
 
     unsigned int level = numLevels - 1; 
@@ -499,8 +500,8 @@ void removeInactiveChunks(float *newStatusPointer,
 
 void collideWithParticles(float *particlePos,
                           float *particleVel,
-                          float  particleRadius,
-                          unsigned int numParticles,
+                          const float  particleRadius,
+                          const unsigned int numParticles,
                           float **dev_statuses,
                           unsigned int **dev_upIndices,
                           unsigned int **dev_downIndices,
@@ -510,12 +511,14 @@ void collideWithParticles(float *particlePos,
                           const unsigned int *maxMemAtLevel,
                           const unsigned int *numberOfCellsPerSideAtLevel,
                           unsigned int numberOfLevels,
-                          float deltaTime)
+                          const float deltaTime,
+                          const unsigned int timestepIndex,
+                          bool usingCoarsen)
 {
-	unsigned int numThreads = 256; 
-	unsigned int numBlocks = ceil((float) numParticles / numThreads);
+    unsigned int numThreads = 256; 
+    unsigned int numBlocks = ceil((float) numParticles / numThreads);
     unsigned int maxResultSize = 1000000;
-	float *result;
+    float *result;
     checkCudaErrors(cudaMalloc((void **) &result, maxResultSize * sizeof(float4))); 
     unsigned int *sizeOfResult; 
     checkCudaErrors(cudaMalloc((void **) &sizeOfResult, 1 * sizeof(unsigned int))); 
@@ -586,6 +589,9 @@ void collideWithParticles(float *particlePos,
 
     // Copy a level into a new one if: 1) it's > 50% inactive chunks (subject to change)
     // or if it seems like it might overflow on next refining
+    if (timestepIndex % 100 == 0) {
+        printf("------------------------------------------------\n");
+    }
     for (int level = 1; level < numberOfLevels; ++level) {
 
         // Grab number of voxels from GPU
@@ -597,71 +603,80 @@ void collideWithParticles(float *particlePos,
             // Calculate size of chunk at level
             unsigned int sizeOfChunkAtLevel = numberOfCellsPerSideAtLevel[level] * numberOfCellsPerSideAtLevel[level] * numberOfCellsPerSideAtLevel[level]; 
             unsigned int numVoxelsAtLevel = numChunksAtLevel * sizeOfChunkAtLevel; 
+
+            if (timestepIndex % 100 == 0) {
+                printf("%u chunks at level %u\n", numChunksAtLevel, level);
+            }
            
-            // Calculate amount of memory to allocate (TODO: CHECK THIS NUMBER) 
-            unsigned int newNumAllocated = 8 * (numVoxelsAtLevel); 
-            if (newNumAllocated > maxMemAtLevel[level]) {
-                newNumAllocated = maxMemAtLevel[level];
-            } 
-            memAllocatedAtLevel[level] = newNumAllocated; 
+            if (usingCoarsen) {
+                // Calculate amount of memory to allocate (TODO: CHECK THIS NUMBER) 
+                unsigned int newNumAllocated = 8 * (numVoxelsAtLevel); 
+                if (newNumAllocated > maxMemAtLevel[level]) {
+                    newNumAllocated = maxMemAtLevel[level];
+                } 
+                memAllocatedAtLevel[level] = newNumAllocated; 
 
-            // Bring old pointers over from GPU
-            float *dev_oldStatuses;
-            checkCudaErrors(cudaMemcpy(&dev_oldStatuses, dev_statuses + level, sizeof(float *), cudaMemcpyDeviceToHost));
-            unsigned int *dev_oldUpIndices;
-            checkCudaErrors(cudaMemcpy(&dev_oldUpIndices, dev_upIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
-            unsigned int *dev_oldDownIndices;
-            checkCudaErrors(cudaMemcpy(&dev_oldDownIndices, dev_downIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
+                // Bring old pointers over from GPU
+                float *dev_oldStatuses;
+                checkCudaErrors(cudaMemcpy(&dev_oldStatuses, dev_statuses + level, sizeof(float *), cudaMemcpyDeviceToHost));
+                unsigned int *dev_oldUpIndices;
+                checkCudaErrors(cudaMemcpy(&dev_oldUpIndices, dev_upIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
+                unsigned int *dev_oldDownIndices;
+                checkCudaErrors(cudaMemcpy(&dev_oldDownIndices, dev_downIndices + level, sizeof(unsigned int *), cudaMemcpyDeviceToHost));
 
-            // Allocate new storage of proper size
-            float *dev_newStatuses;
-            unsigned int *dev_newUpIndices;
-            unsigned int *dev_newDownIndices;
-            checkCudaErrors(cudaMalloc((void **) &dev_newStatuses, newNumAllocated * sizeof(float))); 
-            checkCudaErrors(cudaMalloc((void **) &dev_newUpIndices, (newNumAllocated / sizeOfChunkAtLevel)  * sizeof(unsigned int))); 
-            checkCudaErrors(cudaMalloc((void **) &dev_newDownIndices, newNumAllocated * sizeof(unsigned int))); 
+                // Allocate new storage of proper size
+                float *dev_newStatuses;
+                unsigned int *dev_newUpIndices;
+                unsigned int *dev_newDownIndices;
+                checkCudaErrors(cudaMalloc((void **) &dev_newStatuses, newNumAllocated * sizeof(float))); 
+                checkCudaErrors(cudaMalloc((void **) &dev_newUpIndices, (newNumAllocated / sizeOfChunkAtLevel)  * sizeof(unsigned int))); 
+                checkCudaErrors(cudaMalloc((void **) &dev_newDownIndices, newNumAllocated * sizeof(unsigned int))); 
 
-            // Reset numClaimedAtLevel to 0
-            unsigned int newNumClaimed = 0; 
-            checkCudaErrors(cudaMemcpy(&dev_numClaimedInArrayAtLevel[level], &newNumClaimed, sizeof(unsigned int), cudaMemcpyHostToDevice));
+                // Reset numClaimedAtLevel to 0
+                unsigned int newNumClaimed = 0; 
+                checkCudaErrors(cudaMemcpy(&dev_numClaimedInArrayAtLevel[level], &newNumClaimed, sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-            // Run kernel
-            assert(sizeOfChunkAtLevel < 1024); // Simplifying assumption
-            // TODO: Make work for >1 chunk per block
-            numThreads = sizeOfChunkAtLevel; 
-            numBlocks = numChunksAtLevel; 
-            removeInactiveChunks<<<numBlocks, numThreads>>>(dev_newStatuses,
-                                                            dev_newUpIndices,
-                                                            dev_newDownIndices,
-                                                            numVoxelsAtLevel,
-                                                            level,
-                                                            sizeOfChunkAtLevel,
-                                                            dev_numClaimedInArrayAtLevel);
-            getLastCudaError("Kernel execution failed");
-            checkCudaErrors(cudaDeviceSynchronize()); 
+                // Run kernel
+                assert(sizeOfChunkAtLevel < 1024); // Simplifying assumption
+                // TODO: Make work for >1 chunk per block
+                numThreads = sizeOfChunkAtLevel; 
+                numBlocks = numChunksAtLevel; 
+                removeInactiveChunks<<<numBlocks, numThreads>>>(dev_newStatuses,
+                                                                dev_newUpIndices,
+                                                                dev_newDownIndices,
+                                                                numVoxelsAtLevel,
+                                                                level,
+                                                                sizeOfChunkAtLevel,
+                                                                dev_numClaimedInArrayAtLevel);
+                getLastCudaError("Kernel execution failed");
+                checkCudaErrors(cudaDeviceSynchronize()); 
 
-            // free old pointers
-            checkCudaErrors(cudaFree(dev_oldStatuses));
-            checkCudaErrors(cudaFree(dev_oldDownIndices));
-            checkCudaErrors(cudaFree(dev_oldUpIndices));
+                // free old pointers
+                checkCudaErrors(cudaFree(dev_oldStatuses));
+                checkCudaErrors(cudaFree(dev_oldDownIndices));
+                checkCudaErrors(cudaFree(dev_oldUpIndices));
 
-            // memcpy to symbol new ones
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &dev_newStatuses, sizeof(float *), level * sizeof(float *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) &dev_newDownIndices, sizeof(unsigned int *), level * sizeof(unsigned int *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) &dev_newUpIndices, sizeof(unsigned int *), level * sizeof(unsigned int *),  cudaMemcpyHostToDevice));
+                // memcpy to symbol new ones
+                checkCudaErrors(cudaMemcpyToSymbol(pointersToStatuses, (void *) &dev_newStatuses, sizeof(float *), level * sizeof(float *), cudaMemcpyHostToDevice));
+                checkCudaErrors(cudaMemcpyToSymbol(pointersToDownDelimiters, (void *) &dev_newDownIndices, sizeof(unsigned int *), level * sizeof(unsigned int *), cudaMemcpyHostToDevice));
+                checkCudaErrors(cudaMemcpyToSymbol(pointersToUpDelimiters, (void *) &dev_newUpIndices, sizeof(unsigned int *), level * sizeof(unsigned int *),  cudaMemcpyHostToDevice));
 
-            // Also set new dev ones
-            checkCudaErrors(cudaMemcpy(dev_statuses + level, &dev_newStatuses, sizeof(float *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpy(dev_upIndices + level, &dev_newUpIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
-            checkCudaErrors(cudaMemcpy(dev_downIndices + level, &dev_newDownIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
+                // Also set new dev ones
+                checkCudaErrors(cudaMemcpy(dev_statuses + level, &dev_newStatuses, sizeof(float *), cudaMemcpyHostToDevice));
+                checkCudaErrors(cudaMemcpy(dev_upIndices + level, &dev_newUpIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
+                checkCudaErrors(cudaMemcpy(dev_downIndices + level, &dev_newDownIndices, sizeof(unsigned int *), cudaMemcpyHostToDevice));
+            }
         }
 
+    }
+    if (timestepIndex % 100 == 0) {
+        printf("------------------------------------------------\n");
     }
 
 
     cudaFree(result);
     cudaFree(sizeOfResult); 
-	
+    
 }
 
 __global__
